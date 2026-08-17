@@ -5,7 +5,7 @@ import math
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, literal_column, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -157,15 +157,19 @@ async def finance_overview(db: AsyncSession, month: str | None) -> dict:
         ).scalar_one()
     )
 
+    # literal_column: repeating func.date_trunc("day", ...) renders 'day' as a
+    # separate bind param per occurrence, and Postgres then rejects the GROUP BY
+    # because it can't prove the SELECT and GROUP BY expressions are equal.
+    bucket = func.date_trunc(literal_column("'day'"), CallCost.created_at)
     day_rows = await db.execute(
         select(
-            func.date_trunc("day", CallCost.created_at),
+            bucket,
             func.coalesce(func.sum(CallCost.total_bdt), 0),
             func.count(),
         )
         .where(CallCost.created_at >= start, CallCost.created_at < end)
-        .group_by(func.date_trunc("day", CallCost.created_at))
-        .order_by(func.date_trunc("day", CallCost.created_at))
+        .group_by(bucket)
+        .order_by(bucket)
     )
     daily = [
         {"day": day.date().isoformat(), "cost_bdt": float(cost), "calls": int(count)}

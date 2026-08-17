@@ -50,5 +50,5 @@ async def public_platform(db: AsyncSession = Depends(get_db)):
 
 @router.get("/voice-tiers")
 async def public_voice_tiers():
-    """Voice quality ranks a merchant can choose — names and pricing only."""
+    """Voice ranks a merchant can choose — names, speakers and pricing only."""
     return voice_tiers.public_catalog()

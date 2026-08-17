@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client";
 import { AuditLog, Page } from "../../api/types";
+import MerchantSelect from "../../components/MerchantSelect";
 import Pagination from "../../components/Pagination";
 import { useLang } from "../../i18n";
 
@@ -22,16 +23,18 @@ export default function AdminLogs() {
   const [page, setPage] = useState(1);
   const [actorRole, setActorRole] = useState("");
   const [action, setAction] = useState("");
+  const [merchantId, setMerchantId] = useState("");
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
     const params = new URLSearchParams({ page: String(page), page_size: String(PAGE_SIZE) });
     if (actorRole) params.set("actor_role", actorRole);
     if (action) params.set("action", action);
+    if (merchantId) params.set("merchant_id", merchantId);
     api<Page<AuditLog>>(`/api/admin/logs?${params}`)
       .then(setData)
       .catch((e) => setError(e.message));
-  }, [page, actorRole, action]);
+  }, [page, actorRole, action, merchantId]);
 
   useEffect(() => {
     load();
@@ -44,6 +47,13 @@ export default function AdminLogs() {
       <h1 className="page-title">{t("অডিট লগ")}</h1>
       {error && <p className="error">{t(error)}</p>}
       <div className="toolbar">
+        <MerchantSelect
+          value={merchantId}
+          onChange={(id) => {
+            setMerchantId(id);
+            setPage(1);
+          }}
+        />
         <select
           value={actorRole}
           onChange={(e) => {

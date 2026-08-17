@@ -26,5 +26,11 @@ class Merchant(Base):
     max_call_seconds: Mapped[int] = mapped_column(Integer, default=0)
     # Voice quality tier key (see services/voice_tiers.py) — rank names only in UI.
     voice_tier: Mapped[str] = mapped_column(String(20), default="very_basic")
+    # Call-behavior knobs (modes & defaults live in app/voice/behavior.py).
+    noise_mode: Mapped[str] = mapped_column(String(10), default="normal")
+    barge_in_mode: Mapped[str] = mapped_column(String(12), default="protected")
+    # Hang up (outcome "auto_dropped", order callable again) after this many
+    # seconds of caller silence following an agent utterance.
+    silence_hangup_secs: Mapped[int] = mapped_column(Integer, default=10)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

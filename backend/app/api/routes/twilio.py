@@ -64,6 +64,8 @@ async def twiml_for_order(order_id: str, request: Request, attempt: int = 1) -> 
 
     ws_url = base.replace("https://", "wss://").replace("http://", "ws://") + "/twilio/ws"
     response = VoiceResponse()
+    # Connect immediately so the first words use the merchant's selected TTS
+    # voice. A Twilio <Say> here would greet in a different (Google) voice.
     connect = Connect()
     stream = Stream(url=ws_url)
     stream.parameter(name="order_id", value=order_id)

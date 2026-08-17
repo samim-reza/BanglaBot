@@ -40,8 +40,10 @@ class Settings(BaseSettings):
     openai_llm_model: str = "gpt-5.4-mini"
     openai_stt_model: str = "gpt-4o-mini-transcribe"
 
-    # TTS: elevenlabs (default) | google (Chirp 3 HD) | gemini (Gemini TTS, plain API key)
-    tts_provider: str = "elevenlabs"
+    # TTS fallback when a call has no voice tier (merchants normally pick a
+    # tier in Settings, and the tier decides provider+model — see
+    # services/voice_tiers.py): elevenlabs | google | gemini | azure
+    tts_provider: str = "azure"
     gemini_api_key: str = ""
     gemini_tts_model: str = "gemini-2.5-flash-preview-tts"
     gemini_tts_voice: str = "Kore"
@@ -50,6 +52,12 @@ class Settings(BaseSettings):
     elevenlabs_model: str = "eleven_v3"
     google_credentials_path: str = ""
     google_tts_voice: str = "bn-IN-Chirp3-HD-Aoede"
+    # Azure Speech. Bangladeshi Bengali neural voices: bn-BD-PradeepNeural
+    # (male) and bn-BD-NabanitaNeural (female). The bn-IN pair (Bashkar,
+    # Tanishaa) is Indian Bengali — different accent, avoid for BD customers.
+    azure_speech_key: str = ""
+    azure_speech_region: str = "southeastasia"
+    azure_tts_voice: str = "bn-BD-PradeepNeural"
 
     # Call behavior
     max_call_seconds: int = 240

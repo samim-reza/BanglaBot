@@ -1,7 +1,7 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { OrderDetail as OrderDetailType } from "../api/types";
+import { OrderDetail as OrderDetailType, OUTCOME_LABELS } from "../api/types";
 import RecordingPlayer from "../components/RecordingPlayer";
 import StatusBadge from "../components/StatusBadge";
 import { useLang } from "../i18n";
@@ -180,7 +180,7 @@ export default function OrderDetail() {
             <b>{fmtDateTime(log.created_at)}</b>{" "}
             <span className="muted">
               — {t("স্ট্যাটাস")}: {log.call_status}
-              {log.outcome && <> — {t("ফলাফল")}: {log.outcome}</>}
+              {log.outcome && <> — {t("ফলাফল")}: {t(OUTCOME_LABELS[log.outcome] ?? log.outcome)}</>}
               {log.duration_secs > 0 && <> — {t("{n} সেকেন্ড", { n: fmtNum(log.duration_secs) })}</>}
             </span>
           </p>

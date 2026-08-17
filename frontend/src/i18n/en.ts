@@ -418,6 +418,14 @@ export const EN: Record<string, string> = {
 
   // ---- order editing ----
   "অর্ডার সম্পাদনা": "Edit order",
+  "কলের শুরুর কথা (সর্বোচ্চ ২০০ অক্ষর)": "Opening line (max 200 characters)",
+
+  // ---- settings section rail ----
+  "এজেন্ট ও ভয়েস": "Agent & voice",
+  "নিরাপত্তা": "Security",
+  "দোকানের নাম ও যোগাযোগের তথ্য": "Shop name and contact details",
+  "এজেন্ট কীভাবে কথা বলবে ও কোন কণ্ঠে": "How the agent speaks, and in which voice",
+  "লগইন পাসওয়ার্ড বদলান": "Change your login password",
 
   // ---- agent settings ----
   "এজেন্ট সেটিংস": "Agent settings",
@@ -435,7 +443,34 @@ export const EN: Record<string, string> = {
     "The call hangs up automatically when time runs out — keeps your bill under control.",
 
   // ---- voice quality tiers ----
+  "ভয়েস": "Voice",
   "ভয়েস কোয়ালিটি": "Voice quality",
+  "বাংলা কণ্ঠ": "Bengali voices",
+  "মহিলা": "Female",
+  "পুরুষ": "Male",
+  "নবনীতা": "Nabanita",
+  "প্রদ্বীপ": "Pradeep",
+  "তানিশা": "Tanishaa",
+  "ভাস্কর": "Bashkar",
+  "তানিশা এইচডি": "Tanishaa HD",
+  "ভাস্কর এইচডি": "Bashkar HD",
+  "অদিতি": "Aditi",
+  "পার্থ": "Partho",
+  "আরও প্রাণবন্ত ও স্বাভাবিক মহিলা কণ্ঠ — ভারতীয় বাংলা":
+    "More lively, natural female voice — Indian Bengali",
+  "আরও প্রাণবন্ত ও স্বাভাবিক পুরুষ কণ্ঠ — ভারতীয় বাংলা":
+    "More lively, natural male voice — Indian Bengali",
+  "উষ্ণ ও বন্ধুত্বপূর্ণ মহিলা কণ্ঠ — ভারতীয় বাংলা":
+    "Warm, friendly female voice — Indian Bengali",
+  "প্রাণবন্ত ও স্পষ্ট পুরুষ কণ্ঠ — ভারতীয় বাংলা":
+    "Lively, clear male voice — Indian Bengali",
+  "নরম ও স্পষ্ট মহিলা কণ্ঠ — বাংলাদেশি বাংলা":
+    "Soft, clear female voice — Bangladeshi Bengali",
+  "স্পষ্ট পুরুষ কণ্ঠ — বাংলাদেশি বাংলা": "Clear male voice — Bangladeshi Bengali",
+  "নরম মহিলা কণ্ঠ — ভারতীয় বাংলা": "Soft female voice — Indian Bengali",
+  "স্পষ্ট পুরুষ কণ্ঠ — ভারতীয় বাংলা": "Clear male voice — Indian Bengali",
+  "বাংলাদেশ": "Bangladesh",
+  "ভারত": "India",
   "স্ট্যাটিক কল": "Static call",
   "খুব সাধারণ": "Very basic",
   "বেসিক": "Basic",
@@ -451,6 +486,10 @@ export const EN: Record<string, string> = {
     "The most natural premium voice — sounds human",
   "কীপ্যাড — বাটন চাপ": "Keypad — button press",
   "এই ভয়েসের নমুনা শুনুন": "Hear a sample of this voice",
+  "কার্ডে ক্লিক করলেই কণ্ঠের নমুনা বাজবে — শুনে তারপর বাছুন।":
+    "Click a card to hear that voice — listen, then pick.",
+  "নমুনা বন্ধ করুন": "Stop the sample",
+  "নির্বাচিত": "Selected",
   "এই ভয়েসের স্যাম্পল এখনো যোগ করা হয়নি": "No sample clip added for this voice yet",
   "সাধারণ মিনিট খরচ": "Standard minute usage",
   "মিনিট খরচ ×{n}": "Minute usage ×{n}",
@@ -459,6 +498,30 @@ export const EN: Record<string, string> = {
   "অজানা ভয়েস কোয়ালিটি": "Unknown voice quality",
   "অনেকবার ভুল চেষ্টা হয়েছে — ১০ মিনিট পরে আবার চেষ্টা করুন":
     "Too many failed attempts — try again in 10 minutes",
+  "সব মার্চেন্ট": "All merchants",
+  "শুরুর তারিখ": "From date",
+  "শেষ তারিখ": "To date",
+  "ফিল্টার মুছুন": "Clear filters",
+  "বিলড মিনিট": "Billed minutes",
+  "মোট খরচ": "Total cost",
+  "মার্চেন্ট অনুযায়ী কল ও খরচ": "Calls and cost by merchant",
+  "এই মার্চেন্টের কল দেখতে ক্লিক করুন": "Click to see this merchant's calls",
+  "পরিবেশের আওয়াজ ফিল্টার": "Background noise filter",
+  "সাধারণ পরিবেশ": "Normal surroundings",
+  "বেশি আওয়াজের পরিবেশ (কড়া ফিল্টার)": "Noisy surroundings (strict filter)",
+  "কড়া ফিল্টারে রাস্তা/দোকানের আওয়াজ কাস্টমারের কথা হিসেবে ধরা হবে না।":
+    "The strict filter keeps street/shop noise from being mistaken for the customer speaking.",
+  "কথার মাঝে থামানো (বার্জ-ইন)": "Interrupting the agent (barge-in)",
+  "সুরক্ষিত — কয়েক শব্দ শুনে তবেই থামবে": "Protected — stops only after a few clear words",
+  "সাথে সাথে থামবে": "Stops the moment the customer speaks",
+  "থামবে না — কথা শেষ করে শুনবে": "Never stops mid-sentence — listens after finishing",
+  "কাস্টমার কথা বললে এজেন্ট কখন থামবে — সুরক্ষিত মোডে হালকা শব্দ বা খুকখুকিতে এজেন্ট থামবে না।":
+    "When the agent yields to the customer — in protected mode a faint sound or cough won't cut it off.",
+  "কাস্টমার চুপ থাকলে কল কাটা": "Hang up when the customer stays silent",
+  "এজেন্টের কথার পরে এতক্ষণ কাস্টমার কিছু না বললে কলটি কেটে যাবে — অর্ডারটি আবার কল করা যাবে।":
+    "If the customer says nothing for this long after the agent speaks, the call ends — the order can be called again.",
+  "মানুষের কাছে": "Transferred to human",
+  "অটো ড্রপড": "Auto dropped",
 
   // ---- backend messages surfaced in the UI ----
   "এই অর্ডারের জন্য একটি কল ইতিমধ্যে চলছে": "A call is already in progress for this order",
@@ -466,4 +529,8 @@ export const EN: Record<string, string> = {
     "Couldn't start the call — please try again in a moment",
   "কলের সর্বোচ্চ সময় ৬০–৬০০ সেকেন্ডের মধ্যে হতে হবে (০ = ডিফল্ট)":
     "Max call duration must be between 60 and 600 seconds (0 = default)",
+  "তারিখের ফরম্যাট YYYY-MM-DD হতে হবে": "Date must be in YYYY-MM-DD format",
+  "অজানা নয়েজ ফিল্টার মোড": "Unknown noise filter mode",
+  "অজানা বার্জ-ইন মোড": "Unknown barge-in mode",
+  "নীরবতার সীমা ৫–৩০ সেকেন্ডের মধ্যে হতে হবে": "Silence limit must be between 5 and 30 seconds",
 };

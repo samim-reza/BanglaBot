@@ -1,6 +1,13 @@
 import { FormEvent, Fragment, useCallback, useEffect, useState } from "react";
 import { api } from "../../api/client";
-import { AdminMerchant, Page, Plan, SubStatus, SUB_STATUS_LABELS } from "../../api/types";
+import {
+  AdminMerchant,
+  Page,
+  Plan,
+  SubStatus,
+  SUB_STATUS_LABELS,
+  VoiceTier,
+} from "../../api/types";
 import EmptyState from "../../components/EmptyState";
 import Pagination from "../../components/Pagination";
 import { GreetingArt } from "../../components/art";
@@ -24,6 +31,17 @@ const EMPTY_SUB = {
   extend_days: "",
   note: "",
 };
+const EMPTY_EDIT = {
+  business_name: "",
+  owner_name: "",
+  phone: "",
+  email: "",
+  support_phone: "",
+  custom_greeting: "",
+  max_call_seconds: 0,
+  voice_tier: "very_basic",
+};
+const DURATION_CHOICES = [0, 60, 120, 180, 240, 300, 360, 480, 600];
 
 export default function AdminMerchants() {
   const { t, fmtNum } = useLang();
@@ -36,6 +54,10 @@ export default function AdminMerchants() {
   const [subFor, setSubFor] = useState<string | null>(null);
   const [subForm, setSubForm] = useState(EMPTY_SUB);
   const [subBusy, setSubBusy] = useState(false);
+  const [editFor, setEditFor] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState(EMPTY_EDIT);
+  const [editBusy, setEditBusy] = useState(false);
+  const [tiers, setTiers] = useState<VoiceTier[]>([]);
 
   const load = useCallback(() => {
     api<Page<AdminMerchant>>(`/api/admin/merchants?page=${page}&page_size=${PAGE_SIZE}`)
@@ -47,6 +69,7 @@ export default function AdminMerchants() {
 
   useEffect(() => {
     api<Plan[]>("/api/admin/plans").then(setPlans).catch(() => {});
+    api<VoiceTier[]>("/api/public/voice-tiers").then(setTiers).catch(() => {});
   }, []);
 
   const set = (key: string) => (e: { target: { value: string } }) =>
@@ -94,6 +117,7 @@ export default function AdminMerchants() {
   }
 
   function openSubEditor(merchant: AdminMerchant) {
+    setEditFor(null);
     if (subFor === merchant.id) {
       setSubFor(null);
       return;
@@ -104,6 +128,43 @@ export default function AdminMerchants() {
       plan_key: merchant.plan_key ?? "",
       status: merchant.sub_status ?? "",
     });
+  }
+
+  function openEditor(merchant: AdminMerchant) {
+    setSubFor(null);
+    if (editFor === merchant.id) {
+      setEditFor(null);
+      return;
+    }
+    setEditFor(merchant.id);
+    setEditForm({
+      business_name: merchant.business_name,
+      owner_name: merchant.owner_name,
+      phone: merchant.phone,
+      email: merchant.email,
+      support_phone: merchant.support_phone,
+      custom_greeting: merchant.custom_greeting,
+      max_call_seconds: merchant.max_call_seconds,
+      voice_tier: merchant.voice_tier || "very_basic",
+    });
+  }
+
+  const setEdit = (key: string) => (e: { target: { value: string } }) =>
+    setEditForm((f) => ({ ...f, [key]: e.target.value }));
+
+  async function saveEdit(e: FormEvent, merchant: AdminMerchant) {
+    e.preventDefault();
+    setError("");
+    setEditBusy(true);
+    try {
+      await api(`/api/admin/merchants/${merchant.id}`, { method: "PATCH", body: editForm });
+      setEditFor(null);
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setEditBusy(false);
+    }
   }
 
   async function saveSub(e: FormEvent, merchant: AdminMerchant) {
@@ -210,6 +271,9 @@ export default function AdminMerchants() {
                     </span>
                   </td>
                   <td style={{ display: "flex", gap: 6 }}>
+                    <button className="btn secondary small" onClick={() => openEditor(merchant)}>
+                      ✏️ {t("সম্পাদনা")}
+                    </button>
                     <button className="btn secondary small" onClick={() => openSubEditor(merchant)}>
                       {t("সাবস্ক্রিপশন")}
                     </button>
@@ -221,6 +285,106 @@ export default function AdminMerchants() {
                     </button>
                   </td>
                 </tr>
+                {editFor === merchant.id && (
+                  <tr>
+                    <td colSpan={8} style={{ background: "#fafbfc" }}>
+                      <form
+                        className="form"
+                        style={{ maxWidth: "none", padding: "8px 0" }}
+                        onSubmit={(e) => saveEdit(e, merchant)}
+                      >
+                        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+                          <div className="form-row">
+                            <label>{t("ব্যবসার নাম *")}</label>
+                            <input
+                              value={editForm.business_name}
+                              onChange={setEdit("business_name")}
+                              required
+                              style={{ width: 180 }}
+                            />
+                          </div>
+                          <div className="form-row">
+                            <label>{t("মালিকের নাম")}</label>
+                            <input
+                              value={editForm.owner_name}
+                              onChange={setEdit("owner_name")}
+                              style={{ width: 150 }}
+                            />
+                          </div>
+                          <div className="form-row">
+                            <label>{t("ফোন")}</label>
+                            <input value={editForm.phone} onChange={setEdit("phone")} style={{ width: 140 }} />
+                          </div>
+                          <div className="form-row">
+                            <label>{t("ইমেইল")}</label>
+                            <input
+                              type="email"
+                              value={editForm.email}
+                              onChange={setEdit("email")}
+                              style={{ width: 180 }}
+                            />
+                          </div>
+                          <div className="form-row">
+                            <label>{t("সাপোর্ট নম্বর")}</label>
+                            <input
+                              value={editForm.support_phone}
+                              onChange={setEdit("support_phone")}
+                              style={{ width: 140 }}
+                            />
+                          </div>
+                          <div className="form-row">
+                            <label>{t("ভয়েস কোয়ালিটি")}</label>
+                            <select
+                              value={editForm.voice_tier}
+                              onChange={setEdit("voice_tier")}
+                              style={{ width: 160 }}
+                            >
+                              {tiers.map((tier) => (
+                                <option key={tier.key} value={tier.key}>
+                                  {t(tier.name_bn)}
+                                  {tier.accent_bn ? ` · ${t(tier.accent_bn)}` : ""}
+                                  {` (×${tier.multiplier})`}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="form-row">
+                            <label>{t("এক কলের সর্বোচ্চ সময়")}</label>
+                            <select
+                              value={editForm.max_call_seconds}
+                              onChange={(e) =>
+                                setEditForm((f) => ({
+                                  ...f,
+                                  max_call_seconds: Number(e.target.value),
+                                }))
+                              }
+                              style={{ width: 150 }}
+                            >
+                              {DURATION_CHOICES.map((secs) => (
+                                <option key={secs} value={secs}>
+                                  {secs === 0
+                                    ? t("ডিফল্ট (৪ মিনিট)")
+                                    : t("{n} মিনিট", { n: fmtNum(secs / 60) })}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="form-row" style={{ flex: 1, minWidth: 220 }}>
+                            <label>{t("কলের শুরুর কথা (সর্বোচ্চ ২০০ অক্ষর)")}</label>
+                            <input
+                              maxLength={200}
+                              value={editForm.custom_greeting}
+                              onChange={setEdit("custom_greeting")}
+                            />
+                          </div>
+                          <button className="btn small" disabled={editBusy}>
+                            {editBusy ? t("সংরক্ষণ হচ্ছে...") : t("সংরক্ষণ")}
+                          </button>
+                        </div>
+                      </form>
+                    </td>
+                  </tr>
+                )}
                 {subFor === merchant.id && (
                   <tr>
                     <td colSpan={8} style={{ background: "#fafbfc" }}>

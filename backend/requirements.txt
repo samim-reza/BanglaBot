@@ -11,5 +11,5 @@ twilio>=9.0
 loguru>=0.7
 python-multipart>=0.0.9
 openai>=1.40
-pipecat-ai[websocket,openai,silero,elevenlabs]>=1.4.0
+pipecat-ai[websocket,openai,silero,elevenlabs,azure,google]>=1.4.0
 redis>=5.0

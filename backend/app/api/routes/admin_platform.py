@@ -1,5 +1,8 @@
 """Platform admin endpoints: team, audit logs, all call logs and settings."""
 
+from datetime import date, datetime, time, timedelta
+from zoneinfo import ZoneInfo
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -8,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_admin
 from app.core.security import hash_password
 from app.db.session import get_db
-from app.models import AuditLog, CallLog, Merchant, Order, PlatformAdmin
+from app.models import AuditLog, CallCost, CallLog, Merchant, Order, PlatformAdmin
 from app.schemas.common import Page
 from app.schemas.platform import (
     AdminCallOut,
@@ -24,6 +27,21 @@ from app.services import audit_service, billing_service, recording_service
 router = APIRouter(
     prefix="/api/admin", tags=["admin-platform"], dependencies=[Depends(get_current_admin)]
 )
+
+BD_TZ = ZoneInfo("Asia/Dhaka")
+
+
+def _bd_day_bound(value: str | None, *, exclusive_end: bool = False) -> datetime | None:
+    """YYYY-MM-DD → UTC-aware midnight boundary of that Dhaka calendar day."""
+    if not value:
+        return None
+    try:
+        day = date.fromisoformat(value)
+    except ValueError:
+        raise HTTPException(400, "তারিখের ফরম্যাট YYYY-MM-DD হতে হবে")
+    if exclusive_end:
+        day += timedelta(days=1)
+    return datetime.combine(day, time.min, tzinfo=BD_TZ)
 
 
 @router.get("/team", response_model=list[AdminUserOut])
@@ -134,10 +152,14 @@ async def list_logs(
 @router.get("/calls", response_model=Page[AdminCallOut])
 async def list_calls(
     merchant_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ):
+    start = _bd_day_bound(date_from)
+    end = _bd_day_bound(date_to, exclusive_end=True)
     query = (
         select(CallLog, Merchant.business_name, Order.order_ref)
         .join(Merchant, Merchant.id == CallLog.merchant_id)
@@ -147,6 +169,10 @@ async def list_calls(
     )
     if merchant_id:
         query = query.where(CallLog.merchant_id == merchant_id)
+    if start:
+        query = query.where(CallLog.created_at >= start)
+    if end:
+        query = query.where(CallLog.created_at < end)
     total = (await db.execute(select(func.count()).select_from(query.subquery()))).scalar_one()
     rows = await db.execute(
         query.order_by(CallLog.created_at.desc())
@@ -170,6 +196,75 @@ async def list_calls(
         for log, merchant_name, order_ref in rows.all()
     ]
     return Page(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/calls/summary")
+async def calls_summary(
+    merchant_id: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-merchant call volume and platform cost for the picked window."""
+    start = _bd_day_bound(date_from)
+    end = _bd_day_bound(date_to, exclusive_end=True)
+
+    log_query = select(
+        CallLog.merchant_id,
+        func.count(),
+        func.coalesce(func.sum(CallLog.duration_secs), 0),
+        func.coalesce(func.sum(CallLog.billed_secs), 0),
+    ).group_by(CallLog.merchant_id)
+    # call_costs.created_at is backdated to the call's own timestamp, so the
+    # same window filters both tables consistently.
+    cost_query = select(
+        CallCost.merchant_id, func.coalesce(func.sum(CallCost.total_bdt), 0)
+    ).group_by(CallCost.merchant_id)
+    if merchant_id:
+        log_query = log_query.where(CallLog.merchant_id == merchant_id)
+        cost_query = cost_query.where(CallCost.merchant_id == merchant_id)
+    if start:
+        log_query = log_query.where(CallLog.created_at >= start)
+        cost_query = cost_query.where(CallCost.created_at >= start)
+    if end:
+        log_query = log_query.where(CallLog.created_at < end)
+        cost_query = cost_query.where(CallCost.created_at < end)
+
+    usage = {
+        mid: {"calls": int(calls), "duration_secs": int(dur), "billed_secs": int(billed)}
+        for mid, calls, dur, billed in (await db.execute(log_query)).all()
+    }
+    costs = {mid: float(total) for mid, total in (await db.execute(cost_query)).all()}
+
+    ids = set(usage) | set(costs)
+    names: dict[str, str] = {}
+    if ids:
+        rows = await db.execute(
+            select(Merchant.id, Merchant.business_name).where(Merchant.id.in_(ids))
+        )
+        names = dict(rows.all())
+
+    merchants = [
+        {
+            "merchant_id": mid,
+            "merchant_name": names.get(mid, "—"),
+            "calls": usage.get(mid, {}).get("calls", 0),
+            "duration_secs": usage.get(mid, {}).get("duration_secs", 0),
+            "billed_secs": usage.get(mid, {}).get("billed_secs", 0),
+            "cost_bdt": round(costs.get(mid, 0.0), 2),
+        }
+        for mid in ids
+    ]
+    merchants.sort(key=lambda row: (-row["cost_bdt"], -row["calls"], row["merchant_name"]))
+    return {
+        "merchants": merchants,
+        "totals": {
+            "calls": sum(row["calls"] for row in merchants),
+            "duration_secs": sum(row["duration_secs"] for row in merchants),
+            "billed_secs": sum(row["billed_secs"] for row in merchants),
+            "cost_bdt": round(sum(row["cost_bdt"] for row in merchants), 2),
+        },
+    }
 
 
 @router.get("/recordings/{log_id}")

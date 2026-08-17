@@ -22,6 +22,9 @@ class MerchantSelfUpdate(BaseModel):
     custom_greeting: str | None = Field(default=None, max_length=200)
     max_call_seconds: int | None = None  # 0 = platform default
     voice_tier: str | None = None
+    noise_mode: str | None = None
+    barge_in_mode: str | None = None
+    silence_hangup_secs: int | None = None
     password: str | None = None
     current_password: str | None = None
 
@@ -39,6 +42,33 @@ class MerchantSelfUpdate(BaseModel):
 
         if v is not None and not is_valid_tier(v):
             raise ValueError("অজানা ভয়েস কোয়ালিটি")
+        return v
+
+    @field_validator("noise_mode")
+    @classmethod
+    def _valid_noise_mode(cls, v: str | None) -> str | None:
+        from app.voice.behavior import is_valid_noise_mode
+
+        if v is not None and not is_valid_noise_mode(v):
+            raise ValueError("অজানা নয়েজ ফিল্টার মোড")
+        return v
+
+    @field_validator("barge_in_mode")
+    @classmethod
+    def _valid_barge_in(cls, v: str | None) -> str | None:
+        from app.voice.behavior import is_valid_barge_in_mode
+
+        if v is not None and not is_valid_barge_in_mode(v):
+            raise ValueError("অজানা বার্জ-ইন মোড")
+        return v
+
+    @field_validator("silence_hangup_secs")
+    @classmethod
+    def _valid_silence_secs(cls, v: int | None) -> int | None:
+        from app.voice.behavior import SILENCE_HANGUP_MAX, SILENCE_HANGUP_MIN
+
+        if v is not None and not (SILENCE_HANGUP_MIN <= v <= SILENCE_HANGUP_MAX):
+            raise ValueError("নীরবতার সীমা ৫–৩০ সেকেন্ডের মধ্যে হতে হবে")
         return v
 
 
@@ -74,6 +104,16 @@ class AuditLogOut(BaseModel):
     detail: str
     merchant_id: str | None
     created_at: datetime
+
+
+class MerchantOption(BaseModel):
+    """Lightweight merchant row for filter dropdowns."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    business_name: str
+    active: bool
 
 
 class AdminMerchantOut(MerchantOut):

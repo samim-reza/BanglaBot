@@ -3,18 +3,20 @@
 from app.models import Merchant, Order
 
 
+def opening_greeting(merchant: Merchant) -> str:
+    """First sentence the selected TTS voice speaks when the media stream connects.
+
+    Kept short so the caller hears the merchant's chosen voice quickly. The
+    LLM is told this line already went out and must not greet again.
+    """
+    if merchant.custom_greeting.strip():
+        return merchant.custom_greeting.strip()
+    return f"আসসালামু আলাইকুম, আমি {merchant.business_name}-এর পক্ষ থেকে বলছি।"
+
+
 def build_system_prompt(order: Order, merchant: Merchant) -> str:
     amount = f"{order.total_amount:g}"
-    if merchant.custom_greeting.strip():
-        greeting_rule = (
-            f'2. কলের শুরুতে ঠিক এই বাক্যটি বলবে (হুবহু): "{merchant.custom_greeting.strip()}" — '
-            f"তারপর জিজ্ঞেস করবে তিনি {order.customer_name} বলছেন কি না।"
-        )
-    else:
-        greeting_rule = (
-            "2. প্রথমে সালাম/শুভেচ্ছা দিয়ে নিজের পরিচয় দেবে এবং জিজ্ঞেস করবে "
-            f"তিনি {order.customer_name} বলছেন কি না।"
-        )
+    greeting = opening_greeting(merchant)
     return f"""
 তুমি \"{merchant.business_name}\"-এর পক্ষ থেকে ফোন করা একজন ভদ্র মহিলা কাস্টমার-কেয়ার এজেন্ট।
 তোমার একমাত্র কাজ: নিচের অর্ডারটি কাস্টমার নিশ্চিত (confirm) করছেন কি না তা জানা।
@@ -28,7 +30,7 @@ def build_system_prompt(order: Order, merchant: Merchant) -> str:
 
 কথা বলার নিয়ম:
 1. সবসময় সহজ, প্রমিত বাংলায় কথা বলবে। ছোট ছোট বাক্য ব্যবহার করবে — উত্তরগুলো ফোনে শোনানো হবে।
-{greeting_rule}
+2. কলের একদম শুরুতে কাস্টমার ইতিমধ্যে এই গ্রিটিং শুনে ফেলেছেন: "{greeting}" — তাই আবার সালাম বা পরিচয় দেবে না। সরাসরি জিজ্ঞেস করবে তিনি {order.customer_name} বলছেন কি না।
 3. তারপর অর্ডারের সংক্ষিপ্ত বিবরণ (পণ্য ও মোট মূল্য) বলে জিজ্ঞেস করবে: তিনি কি অর্ডারটি নিশ্চিত করছেন?
 4. কাস্টমার নিশ্চিত করলে confirm_order টুল কল করবে, তারপর ধন্যবাদ জানিয়ে end_call টুল দিয়ে কল শেষ করবে।
 5. কাস্টমার বাতিল করতে চাইলে একবার ভদ্রভাবে কারণ জিজ্ঞেস করবে, তারপরও বাতিল চাইলে cancel_order টুল কল করবে এবং end_call করবে।
@@ -38,5 +40,5 @@ def build_system_prompt(order: Order, merchant: Merchant) -> str:
 9. সংখ্যা বাংলায় উচ্চারণ করবে (যেমন: এক হাজার দুইশ টাকা)। কোনো ইমোজি, তালিকা বা বিশেষ চিহ্ন ব্যবহার করবে না।
 10. কাস্টমার ইংরেজিতে বললেও তুমি বাংলাতেই উত্তর দেবে।
 
-এখন কল শুরু হয়েছে — সালাম দিয়ে শুরু করো।
+এখন কল শুরু হয়েছে — গ্রিটিং আগেই বলা হয়ে গেছে; এখন জিজ্ঞেস করো তিনি {order.customer_name} বলছেন কি না।
 """.strip()

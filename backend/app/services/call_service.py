@@ -107,6 +107,9 @@ async def apply_status_callback(
     if order and order.status == OrderStatus.calling:
         if call_status in ("no-answer", "busy", "failed", "canceled"):
             order.status = OrderStatus.no_answer
+        elif call_status == "completed" and log and log.outcome == "auto_dropped":
+            # Silent caller — the agent hung up; the order stays callable.
+            order.status = OrderStatus.no_answer
         elif call_status == "completed" and not (log and log.outcome):
             # Call happened but the agent recorded no clear outcome.
             order.status = OrderStatus.needs_review
@@ -174,6 +177,9 @@ async def reconcile_stale_calls(db: AsyncSession, merchant: Merchant) -> int:
                 log.billed_secs = voice_tiers.billed_seconds(duration, log.voice_tier)
                 await finance_service.compute_call_cost(db, log)
         if call_status in ("no-answer", "busy", "failed", "canceled"):
+            order.status = OrderStatus.no_answer
+        elif log and log.outcome == "auto_dropped":
+            # Silent caller — agent hung up; keep the order callable.
             order.status = OrderStatus.no_answer
         else:
             # Completed without a recorded outcome, or Twilio unreachable.

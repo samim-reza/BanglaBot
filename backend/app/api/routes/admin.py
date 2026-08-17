@@ -25,8 +25,8 @@ from app.models import (
 from app.schemas.billing import AdminSubscriptionUpdate
 from app.schemas.common import Page
 from app.schemas.merchant import MerchantCreate, MerchantOut, MerchantUpdate
-from app.schemas.order import OrderOut
-from app.schemas.platform import AdminMerchantOut, AuditLogOut
+from app.schemas.order import OrderOut, OrderUpdate
+from app.schemas.platform import AdminMerchantOut, AuditLogOut, MerchantOption
 from app.services import audit_service, billing_service, order_service
 
 router = APIRouter(
@@ -153,6 +153,13 @@ async def list_merchants(
     )
     items = await _admin_merchant_items(db, list(rows.scalars()))
     return Page(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.get("/merchants/options", response_model=list[MerchantOption])
+async def merchant_options(db: AsyncSession = Depends(get_db)):
+    """All merchants as a light id/name list — feeds the admin filter dropdowns."""
+    rows = await db.execute(select(Merchant).order_by(Merchant.business_name))
+    return list(rows.scalars())
 
 
 @router.post("/merchants", response_model=MerchantOut, status_code=201)
@@ -313,3 +320,29 @@ async def all_orders(
         db, merchant_id=merchant_id, status=status, search=search, page=page, page_size=page_size
     )
     return Page(items=items, total=total, page=page, page_size=page_size)
+
+
+@router.patch("/orders/{order_id}", response_model=OrderOut)
+async def update_order(
+    order_id: str,
+    body: OrderUpdate,
+    admin: PlatformAdmin = Depends(get_current_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    order = await db.get(Order, order_id)
+    if not order:
+        raise HTTPException(404, "অর্ডার পাওয়া যায়নি")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(order, field, value)
+    audit_service.record(
+        db,
+        actor_role="admin",
+        actor_id=admin.id,
+        actor_name=admin.name,
+        action="order_updated",
+        detail=f"{admin.name} অর্ডার আপডেট করেছেন: {order.order_ref or order.id[:8]}",
+        merchant_id=order.merchant_id,
+    )
+    await db.commit()
+    await db.refresh(order)
+    return order

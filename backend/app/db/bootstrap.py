@@ -1,7 +1,10 @@
 """Create tables and seed the platform admin, settings, plans and trials on startup."""
 
+import asyncio
+
 from loguru import logger
 from sqlalchemy import select, text
+from sqlalchemy.exc import OperationalError
 
 from app.core.config import get_settings
 from app.core.security import hash_password
@@ -68,8 +71,23 @@ PLAN_SEEDS = [
 
 
 async def bootstrap() -> None:
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    last_exc: Exception | None = None
+    for attempt in range(1, 4):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            last_exc = None
+            break
+        except (TimeoutError, OSError, ConnectionError, OperationalError) as exc:
+            last_exc = exc
+            logger.warning(f"database not reachable (attempt {attempt}/3): {exc}")
+            await engine.dispose()
+            await asyncio.sleep(2 * attempt)
+    if last_exc:
+        raise RuntimeError(
+            "Could not connect to Postgres. Check DATABASE_URL in backend/.env "
+            "and that the Supabase project is running (free-tier projects pause)."
+        ) from last_exc
 
     # Idempotent migrations for databases created before the SaaS port.
     for statement in (
@@ -87,6 +105,10 @@ async def bootstrap() -> None:
         "UPDATE merchants SET voice_tier='very_basic' WHERE voice_tier='standard'",
         "UPDATE merchants SET voice_tier='basic' WHERE voice_tier='better'",
         "UPDATE merchants SET voice_tier='advance' WHERE voice_tier='best'",
+        # Call-behavior knobs (modes & defaults in app/voice/behavior.py).
+        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS noise_mode VARCHAR(10) NOT NULL DEFAULT 'normal'",
+        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS barge_in_mode VARCHAR(12) NOT NULL DEFAULT 'protected'",
+        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS silence_hangup_secs INTEGER NOT NULL DEFAULT 10",
         "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS voice_tier VARCHAR(20) NOT NULL DEFAULT ''",
         "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS billed_secs INTEGER NOT NULL DEFAULT 0",
         # Calls priced before the tier system bill at face value (multiplier 1.0).

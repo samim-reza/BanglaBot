@@ -46,6 +46,17 @@ def elevenlabs_usable() -> bool:
     return usable
 
 
+def _credentials_missing(provider: str) -> bool:
+    """True when the provider a tier points at has no key/credentials configured."""
+    settings = get_settings()
+    return (
+        (provider == "azure" and not settings.azure_speech_key)
+        or (provider == "elevenlabs" and not settings.elevenlabs_api_key)
+        or (provider == "gemini" and not settings.gemini_api_key)
+        or (provider == "google" and not settings.google_credentials_path)
+    )
+
+
 def create_tts_service(tier_key: str | None = None):
     """Build the TTS service for a call.
 
@@ -66,14 +77,23 @@ def create_tts_service(tier_key: str | None = None):
             # Static calls never open a media stream; if we get here anyway,
             # run the default AI voice rather than failing the call.
             tier = voice_tiers.get_tier(voice_tiers.DEFAULT_TIER_KEY)
-        if tier.provider == "elevenlabs" and not settings.elevenlabs_api_key:
+        if _credentials_missing(tier.provider):
+            fallback = voice_tiers.get_tier(voice_tiers.DEFAULT_TIER_KEY)
             logger.warning(
-                f"Voice tier '{tier.key}' needs ElevenLabs but no key is set — "
-                "falling back to the standard tier"
+                f"Voice tier '{tier.key}' needs {tier.provider} but no key is set — "
+                f"falling back to '{fallback.key}'"
             )
-            tier = voice_tiers.get_tier(voice_tiers.DEFAULT_TIER_KEY)
-        provider = tier.provider
-        model_override = tier.model
+            tier = fallback
+        if _credentials_missing(tier.provider):
+            # The default tier is unconfigured too — let TTS_PROVIDER decide
+            # rather than handing a service an empty API key.
+            logger.error(
+                f"Default voice tier '{tier.key}' also has no {tier.provider} key — "
+                f"falling back to TTS_PROVIDER={provider}"
+            )
+        else:
+            provider = tier.provider
+            model_override = tier.model
 
     if provider == "gemini":
         from pipecat.services.google.tts import GeminiTTSService
@@ -94,12 +114,31 @@ def create_tts_service(tier_key: str | None = None):
             ),
         )
 
+    if provider == "azure":
+        from pipecat.services.azure.tts import AzureTTSService
+
+        # Either a plain neural voice ("bn-BD-PradeepNeural") or a Dragon HD
+        # Omni one ("bn-IN-Tanishaa:DragonHDOmniLatestNeural"). HD voices reject
+        # some SSML, so never set style/prosody params here.
+        voice = model_override or settings.azure_tts_voice
+        # bn-IN-* is Indian Bengali; bn-BD-* (and the default) is Bangladeshi.
+        language = Language.BN_IN if voice.startswith("bn-IN") else Language.BN_BD
+        return AzureTTSService(
+            api_key=settings.azure_speech_key,
+            region=settings.azure_speech_region,
+            # Azure honours the rate we ask for, so pick 16k for a cleaner
+            # signal and let the Twilio serializer resample down to 8k.
+            sample_rate=16000,
+            settings=AzureTTSService.Settings(voice=voice, language=language),
+        )
+
     if provider == "google":
         from pipecat.services.google.tts import GoogleTTSService
 
+        # Chirp 3 HD voices (bn-IN only — Google has no bn-BD locale).
         return GoogleTTSService(
             credentials_path=settings.google_credentials_path,
-            voice_id=settings.google_tts_voice,
+            voice_id=model_override or settings.google_tts_voice,
             params=GoogleTTSService.InputParams(language=Language.BN_IN),
         )
 

@@ -16,7 +16,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.frames.frames import LLMRunFrame
+from pipecat.frames.frames import LLMRunFrame, TTSSpeakFrame
 from pipecat.runner.utils import parse_telephony_websocket
 from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.services.openai.llm import OpenAILLMService
@@ -30,8 +30,9 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.db.session import AsyncSessionLocal
-from app.models import CallLog, Merchant, Order
-from app.voice.prompts import build_system_prompt
+from app.models import CallLog, Merchant, Order, OrderStatus
+from app.voice import behavior
+from app.voice.prompts import build_system_prompt, opening_greeting
 from app.voice.tools import CallAgentTools, tool_schemas
 from app.voice.tts import create_tts_service
 
@@ -96,9 +97,17 @@ async def run_call_agent(websocket: WebSocket) -> None:
         messages=[{"role": "system", "content": build_system_prompt(order, merchant)}],
         tools=tool_schemas(),
     )
+    # Merchant-tunable call behavior (defaults in app/voice/behavior.py):
+    # noise_mode = VAD strictness, barge_in_mode = when the caller may
+    # interrupt, silence_hangup_secs = auto-drop after caller silence.
+    idle_secs = behavior.silence_hangup_secs(merchant.silence_hangup_secs)
     user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
         context,
-        user_params=LLMUserAggregatorParams(vad_analyzer=SileroVADAnalyzer()),
+        user_params=LLMUserAggregatorParams(
+            vad_analyzer=SileroVADAnalyzer(params=behavior.vad_params(merchant.noise_mode)),
+            user_turn_strategies=behavior.turn_strategies(merchant.barge_in_mode),
+            user_idle_timeout=idle_secs,
+        ),
     )
 
     pipeline = Pipeline(
@@ -118,10 +127,25 @@ async def run_call_agent(websocket: WebSocket) -> None:
         idle_timeout_secs=90,
     )
 
+    @user_aggregator.event_handler("on_user_turn_idle")
+    async def on_user_idle(aggregator):
+        # Caller said nothing for idle_secs after the agent finished speaking:
+        # mark the call auto-dropped (order becomes callable again) and hang up.
+        logger.info(f"Call {call_sid}: caller silent for {idle_secs}s — auto-dropping")
+        await _mark_auto_dropped(call_sid, order.id)
+        await task.queue_frames(
+            [TTSSpeakFrame("আপনাকে শুনতে পাচ্ছি না, তাই কলটি রাখছি। পরে আবার কল করা হবে, ধন্যবাদ।")]
+        )
+        await task.stop_when_done()
+
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info(f"Call {call_sid} connected for order {order.id}")
-        await task.queue_frames([LLMRunFrame()])  # agent greets first
+        # Speak the greeting with the selected TTS (not Twilio <Say>), then let
+        # the LLM continue. TTS pauses inbound frames so the two don't overlap.
+        await task.queue_frames(
+            [TTSSpeakFrame(opening_greeting(merchant)), LLMRunFrame()]
+        )
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
@@ -133,6 +157,22 @@ async def run_call_agent(websocket: WebSocket) -> None:
         await runner.run(task)
     finally:
         await _save_transcript(call_sid, _transcript_from_context(context))
+
+
+async def _mark_auto_dropped(call_sid: str, order_id: str) -> None:
+    """Record the silent-caller drop: outcome "auto_dropped" on the log and the
+    order back to no_answer so it can be called again. A real outcome recorded
+    earlier in the call (confirm/cancel) always wins."""
+    async with AsyncSessionLocal() as db:
+        log = (
+            await db.execute(select(CallLog).where(CallLog.twilio_call_sid == call_sid))
+        ).scalar_one_or_none()
+        if log and not log.outcome:
+            log.outcome = "auto_dropped"
+            order = await db.get(Order, order_id)
+            if order and order.status == OrderStatus.calling:
+                order.status = OrderStatus.no_answer
+            await db.commit()
 
 
 async def _save_transcript(call_sid: str, transcript: str) -> None:

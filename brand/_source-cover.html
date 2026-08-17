@@ -1,0 +1,78 @@
+<meta charset="utf-8">
+<style>
+  html,body{margin:0;padding:0}
+  body{
+    width:1640px;height:624px;overflow:hidden;position:relative;
+    background:
+      radial-gradient(900px 620px at 78% 18%, rgba(45,212,191,.34), transparent 62%),
+      radial-gradient(700px 520px at 14% 88%, rgba(13,148,136,.30), transparent 60%),
+      linear-gradient(125deg,#062e2b 0%,#0b4f4a 42%,#0d9488 100%);
+    font-family:'Lato',sans-serif;
+  }
+  .bn{font-family:'Lohit Bengali','Mukti','Likhan',sans-serif}
+
+  /* decorative waveform, sits outside the mobile safe zone on purpose */
+  .wave{position:absolute;inset:0;width:100%;height:100%}
+
+  .stage{
+    position:absolute;left:50%;top:284px;transform:translate(-50%,-50%);
+    width:1080px;text-align:center;color:#fff;
+  }
+
+  .lockup{display:flex;align-items:center;justify-content:center;gap:22px;margin-bottom:26px}
+  .mark{
+    width:82px;height:82px;border-radius:50%;flex:0 0 auto;
+    background:linear-gradient(140deg,#2dd4bf,#0d9488 55%,#0b4f4a);
+    box-shadow:0 10px 30px rgba(0,0,0,.28), inset 0 0 0 2px rgba(255,255,255,.14);
+    display:flex;align-items:center;justify-content:center;
+  }
+  .mark span{font-size:54px;line-height:1;color:#fff;transform:translateY(-2px)}
+  .word{font-size:60px;font-weight:900;letter-spacing:-1.2px;line-height:1}
+
+  h1{
+    margin:0 0 20px;font-size:52px;font-weight:700;line-height:1.42;
+    text-shadow:0 2px 18px rgba(0,0,0,.25);
+  }
+  .en{
+    margin:0 auto 34px;max-width:860px;font-size:27px;font-weight:400;line-height:1.45;
+    color:rgba(255,255,255,.80);
+  }
+
+  .chips{display:flex;justify-content:center;gap:14px;flex-wrap:wrap}
+  .chip{
+    font-size:23px;padding:11px 24px;border-radius:999px;
+    background:rgba(255,255,255,.11);border:1px solid rgba(255,255,255,.22);
+    color:rgba(255,255,255,.94);backdrop-filter:blur(2px);
+  }
+</style>
+
+<svg class="wave" viewBox="0 0 1640 624" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+  <g fill="none" stroke="#ffffff" stroke-opacity="0.09" stroke-width="3">
+    <path d="M0 500 Q 205 400 410 500 T 820 500 T 1230 500 T 1640 500"/>
+    <path d="M0 548 Q 205 468 410 548 T 820 548 T 1230 548 T 1640 548"/>
+  </g>
+  <g fill="none" stroke="#5eead4" stroke-opacity="0.16" stroke-linecap="round" stroke-width="12">
+    <path d="M1452 236 A 92 92 0 0 1 1452 388"/>
+    <path d="M1520 190 A 160 160 0 0 1 1520 434"/>
+    <path d="M1588 144 A 228 228 0 0 1 1588 480"/>
+    <path d="M188 236 A 92 92 0 0 0 188 388"/>
+    <path d="M120 190 A 160 160 0 0 0 120 434"/>
+  </g>
+</svg>
+
+<div class="stage">
+  <div class="lockup">
+    <div class="mark"><span class="bn">ব</span></div>
+    <div class="word">BanglaBot</div>
+  </div>
+
+  <h1 class="bn">বাংলায় অর্ডার কনফার্মেশন কল</h1>
+
+  <p class="en">AI voice agent that calls your customers in Bengali to confirm orders.</p>
+
+  <div class="chips">
+    <div class="chip bn">অটোমেটিক কল</div>
+    <div class="chip bn">রিয়েল-টাইম ড্যাশবোর্ড</div>
+    <div class="chip bn">ক্যাশ-অন-ডেলিভারি যাচাই</div>
+  </div>
+</div>

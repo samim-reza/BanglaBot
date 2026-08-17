@@ -44,6 +44,9 @@ export interface Merchant {
   custom_greeting: string;
   max_call_seconds: number;
   voice_tier: string;
+  noise_mode: string;
+  barge_in_mode: string;
+  silence_hangup_secs: number;
   active: boolean;
   created_at: string;
 }
@@ -54,6 +57,9 @@ export interface VoiceTier {
   description_bn: string;
   multiplier: number;
   mode: "static" | "ai";
+  group?: "speaker" | "quality";
+  gender?: string;
+  accent_bn?: string;
 }
 
 export interface InsightsDay {
@@ -95,6 +101,14 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: "বাতিল",
   no_answer: "ধরেননি",
   needs_review: "পর্যালোচনা দরকার",
+};
+
+/** Call-log outcome → Bengali label; unknown outcomes render raw. */
+export const OUTCOME_LABELS: Record<string, string> = {
+  confirmed: "নিশ্চিত",
+  cancelled: "বাতিল",
+  transfer: "মানুষের কাছে",
+  auto_dropped: "অটো ড্রপড",
 };
 
 export type SubStatus = "trialing" | "active" | "past_due" | "canceled";
@@ -223,6 +237,26 @@ export interface PlatformSettingsData {
   trial_plan_key: string;
   entitlement_mode: string;
   updated_at: string;
+}
+
+export interface MerchantOption {
+  id: string;
+  business_name: string;
+  active: boolean;
+}
+
+export interface CallSummaryRow {
+  merchant_id: string;
+  merchant_name: string;
+  calls: number;
+  duration_secs: number;
+  billed_secs: number;
+  cost_bdt: number;
+}
+
+export interface AdminCallSummary {
+  merchants: CallSummaryRow[];
+  totals: { calls: number; duration_secs: number; billed_secs: number; cost_bdt: number };
 }
 
 export interface AdminCall {
