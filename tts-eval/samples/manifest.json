@@ -1,0 +1,104 @@
+{
+  "text": "আসসালামু আলাইকুম, আমি বাংলাবট থেকে কল করছি। আপনার অর্ডারটি নিশ্চিত করতে চাই। আপনি কি অর্ডারটি রিসিভ করবেন?",
+  "voices": [
+    {
+      "id": "piper-bn_BD-google-spk00",
+      "title": "Piper bn_BD-google medium — speaker 0",
+      "engine": "Piper VITS ONNX (CPU)",
+      "size": "~77 MB, 16 speakers, 22.05 kHz",
+      "note": "Official Piper Bangladeshi Bengali voice (OpenSLR 37 + CMU Indic). Same architecture as the CPU path we talked about.",
+      "rtf": 0.042,
+      "duration": 8.77,
+      "mp3": "piper-bn_BD-google-spk00.mp3",
+      "phone": "piper-bn_BD-google-spk00-phone.mp3"
+    },
+    {
+      "id": "piper-bn_BD-google-spk01",
+      "title": "Piper bn_BD-google medium — speaker 1",
+      "engine": "Piper VITS ONNX (CPU)",
+      "size": "~77 MB, 16 speakers, 22.05 kHz",
+      "note": "Official Piper Bangladeshi Bengali voice (OpenSLR 37 + CMU Indic). Same architecture as the CPU path we talked about.",
+      "rtf": 0.04,
+      "duration": 8.44,
+      "mp3": "piper-bn_BD-google-spk01.mp3",
+      "phone": "piper-bn_BD-google-spk01-phone.mp3"
+    },
+    {
+      "id": "piper-bn_BD-google-spk06",
+      "title": "Piper bn_BD-google medium — speaker 6",
+      "engine": "Piper VITS ONNX (CPU)",
+      "size": "~77 MB, 16 speakers, 22.05 kHz",
+      "note": "Official Piper Bangladeshi Bengali voice (OpenSLR 37 + CMU Indic). Same architecture as the CPU path we talked about.",
+      "rtf": 0.038,
+      "duration": 9.11,
+      "mp3": "piper-bn_BD-google-spk06.mp3",
+      "phone": "piper-bn_BD-google-spk06-phone.mp3"
+    },
+    {
+      "id": "piper-bn_BD-google-spk10",
+      "title": "Piper bn_BD-google medium — speaker 10",
+      "engine": "Piper VITS ONNX (CPU)",
+      "size": "~77 MB, 16 speakers, 22.05 kHz",
+      "note": "Official Piper Bangladeshi Bengali voice (OpenSLR 37 + CMU Indic). Same architecture as the CPU path we talked about.",
+      "rtf": 0.04,
+      "duration": 7.19,
+      "mp3": "piper-bn_BD-google-spk10.mp3",
+      "phone": "piper-bn_BD-google-spk10-phone.mp3"
+    },
+    {
+      "id": "piper-bn_BD-google-spk15",
+      "title": "Piper bn_BD-google medium — speaker 15",
+      "engine": "Piper VITS ONNX (CPU)",
+      "size": "~77 MB, 16 speakers, 22.05 kHz",
+      "note": "Official Piper Bangladeshi Bengali voice (OpenSLR 37 + CMU Indic). Same architecture as the CPU path we talked about.",
+      "rtf": 0.045,
+      "duration": 10.14,
+      "mp3": "piper-bn_BD-google-spk15.mp3",
+      "phone": "piper-bn_BD-google-spk15-phone.mp3"
+    },
+    {
+      "id": "mms-tts-ben",
+      "title": "Meta MMS-TTS Bengali (facebook/mms-tts-ben)",
+      "engine": "Hugging Face VITS, 36M params, CPU PyTorch",
+      "size": "~36M params / ~140 MB weights",
+      "note": "One small VITS trained only on Bengali — this is 'Bangla extracted' the right way. License is CC-BY-NC-4.0 (non-commercial).",
+      "rtf": 0.253,
+      "duration": 10.11,
+      "mp3": "mms-tts-ben.mp3",
+      "phone": "mms-tts-ben-phone.mp3"
+    },
+    {
+      "id": "community-emtiaz-female",
+      "title": "Community VITS — EMTIAZZ Bangladeshi female",
+      "engine": "Coqui VITS (CPU)",
+      "size": "Coqui checkpoint ~1 GB on disk (training dump; inference is smaller)",
+      "note": "Trained for Bangladeshi Bangla pronunciation. Grapheme VITS, no espeak.",
+      "rtf": 0.316,
+      "duration": 8.6,
+      "mp3": "community-emtiaz-female.mp3",
+      "phone": "community-emtiaz-female-phone.mp3"
+    },
+    {
+      "id": "community-bsp-female",
+      "title": "Community VITS — bangla-speech-processing female",
+      "engine": "Coqui VITS (CPU)",
+      "size": "Coqui checkpoint ~1 GB on disk",
+      "note": "Well-known Bangla female VITS (IIT Madras / Common Voice mix). MOS claimed ~4.1.",
+      "rtf": 0.287,
+      "duration": 8.02,
+      "mp3": "community-bsp-female.mp3",
+      "phone": "community-bsp-female-phone.mp3"
+    },
+    {
+      "id": "community-bsp-male",
+      "title": "Community VITS — bangla-speech-processing male",
+      "engine": "Coqui VITS (CPU)",
+      "size": "Coqui checkpoint ~1 GB on disk",
+      "note": "Male counterpart of the same Bangla VITS family.",
+      "rtf": 0.286,
+      "duration": 10.71,
+      "mp3": "community-bsp-male.mp3",
+      "phone": "community-bsp-male-phone.mp3"
+    }
+  ]
+}

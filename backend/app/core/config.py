@@ -59,6 +59,14 @@ class Settings(BaseSettings):
     azure_speech_region: str = "southeastasia"
     azure_tts_voice: str = "bn-BD-PradeepNeural"
 
+    # TTS audio cache (app/voice/tts_cache.py): repeated lines are served from
+    # disk instead of re-bought from the vendor. Size cap drives LRU eviction;
+    # buy concurrency matches the vendor's synthesis limit (ElevenLabs free
+    # plan allows 2 concurrent requests).
+    tts_cache_enabled: bool = True
+    tts_cache_max_mb: int = 4096
+    tts_buy_concurrency: int = 2
+
     # Call behavior
     max_call_seconds: int = 240
 

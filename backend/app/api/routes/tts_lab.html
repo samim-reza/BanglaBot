@@ -1,0 +1,448 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TTS Cost Lab — BanglaBot</title>
+<style>
+  :root {
+    --bg:#0e1117; --panel:#161b24; --sunk:#0b0e14; --line:#262d3a; --text:#e6e9ef;
+    --muted:#8b95a7; --accent:#4c8dff; --hit:#2ecc8f; --miss:#f5a524; --bad:#ff5c5c;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:32px 20px; background:var(--bg); color:var(--text);
+    font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  .wrap { max-width:860px; margin:0 auto; }
+  h1 { font-size:21px; margin:0 0 4px; }
+  .sub { color:var(--muted); font-size:13.5px; margin:0 0 22px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:18px; margin-bottom:16px; }
+  .bn { font-family:"Noto Sans Bengali","Kalpurush","SolaimanLipi",system-ui,sans-serif; font-size:16.5px; line-height:1.75; }
+  label { display:block; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:8px; }
+  textarea, input[type=text] { width:100%; padding:11px; border-radius:8px; border:1px solid var(--line);
+    background:var(--sunk); color:var(--text); }
+  textarea { min-height:70px; resize:vertical; }
+  textarea:focus, input:focus { outline:none; border-color:var(--accent); }
+  select { padding:9px; border-radius:8px; border:1px solid var(--line); background:var(--sunk); color:var(--text); font-size:13px; }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .row.mt { margin-top:14px; }
+  button { border:0; border-radius:8px; padding:11px 20px; font-size:14.5px; font-weight:600; background:var(--accent); color:#fff; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:default; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); font-weight:500; }
+  button.mini { padding:7px 11px; font-size:12.5px; font-weight:500; background:transparent; border:1px solid var(--line); color:var(--muted); }
+  .tabs { display:flex; gap:6px; margin-bottom:16px; }
+  .tabs button { background:transparent; border:1px solid var(--line); color:var(--muted); font-weight:500; }
+  .tabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  .verdict { display:none; border-radius:10px; padding:16px 18px; margin-bottom:16px; border:1px solid; }
+  .verdict.show { display:block; }
+  .verdict.hit { border-color:var(--hit); background:rgba(46,204,143,.09); }
+  .verdict.miss { border-color:var(--miss); background:rgba(245,165,36,.09); }
+  .verdict.err { border-color:var(--bad); background:rgba(255,92,92,.09); }
+  .verdict h2 { margin:0 0 6px; font-size:17px; }
+  .hit h2 { color:var(--hit); } .miss h2 { color:var(--miss); } .err h2 { color:var(--bad); }
+  .verdict p { margin:0; color:var(--muted); font-size:13.5px; }
+  audio { width:100%; margin-top:12px; }
+  .cards { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:680px) { .cards { grid-template-columns:1fr; } }
+  .card { border:1px solid var(--line); border-radius:10px; padding:15px; background:var(--sunk); }
+  .card h3 { margin:0 0 2px; font-size:13px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  .big { font-size:29px; font-weight:700; font-variant-numeric:tabular-nums; margin:6px 0 0; }
+  .big.good { color:var(--hit); } .big.warn { color:var(--miss); }
+  .card .note { color:var(--muted); font-size:12.5px; margin:3px 0 0; }
+  .save { margin-top:14px; padding:13px 15px; border-radius:9px; border:1px solid var(--hit); background:rgba(46,204,143,.09); font-size:14px; }
+  .save b { color:var(--hit); }
+  table { width:100%; border-collapse:collapse; font-size:13.5px; }
+  th { text-align:left; font-weight:500; color:var(--muted); font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; padding-bottom:8px; }
+  td { padding:7px 0; border-top:1px solid var(--line); font-variant-numeric:tabular-nums; vertical-align:top; }
+  .tag { font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; white-space:nowrap; }
+  .tag.hit { background:rgba(46,204,143,.16); color:var(--hit); }
+  .tag.miss { background:rgba(245,165,36,.16); color:var(--miss); }
+  .tag.slot { background:rgba(76,141,255,.16); color:var(--accent); }
+  .tag.fixed { background:rgba(139,149,167,.16); color:var(--muted); }
+  .meta { display:flex; gap:22px; flex-wrap:wrap; color:var(--muted); font-size:13px; }
+  .meta b { color:var(--text); font-weight:600; font-variant-numeric:tabular-nums; }
+  .empty { color:var(--muted); font-size:13.5px; }
+  .frag { display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .frag input { flex:1; }
+  .hint { color:var(--muted); font-size:12.5px; margin:12px 0 0; padding-left:11px; border-left:2px solid var(--line); }
+  .chk { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:13.5px; }
+  .chk input { accent-color:var(--accent); width:16px; height:16px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>TTS Cost Lab</h1>
+  <p class="sub">Charges come from the <code>character-cost</code> header ElevenLabs returns on each synthesis — their number, not an estimate. A cache hit makes no request at all, so it cannot cost anything.</p>
+
+  <div class="tabs">
+    <button id="tabSingle" class="on">Single line</button>
+    <button id="tabSlots">Slots vs whole sentence</button>
+    <button id="tabOps">Scale &amp; ops</button>
+  </div>
+
+  <!-- ───────── single line ───────── -->
+  <div id="paneSingle">
+    <div class="panel">
+      <label for="text">Line to speak</label>
+      <textarea id="text" class="bn">আসসালামু আলাইকুম, আমি কি শামীম রেজার সাথে কথা বলছি?</textarea>
+      <div class="row mt">
+        <button id="go">Generate</button>
+        <span id="status" class="empty"></span>
+      </div>
+      <p class="hint">Click twice with identical text: the first buys the clip, the second serves it from disk for free. Change one word and it is a new sentence, so it costs again.</p>
+    </div>
+    <div id="verdict" class="verdict">
+      <h2 id="vTitle"></h2><p id="vBody"></p><audio id="player" controls></audio>
+    </div>
+    <div class="panel">
+      <table>
+        <thead><tr><th>#</th><th>Result</th><th>Credits charged</th><th>Latency</th><th>Chars</th></tr></thead>
+        <tbody id="log"><tr><td colspan="5" class="empty" style="border:0;padding-top:12px">No requests yet.</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ───────── slot mode ───────── -->
+  <div id="paneSlots" style="display:none">
+    <div class="panel">
+      <label>Fragments — cached frame + variable slot</label>
+      <div id="frags"></div>
+      <div class="row"><button class="mini" id="addFrag">+ Add fragment</button></div>
+
+      <div style="margin-top:18px">
+        <label for="whole">Compare against — the same words as one sentence</label>
+        <input type="text" id="whole" class="bn" value="আসসালামু আলাইকুম, আমি কি শামীম রেজার সাথে কথা বলছি?">
+      </div>
+
+      <div class="row mt">
+        <span class="chk"><input type="checkbox" id="phone"> Phone band (8&nbsp;kHz μ-law, 300&nbsp;Hz cut)</span>
+        <span class="chk"><input type="checkbox" id="cmp" checked> Also buy whole sentence</span>
+        <span class="chk">Gap <input type="range" id="gap" min="0" max="500" step="20" value="180" style="width:110px"> <b id="gapV" style="color:var(--text)">180 ms</b></span>
+      </div>
+      <div class="row mt">
+        <button id="goSlots">Generate</button>
+        <span id="statusSlots" class="empty"></span>
+      </div>
+      <p class="hint">Change only the slot text and generate again: the split version pays for the slot alone, while the whole sentence pays in full every time. Toggling the phone band never costs credits — it re-renders cached audio.</p>
+    </div>
+
+    <div id="slotErr" class="verdict err"><h2 id="seTitle"></h2><p id="seBody"></p></div>
+
+    <div id="slotOut" style="display:none">
+      <div class="cards">
+        <div class="card">
+          <h3>Split — frame + slot</h3>
+          <p class="big good" id="cSplit">—</p>
+          <p class="note" id="nSplit"></p>
+          <audio id="pSplit" controls></audio>
+        </div>
+        <div class="card">
+          <h3>Whole sentence</h3>
+          <p class="big warn" id="cWhole">—</p>
+          <p class="note" id="nWhole"></p>
+          <audio id="pWhole" controls></audio>
+        </div>
+      </div>
+      <div class="save" id="save"></div>
+
+      <div class="panel" style="margin-top:16px">
+        <table>
+          <thead><tr><th>Fragment</th><th>Kind</th><th>Chars</th><th>Cache</th><th>Audio</th></tr></thead>
+          <tbody id="fragTable"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ───────── scale & ops ───────── -->
+  <div id="paneOps" style="display:none">
+    <div class="panel">
+      <label>Cache health</label>
+      <div class="meta" style="margin-bottom:4px">
+        <span>Hit rate <b id="oHit">—</b></span>
+        <span>Clips <b id="oClips">—</b></span>
+        <span>Resident <b id="oMB">—</b></span>
+        <span>Evictions <b id="oEv">—</b></span>
+        <span>Chars bought (lifetime) <b id="oChars">—</b></span>
+      </div>
+      <div class="row mt">
+        <button class="mini" id="opSweep">Sweep (reconcile disk ↔ ledger)</button>
+        <button class="mini" id="opRebuildDry">Rebuild lost — dry run</button>
+        <button class="mini" id="opRebuild" style="border-color:var(--miss);color:var(--miss)">Rebuild lost — BUY</button>
+        <span id="opsStatus" class="empty"></span>
+      </div>
+      <p class="hint">Sweep compares the audio directory against the ledger (a separate SQLite file) and lists what is lost and what re-buying it costs. Dry run prices a rebuild without spending; BUY re-purchases the hottest lost clips through the vendor concurrency gate.</p>
+    </div>
+
+    <div class="panel">
+      <label>Traffic simulation — synthetic vendor, throwaway cache, spends nothing</label>
+      <div class="row">
+        <span class="chk">Calls/day <input type="text" id="simCalls" value="2000" style="width:70px"></span>
+        <span class="chk">Days <input type="text" id="simDays" value="3" style="width:44px"></span>
+        <span class="chk">Cap MB <input type="text" id="simCap" value="512" style="width:60px"></span>
+        <span class="chk"><input type="checkbox" id="simWipe" checked> Wipe files on last day</span>
+        <button id="simGo">Run</button>
+        <span id="simStatus" class="empty"></span>
+      </div>
+      <div id="simOut" style="margin-top:14px;display:none">
+        <table>
+          <thead><tr><th>Day</th><th>Hit rate</th><th>Chars bought</th><th>Resident</th><th>Evictions</th><th>get() p50 / p99</th></tr></thead>
+          <tbody id="simTable"></tbody>
+        </table>
+        <div class="save" id="simSummary" style="margin-top:12px"></div>
+      </div>
+      <p class="hint">Models the phrase-bank call script: greeting + fixed frames + name/product/amount slots, zipf-weighted across 150 merchants and four voice tiers. 10k-call days take ~10s each.</p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="meta">
+      <span>Charged this session <b id="mSession">—</b></span>
+      <span>Vendor total today <b id="mToday">—</b></span>
+      <span>Last 30 days <b id="m30">—</b></span>
+      <span>Clips cached <b id="mClips">—</b></span>
+      <button class="mini" id="clear" style="margin-left:auto">Clear cache</button>
+    </div>
+    <p class="hint" style="margin-top:12px">"Charged this session" is summed from the per-request cost headers — exact and instant. The vendor totals come from daily usage buckets and land about five seconds late, so they refresh on their own shortly after each generate.</p>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const fmt = v => (v === null || v === undefined) ? "—" : v.toLocaleString();
+const esc = t => t.replace(/[&<>]/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;" }[c]));
+
+/* ---------- tabs ---------- */
+function tab(which) {
+  for (const [btn, pane] of [["tabSingle","paneSingle"],["tabSlots","paneSlots"],["tabOps","paneOps"]]) {
+    const on = btn.toLowerCase().includes(which);
+    $(pane).style.display = on ? "" : "none";
+    $(btn).className = on ? "on" : "";
+  }
+}
+$("tabSingle").onclick = () => tab("single");
+$("tabSlots").onclick = () => tab("slots");
+$("tabOps").onclick = () => { tab("ops"); loadUsage(); };
+
+function meta(d) {
+  $("mSession").textContent = fmt(d.session_charged);
+  $("mClips").textContent = fmt(d.cache.clips);
+  setTimeout(loadUsage, 6000);   // daily buckets lag ~5s behind a purchase
+}
+
+async function loadUsage() {
+  try {
+    const d = await (await fetch("/api/tts-lab/usage")).json();
+    $("mSession").textContent = fmt(d.session_charged);
+    $("mClips").textContent = fmt(d.cache.clips);
+    $("mToday").textContent = d.usage ? fmt(d.usage.today) : "unavailable";
+    $("m30").textContent = d.usage ? fmt(d.usage.last_30d) : "unavailable";
+    const c = d.cache;
+    $("oHit").textContent = c.hit_rate === null ? "—" : (c.hit_rate * 100).toFixed(1) + "%";
+    $("oClips").textContent = fmt(c.clips);
+    $("oMB").textContent = (c.bytes / 1048576).toFixed(1) + " / " + Math.round(c.max_bytes / 1048576) + " MB";
+    $("oEv").textContent = fmt(c.evictions);
+    $("oChars").textContent = fmt(c.chars_bought);
+  } catch (e) { /* readout only */ }
+}
+
+$("opSweep").onclick = async () => {
+  $("opsStatus").textContent = "Sweeping…";
+  const d = await (await fetch("/api/tts-lab/sweep", { method: "POST" })).json();
+  $("opsStatus").textContent = `${d.files_on_disk} files on disk · ${d.newly_missing} newly missing · ${d.rebuildable_clips} rebuildable for ${fmt(d.rebuild_cost_chars)} chars`;
+  loadUsage();
+};
+async function rebuild(confirm) {
+  $("opsStatus").textContent = confirm ? "Rebuilding (spends credits)…" : "Pricing rebuild…";
+  const d = await (await fetch("/api/tts-lab/rebuild", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm, limit: 25 })
+  })).json();
+  $("opsStatus").textContent = d.dry_run
+    ? `Dry run: ${d.clips} lost clips, re-buying costs ${fmt(d.chars_to_buy)} chars`
+    : `Re-bought ${d.bought} clips for ${fmt(d.chars_charged)} chars`;
+  loadUsage();
+}
+$("opRebuildDry").onclick = () => rebuild(false);
+$("opRebuild").onclick = () => rebuild(true);
+
+$("simGo").onclick = async () => {
+  $("simGo").disabled = true;
+  $("simStatus").textContent = "Running… (about 1s per 1k calls per day)";
+  try {
+    const res = await fetch("/api/tts-lab/simulate", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        calls_per_day: +($("simCalls").value) || 2000,
+        days: +($("simDays").value) || 3,
+        cap_mb: +($("simCap").value) || 512,
+        wipe_last_day: $("simWipe").checked,
+      })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || res.status);
+    $("simOut").style.display = "";
+    $("simTable").innerHTML = d.days.map(r => `
+      <tr><td>${r.day}${d.wipe && r.day === d.days.length ? " 💥wipe" : ""}</td>
+        <td>${(r.hit_rate * 100).toFixed(1)}%</td>
+        <td>${(r.buy_ratio_chars * 100).toFixed(1)}% (${fmt(r.chars_bought)})</td>
+        <td>${r.resident_mb} MB · ${fmt(r.resident_clips)} clips</td>
+        <td>${fmt(r.evictions)}</td>
+        <td>${r.get_ms_p50} / ${r.get_ms_p99} ms</td></tr>`).join("");
+    const t = d.totals;
+    $("simSummary").innerHTML = `<b>${t.chars_saved_pct}% of characters never bought.</b> `
+      + `${fmt(t.chars_spoken)} chars spoken, ${fmt(t.chars_bought)} bought. `
+      + (d.wipe ? `Wipe destroyed ${fmt(d.wipe.files_deleted)} files; the ledger priced a full re-buy at ${fmt(d.wipe.proactive_rebuild_cost_chars)} chars and traffic rebuilt the hot set the same day.` : "");
+  } catch (e) {
+    $("simStatus").textContent = "Failed: " + e.message;
+  } finally {
+    $("simGo").disabled = false;
+    if (!$("simStatus").textContent.startsWith("Failed")) $("simStatus").textContent = "";
+  }
+};
+loadUsage();
+
+/* ---------- single line ---------- */
+let n = 0;
+function show(cls, title, body) {
+  $("verdict").className = "verdict show " + cls;
+  $("vTitle").textContent = title;
+  $("vBody").textContent = body;
+}
+
+async function generate() {
+  const text = $("text").value.trim();
+  if (!text) return;
+  $("go").disabled = true; $("status").textContent = "Synthesizing…";
+  try {
+    const res = await fetch("/api/tts-lab/speak", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || ("HTTP " + res.status));
+    n++;
+    const charged = fmt(d.credits_used);
+    if (d.cached) show("hit", "Cache HIT — 0 credits",
+      `Served from disk in ${d.elapsed_ms} ms with no network request at all.`);
+    else show("miss", `Cache MISS — ${charged} credits charged`,
+      `ElevenLabs charged ${charged} characters for this line and it is now on disk. Generate again with the same text and it drops to zero.`);
+    $("player").src = d.audio_url + "?t=" + Date.now();
+    $("player").play().catch(() => {});
+    meta(d);
+    if (n === 1) $("log").innerHTML = "";
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${n}</td>
+      <td><span class="tag ${d.cached ? "hit" : "miss"}">${d.cached ? "HIT" : "MISS"}</span></td>
+      <td>${charged}</td><td>${d.elapsed_ms} ms</td><td>${d.chars}</td>`;
+    $("log").prepend(tr);
+  } catch (e) {
+    show("err", "Request failed", String(e.message || e));
+  } finally { $("go").disabled = false; $("status").textContent = ""; }
+}
+$("go").onclick = generate;
+
+/* ---------- slot mode ---------- */
+let frags = [
+  { text: "আসসালামু আলাইকুম।", kind: "fixed" },
+  { text: "শামীম রেজা?", kind: "slot" },
+  { text: "আমি বাংলাবট থেকে বলছি।", kind: "fixed" },
+];
+
+function drawFrags() {
+  $("frags").innerHTML = "";
+  frags.forEach((f, i) => {
+    const row = document.createElement("div");
+    row.className = "frag";
+    row.innerHTML = `
+      <input type="text" class="bn" value="${esc(f.text)}">
+      <select>
+        <option value="fixed"${f.kind === "fixed" ? " selected" : ""}>fixed</option>
+        <option value="slot"${f.kind === "slot" ? " selected" : ""}>slot</option>
+      </select>
+      <button class="mini">✕</button>`;
+    row.querySelector("input").oninput = e => { frags[i].text = e.target.value; };
+    row.querySelector("select").onchange = e => { frags[i].kind = e.target.value; };
+    row.querySelector("button").onclick = () => {
+      if (frags.length > 1) { frags.splice(i, 1); drawFrags(); }
+    };
+    $("frags").appendChild(row);
+  });
+}
+drawFrags();
+
+$("addFrag").onclick = () => { frags.push({ text: "", kind: "fixed" }); drawFrags(); };
+$("gap").oninput = e => { $("gapV").textContent = e.target.value + " ms"; };
+
+function slotErr(title, body) {
+  $("slotErr").className = "verdict show err";
+  $("seTitle").textContent = title; $("seBody").textContent = body;
+}
+
+async function generateSlots() {
+  const payload = {
+    fragments: frags.filter(f => f.text.trim()).map(f => ({ text: f.text.trim(), kind: f.kind })),
+    whole_text: $("whole").value.trim(),
+    gap_ms: Number($("gap").value),
+    phone_band: $("phone").checked,
+    compare_whole: $("cmp").checked,
+  };
+  if (!payload.fragments.length) return;
+  $("goSlots").disabled = true; $("statusSlots").textContent = "Synthesizing…";
+  $("slotErr").className = "verdict err";
+  try {
+    const res = await fetch("/api/tts-lab/slots", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || ("HTTP " + res.status));
+
+    $("slotOut").style.display = "";
+    const s = d.split, w = d.whole;
+
+    $("cSplit").textContent = s.charged_chars + " chars";
+    $("nSplit").textContent = `${d.fragments.filter(f => !f.cached).length} of ${d.fragments.length} fragments bought · ${s.duration_ms} ms of audio · ${d.gap_ms} ms gaps`;
+    $("pSplit").src = s.audio_url + "?t=" + Date.now();
+
+    if (w) {
+      $("cWhole").textContent = w.charged_chars + " chars";
+      $("nWhole").textContent = `${w.cached ? "served from cache" : "bought in full"} · ${w.chars} chars total · ${w.duration_ms} ms of audio`;
+      $("pWhole").src = w.audio_url + "?t=" + Date.now();
+      const per = w.chars - s.charged_chars;
+      const pct = w.chars ? Math.round(per / w.chars * 100) : 0;
+      $("save").innerHTML = s.charged_chars === 0
+        ? `Everything was already cached — <b>this call cost 0 credits</b>. The whole-sentence path would still have charged ${w.chars} once per distinct sentence.`
+        : `Steady state: a new slot value costs <b>${s.charged_chars} chars</b> instead of <b>${w.chars}</b> — <b>${pct}% less</b> per call, because the frame is bought once and reused forever.`;
+    } else {
+      $("cWhole").textContent = "—";
+      $("nWhole").textContent = "comparison off";
+      $("save").innerHTML = `Split path charged <b>${s.charged_chars} chars</b>.`;
+    }
+
+    $("fragTable").innerHTML = d.fragments.map(f => `
+      <tr>
+        <td class="bn" style="padding-right:12px">${esc(f.text)}</td>
+        <td><span class="tag ${f.kind}">${f.kind}</span></td>
+        <td>${f.chars}</td>
+        <td><span class="tag ${f.cached ? "hit" : "miss"}">${f.cached ? "HIT" : "MISS"}</span></td>
+        <td>${f.duration_ms} ms</td>
+      </tr>`).join("");
+
+    meta(d);
+    $("pSplit").play().catch(() => {});
+  } catch (e) {
+    slotErr("Request failed", String(e.message || e));
+  } finally { $("goSlots").disabled = false; $("statusSlots").textContent = ""; }
+}
+$("goSlots").onclick = generateSlots;
+
+/* ---------- clear ---------- */
+$("clear").onclick = async () => {
+  const res = await fetch("/api/tts-lab/clear", { method: "POST" });
+  const d = await res.json();
+  $("mClips").textContent = fmt(d.cache.clips);
+  $("status").textContent = $("statusSlots").textContent = `Cleared ${d.removed} clip(s).`;
+};
+</script>
+</body>
+</html>

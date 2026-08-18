@@ -6,3 +6,11 @@ node_modules/
 frontend/dist/
 SloancodeAI
 .DS_Store
+tts-eval/venv/
+tts-eval/venv-coqui/
+tts-eval/models/
+tts-eval/.cache/
+tts-eval/samples/*.wav
+frontend/public/voice-samples/cpu-eval/
+backend/.tts-cache/
+backend/.tts-cache-manifest.db*

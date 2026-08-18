@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bangla CPU TTS listen test</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #11140f;
+      --card: #1c2218;
+      --line: #2d3828;
+      --text: #e8efe3;
+      --muted: #9aa894;
+      --accent: #b6e388;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Noto Sans Bengali", "Noto Sans", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    main { max-width: 880px; margin: 0 auto; padding: 32px 20px 64px; }
+    h1 { font-size: 1.6rem; margin: 0 0 8px; }
+    .lede { color: var(--muted); margin: 0 0 24px; }
+    .script {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 28px;
+    }
+    .script p { margin: 0; }
+    .script small { color: var(--muted); }
+    h2 {
+      font-size: 1.05rem;
+      margin: 28px 0 10px;
+      color: var(--accent);
+      letter-spacing: 0.02em;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin: 10px 0;
+    }
+    .card h3 { margin: 0 0 4px; font-size: 1rem; }
+    .meta { color: var(--muted); font-size: 0.85rem; margin: 0 0 10px; }
+    .row { display: grid; gap: 10px; }
+    @media (min-width: 700px) {
+      .row { grid-template-columns: 1fr 1fr; }
+    }
+    label { display: block; font-size: 0.8rem; color: var(--muted); margin-bottom: 4px; }
+    audio { width: 100%; }
+    .rtf { float: right; color: var(--accent); font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Bangla CPU TTS — listen test</h1>
+    <p class="lede">
+      Same BanglaBot confirmation line, synthesized on this machine’s CPU.
+      Full-quality is 22 kHz. “Phone” is 8 kHz with a 300–3400 Hz filter, closer to what a caller hears.
+    </p>
+    <div class="script">
+      <small>Script</small>
+      <p>আসসালামু আলাইকুম, আমি বাংলাবট থেকে কল করছি। আপনার অর্ডারটি নিশ্চিত করতে চাই। আপনি কি অর্ডারটি রিসিভ করবেন?</p>
+    </div>
+
+    <h2>1. Piper VITS ONNX — bn_BD-google-medium (~77 MB, 16 speakers)</h2>
+    <p class="lede">Fastest path. Real-time factor ~0.04 here (about 25× faster than the audio). This is the one to use for concurrent calls.</p>
+
+    <div class="card">
+      <h3>Speaker 0 <span class="rtf">RTF 0.04</span></h3>
+      <p class="meta">Official Piper Bangladeshi Bengali · OpenSLR 37 + CMU Indic</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk00.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk00-phone.mp3"></audio></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Speaker 1 <span class="rtf">RTF 0.04</span></h3>
+      <p class="meta">Same model, different speaker embedding</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk01.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk01-phone.mp3"></audio></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Speaker 6 <span class="rtf">RTF 0.04</span></h3>
+      <p class="meta">Same model, different speaker embedding</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk06.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk06-phone.mp3"></audio></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Speaker 10 <span class="rtf">RTF 0.04</span></h3>
+      <p class="meta">Same model, different speaker embedding</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk10.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk10-phone.mp3"></audio></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Speaker 15 (rm) <span class="rtf">RTF 0.04</span></h3>
+      <p class="meta">Same model, different speaker embedding</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk15.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/piper-bn_BD-google-spk15-phone.mp3"></audio></div>
+      </div>
+    </div>
+
+    <h2>2. Meta MMS-TTS Bengali — facebook/mms-tts-ben (~36M params)</h2>
+    <p class="lede">Single-speaker VITS trained only on Bengali. Still real-time on CPU (RTF 0.25). License is CC-BY-NC-4.0 — fine to evaluate, not fine to sell as-is.</p>
+    <div class="card">
+      <h3>mms-tts-ben <span class="rtf">RTF 0.25</span></h3>
+      <p class="meta">Hugging Face Transformers · CPU PyTorch</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/mms-tts-ben.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/mms-tts-ben-phone.mp3"></audio></div>
+      </div>
+    </div>
+
+    <h2>3. Community Bangla VITS (Coqui)</h2>
+    <p class="lede">Larger Coqui checkpoints (~1 GB training dumps). Still real-time on this CPU (RTF ~0.3). These are the “someone already trained Bangla-only” models.</p>
+    <div class="card">
+      <h3>EMTIAZZ Bangladeshi female <span class="rtf">RTF 0.32</span></h3>
+      <p class="meta">Claimed Bangladeshi accent · grapheme VITS</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/community-emtiaz-female.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/community-emtiaz-female-phone.mp3"></audio></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>bangla-speech-processing female <span class="rtf">RTF 0.29</span></h3>
+      <p class="meta">IIT Madras / Common Voice mix · claimed MOS ~4.1</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/community-bsp-female.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/community-bsp-female-phone.mp3"></audio></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>bangla-speech-processing male <span class="rtf">RTF 0.29</span></h3>
+      <p class="meta">Male counterpart of the same family</p>
+      <div class="row">
+        <div><label>Full quality</label><audio controls preload="none" src="samples/community-bsp-male.mp3"></audio></div>
+        <div><label>Phone (8 kHz)</label><audio controls preload="none" src="samples/community-bsp-male-phone.mp3"></audio></div>
+      </div>
+    </div>
+
+    <h2>Cloud references (already in the app)</h2>
+    <p class="lede">Same kind of confirmation line, from the vendors BanglaBot already uses. Use these as the quality ceiling.</p>
+    <div class="card">
+      <h3>Azure Nabanita (bn-BD female)</h3>
+      <audio controls preload="none" src="cloud-ref/nabanita.mp3"></audio>
+    </div>
+    <div class="card">
+      <h3>Azure Pradeep (bn-BD male)</h3>
+      <audio controls preload="none" src="cloud-ref/pradeep.mp3"></audio>
+    </div>
+    <div class="card">
+      <h3>Gemini 2.5 Flash TTS</h3>
+      <audio controls preload="none" src="cloud-ref/very_basic.mp3"></audio>
+    </div>
+    <div class="card">
+      <h3>ElevenLabs eleven_v3</h3>
+      <audio controls preload="none" src="cloud-ref/advance.mp3"></audio>
+    </div>
+  </main>
+</body>
+</html>

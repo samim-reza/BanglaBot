@@ -13,6 +13,7 @@ from pipecat.services.elevenlabs.tts import ElevenLabsHttpTTSService
 from pipecat.transcriptions.language import Language
 
 from app.core.config import get_settings
+from app.voice.tts_caching import cached_class
 
 # Cached ElevenLabs health probe: (checked_at, usable)
 _el_probe: tuple[float, bool] | None = None
@@ -57,6 +58,21 @@ def _credentials_missing(provider: str) -> bool:
     )
 
 
+def _build(service_cls, identity: dict, **kwargs):
+    """Construct a TTS service, wrapped with the audio cache when enabled.
+
+    identity is the cache key scope {provider, voice_id, model}; kwargs go to
+    the service constructor unchanged. The wrapper replays lines it has seen
+    before (same voice, model, sample rate) from disk — the vendor is only
+    paid for new text. TTS_CACHE_ENABLED=false builds the plain class.
+    """
+    if not get_settings().tts_cache_enabled:
+        return service_cls(**kwargs)
+    service = cached_class(service_cls)(**kwargs)
+    service.configure_tts_cache(**identity)
+    return service
+
+
 def create_tts_service(tier_key: str | None = None):
     """Build the TTS service for a call.
 
@@ -98,9 +114,12 @@ def create_tts_service(tier_key: str | None = None):
     if provider == "gemini":
         from pipecat.services.google.tts import GeminiTTSService
 
-        return GeminiTTSService(
+        model = model_override or settings.gemini_tts_model
+        return _build(
+            GeminiTTSService,
+            {"provider": "gemini", "voice_id": settings.gemini_tts_voice, "model": model},
             api_key=settings.gemini_api_key,
-            model=model_override or settings.gemini_tts_model,
+            model=model,
             voice_id=settings.gemini_tts_voice,
             sample_rate=24000,  # Gemini always outputs 24kHz; serializer resamples to 8k
             # Without this the 24kHz audio is tagged with the pipeline's 8kHz rate and
@@ -123,7 +142,9 @@ def create_tts_service(tier_key: str | None = None):
         voice = model_override or settings.azure_tts_voice
         # bn-IN-* is Indian Bengali; bn-BD-* (and the default) is Bangladeshi.
         language = Language.BN_IN if voice.startswith("bn-IN") else Language.BN_BD
-        return AzureTTSService(
+        return _build(
+            AzureTTSService,
+            {"provider": "azure", "voice_id": voice, "model": ""},
             api_key=settings.azure_speech_key,
             region=settings.azure_speech_region,
             # Azure honours the rate we ask for, so pick 16k for a cleaner
@@ -136,19 +157,27 @@ def create_tts_service(tier_key: str | None = None):
         from pipecat.services.google.tts import GoogleTTSService
 
         # Chirp 3 HD voices (bn-IN only — Google has no bn-BD locale).
-        return GoogleTTSService(
+        voice = model_override or settings.google_tts_voice
+        return _build(
+            GoogleTTSService,
+            {"provider": "google", "voice_id": voice, "model": ""},
             credentials_path=settings.google_credentials_path,
-            voice_id=model_override or settings.google_tts_voice,
+            voice_id=voice,
             params=GoogleTTSService.InputParams(language=Language.BN_IN),
         )
 
     elevenlabs_usable()  # log a clear error early if the key/plan is broken
+    model = model_override or settings.elevenlabs_model
     # HTTP streaming, not the websocket service: eleven_v3 rejects the
     # stream-input websocket with HTTP 403 (verified 2026-08-16).
-    return ElevenLabsHttpTTSService(
+    # Cache identity matches the lab exactly, so clips bought there serve
+    # live calls too (and vice versa).
+    return _build(
+        ElevenLabsHttpTTSService,
+        {"provider": "elevenlabs", "voice_id": settings.elevenlabs_voice_id, "model": model},
         api_key=settings.elevenlabs_api_key,
         voice_id=settings.elevenlabs_voice_id,
-        model=model_override or settings.elevenlabs_model,
+        model=model,
         aiohttp_session=aiohttp.ClientSession(),
         params=ElevenLabsHttpTTSService.InputParams(language=Language.BN),
     )
