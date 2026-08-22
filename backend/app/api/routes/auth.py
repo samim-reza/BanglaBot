@@ -11,6 +11,7 @@ from app.models import Merchant, PlatformAdmin
 from app.schemas.auth import LoginRequest, TokenResponse
 from app.schemas.merchant import MerchantOut
 from app.schemas.platform import MerchantSelfUpdate, SignupRequest
+from app import flows
 from app.services import audit_service, billing_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -55,6 +56,7 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
         password_hash=hash_password(body.password),
         phone=body.phone,
         email=body.email,
+        service_type=body.service_type,
     )
     db.add(merchant)
     try:
@@ -157,8 +159,32 @@ async def update_me(
         ):
             raise HTTPException(400, "বর্তমান পাসওয়ার্ড সঠিক নয়")
         merchant.password_hash = hash_password(password)
+    if "flow_settings" in data:
+        data["flow_settings"] = flows.validate_flow_settings(
+            merchant.service_type, data["flow_settings"] or {}
+        )
     for field, value in data.items():
         setattr(merchant, field, value)
     await db.commit()
     await db.refresh(merchant)
     return merchant
+
+
+@router.get("/flow-preview")
+async def flow_preview(merchant: Merchant = Depends(get_current_merchant)):
+    """The merchant's call flow: service info, toggles and the step list —
+    recomputed from the current settings so Settings shows the real script."""
+    flow = flows.get_flow(merchant.service_type)
+    settings = flow.merged_settings(merchant)
+    return {
+        "service_type": flow.key,
+        "service_name_bn": flow.name_bn,
+        "service_icon": flow.icon,
+        "description_bn": flow.description_bn,
+        "order_noun_bn": flow.order_noun_bn,
+        "settings": [
+            {"key": key, "label_bn": label, "hint_bn": hint, "value": settings[key]}
+            for key, (_default, label, hint) in flow.settings_spec.items()
+        ],
+        "steps_bn": flow.preview_steps_bn(settings),
+    }

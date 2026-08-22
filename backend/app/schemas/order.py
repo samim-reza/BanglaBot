@@ -40,6 +40,8 @@ class OrderOut(BaseModel):
     total_amount: Decimal
     status: OrderStatus
     notes: str
+    # Structured answers from the last flow call (keys per service flow).
+    flow_data: dict
     call_attempts: int
     last_call_at: datetime | None
     created_at: datetime

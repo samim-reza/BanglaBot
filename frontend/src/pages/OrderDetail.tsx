@@ -1,10 +1,11 @@
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import { OrderDetail as OrderDetailType, OUTCOME_LABELS } from "../api/types";
+import { FLOW_DATA_LABELS, OrderDetail as OrderDetailType, OUTCOME_LABELS } from "../api/types";
 import RecordingPlayer from "../components/RecordingPlayer";
 import StatusBadge from "../components/StatusBadge";
 import { useLang } from "../i18n";
+import { CALLABLE_STATUSES, serviceText, useServiceType } from "../service";
 
 interface EditForm {
   order_ref: string;
@@ -18,6 +19,7 @@ interface EditForm {
 
 export default function OrderDetail() {
   const { t, fmtNum, fmtMoney, fmtDateTime } = useLang();
+  const labels = serviceText(useServiceType());
   const { id } = useParams();
   const [order, setOrder] = useState<OrderDetailType | null>(null);
   const [error, setError] = useState("");
@@ -87,21 +89,21 @@ export default function OrderDetail() {
   return (
     <>
       <p style={{ marginBottom: 10 }}>
-        <Link to="/orders">← {t("সব অর্ডার")}</Link>
+        <Link to="/orders">← {t(labels.backLabel)}</Link>
       </p>
       <h1 className="page-title">
-        {t("অর্ডার")} {order.order_ref || order.id.slice(0, 8)} <StatusBadge status={order.status} />
+        {t(labels.noun)} {order.order_ref || order.id.slice(0, 8)} <StatusBadge status={order.status} />
       </h1>
       {error && <p className="error">{t(error)}</p>}
       <div className="card" style={{ marginBottom: 16 }}>
         {editing && form ? (
           <form className="form" onSubmit={saveEdit}>
             <div className="form-row">
-              <label>{t("অর্ডার নম্বর (ঐচ্ছিক)")}</label>
+              <label>{t(labels.refLabel)}</label>
               <input value={form.order_ref} onChange={setField("order_ref")} />
             </div>
             <div className="form-row">
-              <label>{t("কাস্টমারের নাম *")}</label>
+              <label>{t(labels.customerLabel)}</label>
               <input value={form.customer_name} onChange={setField("customer_name")} required />
             </div>
             <div className="form-row">
@@ -113,11 +115,11 @@ export default function OrderDetail() {
               <textarea rows={2} value={form.address} onChange={setField("address")} />
             </div>
             <div className="form-row">
-              <label>{t("পণ্যের বিবরণ")}</label>
+              <label>{t(labels.itemsLabel)}</label>
               <textarea rows={2} value={form.items_summary} onChange={setField("items_summary")} />
             </div>
             <div className="form-row">
-              <label>{t("মোট মূল্য (টাকা)")}</label>
+              <label>{t(labels.amountLabel)}</label>
               <input
                 type="number" min="0" step="0.01"
                 value={form.total_amount} onChange={setField("total_amount")}
@@ -139,15 +141,15 @@ export default function OrderDetail() {
         ) : (
           <>
             <dl className="detail-grid">
-              <dt>{t("কাস্টমার")}</dt>
+              <dt>{t(labels.customerShort)}</dt>
               <dd>{order.customer_name}</dd>
               <dt>{t("ফোন")}</dt>
               <dd>{order.customer_phone}</dd>
               <dt>{t("ঠিকানা")}</dt>
               <dd>{order.address || "—"}</dd>
-              <dt>{t("পণ্য")}</dt>
+              <dt>{t(labels.itemsShort)}</dt>
               <dd>{order.items_summary || "—"}</dd>
-              <dt>{t("মোট মূল্য")}</dt>
+              <dt>{t(labels.amountShort)}</dt>
               <dd>{fmtMoney(order.total_amount)}</dd>
               <dt>{t("নোট")}</dt>
               <dd style={{ whiteSpace: "pre-wrap" }}>{order.notes || "—"}</dd>
@@ -155,20 +157,38 @@ export default function OrderDetail() {
               <dd>{t("{n} বার", { n: fmtNum(order.call_attempts) })}</dd>
             </dl>
             <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap" }}>
-              {["pending", "no_answer", "needs_review"].includes(order.status) && (
+              {CALLABLE_STATUSES.includes(order.status) && (
                 <button className="btn" onClick={startCall}>
-                  📞 {t("কল করে নিশ্চিত করুন")}
+                  📞 {t(labels.callButton)}
                 </button>
               )}
               {order.status !== "calling" && (
                 <button className="btn secondary" onClick={beginEdit}>
-                  ✏️ {t("অর্ডার সম্পাদনা")}
+                  ✏️ {t(labels.editButton)}
                 </button>
               )}
             </div>
           </>
         )}
       </div>
+
+      {Object.keys(order.flow_data ?? {}).length > 0 && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <h2 className="page-title" style={{ fontSize: 16 }}>
+            🤖 {t("কল থেকে পাওয়া তথ্য")}
+          </h2>
+          <dl className="detail-grid">
+            {Object.entries(order.flow_data).map(([key, value]) => (
+              <span key={key} style={{ display: "contents" }}>
+                <dt>{t(FLOW_DATA_LABELS[key] ?? key)}</dt>
+                <dd>
+                  {typeof value === "boolean" ? (value ? t("হ্যাঁ") : t("না")) : String(value)}
+                </dd>
+              </span>
+            ))}
+          </dl>
+        </div>
+      )}
 
       <h2 className="page-title" style={{ fontSize: 17 }}>
         {t("কলের ইতিহাস")}

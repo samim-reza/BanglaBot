@@ -1,18 +1,24 @@
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Integer, String, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, new_id
 
 
 class Merchant(Base):
-    """An ecommerce business owner account (created by the platform admin)."""
+    """A business owner account (created by the platform admin or via signup)."""
 
     __tablename__ = "merchants"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=new_id)
     business_name: Mapped[str] = mapped_column(String(160))
+    # Which vertical this account runs (see app/flows): picks the call flow,
+    # the agent's script and the UI vocabulary. Set by the platform admin.
+    service_type: Mapped[str] = mapped_column(String(20), default="ecommerce")
+    # Per-merchant flow toggles (known keys per service in flows.settings_spec).
+    flow_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     owner_name: Mapped[str] = mapped_column(String(120), default="")
     username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(128))

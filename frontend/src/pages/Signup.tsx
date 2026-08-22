@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, auth } from "../api/client";
-import { Plan } from "../api/types";
+import { Plan, ServiceTypeInfo } from "../api/types";
 import { LangToggle, useLang } from "../i18n";
+import { clearServiceCache } from "../service";
 
 interface PublicPlatform {
   platform_name: string;
@@ -16,6 +17,7 @@ export default function Signup() {
   const { t, fmtMoney } = useLang();
   const [platform, setPlatform] = useState<PublicPlatform | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const [services, setServices] = useState<ServiceTypeInfo[]>([]);
   const [form, setForm] = useState({
     business_name: "",
     owner_name: "",
@@ -23,6 +25,7 @@ export default function Signup() {
     password: "",
     phone: "",
     email: "",
+    service_type: "ecommerce",
   });
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,6 +34,7 @@ export default function Signup() {
   useEffect(() => {
     api<PublicPlatform>("/api/public/platform").then(setPlatform).catch(() => {});
     api<Plan[]>("/api/public/plans").then(setPlans).catch(() => {});
+    api<ServiceTypeInfo[]>("/api/public/service-types").then(setServices).catch(() => {});
   }, []);
 
   const set = (key: string) => (e: { target: { value: string } }) =>
@@ -46,6 +50,7 @@ export default function Signup() {
         { method: "POST", body: form }
       );
       auth.save(res.access_token, res.role, res.name);
+      clearServiceCache();
       navigate("/dashboard");
     } catch (err) {
       setError((err as Error).message);
@@ -104,6 +109,40 @@ export default function Signup() {
           </div>
         )}
         <form className="form" style={{ maxWidth: "none" }} onSubmit={submit}>
+          {services.length > 0 && (
+            <div className="form-row">
+              <label>{t("আপনার ব্যবসার ধরন *")}</label>
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {services.map((service) => {
+                  const selected = form.service_type === service.key;
+                  return (
+                    <div
+                      key={service.key}
+                      role="radio"
+                      aria-checked={selected}
+                      tabIndex={0}
+                      className={`plan-card ${selected ? "current" : ""}`}
+                      style={{ flex: 1, minWidth: 220, cursor: "pointer" }}
+                      onClick={() => setForm((f) => ({ ...f, service_type: service.key }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          setForm((f) => ({ ...f, service_type: service.key }));
+                        }
+                      }}
+                    >
+                      <b>
+                        {service.icon} {t(service.name_bn)} {selected && "✓"}
+                      </b>
+                      <div className="muted" style={{ fontSize: 13.5 }}>
+                        {t(service.description_bn)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
           <div className="form-row">
             <label>{t("ব্যবসার নাম *")}</label>
             <input value={form.business_name} onChange={set("business_name")} required />

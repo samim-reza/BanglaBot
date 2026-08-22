@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core import cache
 from app.db.session import get_db
 from app.schemas.billing import PlanOut
+from app import flows
 from app.services import billing_service, voice_tiers
 
 router = APIRouter(prefix="/api/public", tags=["public"])
@@ -52,3 +53,9 @@ async def public_platform(db: AsyncSession = Depends(get_db)):
 async def public_voice_tiers():
     """Voice ranks a merchant can choose — names, speakers and pricing only."""
     return voice_tiers.public_catalog()
+
+
+@router.get("/service-types")
+async def public_service_types():
+    """The service verticals an account can run (ecommerce/courier)."""
+    return flows.public_catalog()

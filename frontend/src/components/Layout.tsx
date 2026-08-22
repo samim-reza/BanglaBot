@@ -1,10 +1,12 @@
 import { NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { auth } from "../api/client";
 import { LangToggle, useLang } from "../i18n";
+import { clearServiceCache, serviceText, useServiceType } from "../service";
 
 export default function Layout({ role }: { role: "merchant" | "admin" }) {
   const navigate = useNavigate();
   const { t } = useLang();
+  const service = useServiceType(role === "merchant" && auth.role === "merchant");
   if (!auth.token) return <Navigate to="/login" replace />;
   if (auth.role !== role)
     return <Navigate to={auth.role === "admin" ? "/admin" : "/dashboard"} replace />;
@@ -13,7 +15,7 @@ export default function Layout({ role }: { role: "merchant" | "admin" }) {
     role === "merchant"
       ? [
           { to: "/dashboard", label: "ড্যাশবোর্ড" },
-          { to: "/orders", label: "অর্ডারসমূহ" },
+          { to: "/orders", label: serviceText(service).navOrders },
           { to: "/billing", label: "বিলিং" },
           { to: "/support", label: "সাপোর্ট" },
           { to: "/settings", label: "সেটিংস" },
@@ -49,6 +51,7 @@ export default function Layout({ role }: { role: "merchant" | "admin" }) {
           className="btn secondary small"
           onClick={() => {
             auth.clear();
+            clearServiceCache();
             navigate("/login");
           }}
         >

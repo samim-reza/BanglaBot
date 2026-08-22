@@ -111,6 +111,13 @@ async def bootstrap() -> None:
         "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS silence_hangup_secs INTEGER NOT NULL DEFAULT 10",
         "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS voice_tier VARCHAR(20) NOT NULL DEFAULT ''",
         "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS billed_secs INTEGER NOT NULL DEFAULT 0",
+        # Service verticals + node-flow engine (app/flows). PG12+ allows enum
+        # ADD VALUE inside a transaction as long as it isn't used in the same one.
+        "ALTER TYPE banglabot_order_status ADD VALUE IF NOT EXISTS 'rescheduled'",
+        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) NOT NULL DEFAULT 'ecommerce'",
+        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS flow_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS flow_data JSONB NOT NULL DEFAULT '{}'::jsonb",
+        "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS final_node VARCHAR(32) NOT NULL DEFAULT ''",
         # Calls priced before the tier system bill at face value (multiplier 1.0).
         "UPDATE call_logs SET billed_secs = duration_secs WHERE billed_secs = 0 AND duration_secs > 0",
         # Query-shaped composite indexes: usage metering + insights scan call_logs

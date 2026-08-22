@@ -1,10 +1,19 @@
 # 📞 BanglaBot — বাংলায় অর্ডার কনফার্মেশন কল
 
-A SaaS platform for Bangladeshi ecommerce businesses. Merchants sign up, enter their
-orders; an AI voice agent calls the customer **in Bengali**, confirms (or cancels)
-the order, and the result updates live on the dashboard. Subscriptions are metered
-per call/minute, and a full platform-admin console manages merchants, plans,
-billing, and support.
+A SaaS platform for Bangladeshi businesses. Merchants sign up, enter their
+orders; an AI voice agent calls the customer **in Bengali**, follows a
+service-specific conversation flow, and the result updates live on the
+dashboard. Subscriptions are metered per call/minute, and a full platform-admin
+console manages merchants, plans, billing, and support.
+
+Two **service verticals** are built in (the platform admin picks one per
+account; self-serve signup also offers the choice):
+
+- **ই-কমার্স (ecommerce)** — order-confirmation calls: identity → (optional
+  address verification) → confirm/cancel.
+- **কুরিয়ার (courier)** — pre-delivery / RTO-reduction calls: identity →
+  parcel + address → preferred delivery time → confirm / **reschedule**
+  (order stays callable) / refuse.
 
 ## Stack
 
@@ -117,12 +126,44 @@ merchant clicks call → POST /api/orders/{id}/call
   → customer answers → Twilio fetches POST /twilio/twiml/{order_id}
   → TwiML <Connect><Stream> → WS /twilio/ws (μ-law 8kHz audio)
   → Pipecat pipeline: STT (bn) → gpt-5.4-mini (+tools) → TTS (bn)
-  → tools write outcome to DB: confirm_order / cancel_order /
-    transfer_to_human (dials merchant support number) / end_call
-  → transcript saved on hangup; UI polls and updates
+  → node-flow engine (app/flows) drives the conversation (see below)
+  → terminal tools write the outcome to DB; transcript + collected answers
+    saved on hangup; UI polls and updates
 ```
 
-Order statuses: `pending → calling → confirmed / cancelled / no_answer / needs_review`.
+Order statuses: `pending → calling → confirmed / rescheduled / cancelled /
+no_answer / needs_review` (`rescheduled` is courier-only and stays callable).
+
+## The node-flow engine (`backend/app/flows/`)
+
+The agent follows a per-service **node flow** (pattern borrowed from a
+restaurant voice platform): after the greeting it asks one question at a time,
+and **skips any question the caller already answered** — volunteered early,
+or pre-filled from the order.
+
+- The current node is **derived, never stored**: an ordered slot cascade
+  (`next_missing_stage`) returns the next thing the caller still owes, and a
+  mapper groups stages into instruction "nodes". Skipping is simply the
+  cascade falling through a filled slot; corrections and back-jumps need no
+  special handling.
+- The system prompt is written **once** per call (shared Bengali rulebook +
+  service facts). On a node change the runtime **appends** a short
+  "ধাপ পরিবর্তন" system message to the conversation tail — the prompt is
+  never rewritten mid-call.
+- Slot extraction is pure LLM **function calling**: the model pushes whatever
+  the caller said into `save_details` (structured fields); the tool result
+  carries the backend-owned wording of the next question, so the model never
+  invents its own checklist.
+- Terminal tools per service (`confirm_order`/`cancel_order`,
+  `confirm_delivery`/`reschedule_delivery`/`refuse_parcel`) write the outcome
+  to the DB immediately; `call_logs.final_node` records where each call ended
+  and `orders.flow_data` keeps the collected answers (shown on the order page).
+- Merchants can toggle optional steps (address verification, preferred-time
+  question) in **Settings → কল ফ্লো**, which also previews the exact step list.
+- The static (keypad/DTMF) tier follows the same per-service script with
+  digit menus.
+
+Run the engine's test suite with `backend/venv/bin/python backend/tests/test_flows.py`.
 
 ## Project layout
 
@@ -138,7 +179,9 @@ backend/app
 │               twilio (webhooks + WS)
 ├── services/   order queries, Twilio call origination,
 │               billing (plans/subs/usage/invoices), entitlement gate, audit
-└── voice/      Pipecat agent: prompts (Bengali), tools, pipeline
+├── flows/      node-flow engine: base (derived-node machine), ecommerce,
+│               courier, runtime (per-call slots + step directives)
+└── voice/      Pipecat agent: prompts (Bengali), tools, pipeline, static DTMF
 frontend/src
 ├── api/        fetch client + types
 ├── components/ layout, status badge, pagination

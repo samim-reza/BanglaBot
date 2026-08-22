@@ -2,6 +2,7 @@ import { FormEvent, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api, auth } from "../api/client";
 import { LangToggle, useLang } from "../i18n";
+import { clearServiceCache } from "../service";
 
 export default function Login() {
   const { t } = useLang();
@@ -23,6 +24,7 @@ export default function Login() {
         body: { username, password },
       });
       auth.save(res.access_token, res.role, res.name);
+      clearServiceCache();
       navigate(res.role === "admin" ? "/admin" : "/dashboard");
     } catch (err) {
       setError((err as Error).message);

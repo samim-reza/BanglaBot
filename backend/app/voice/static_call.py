@@ -1,16 +1,18 @@
-"""Static (no-AI) confirmation call: spoken summary + keypad answers.
+"""Static (no-AI) call: spoken summary + keypad answers, per service flow.
 
 Used when the merchant's voice tier is "static". Instead of connecting the
-media-stream agent, the TwiML endpoint speaks the order summary with Twilio's
-built-in Bengali voice and gathers one DTMF digit:
-1 = confirm, 2 = cancel, 3 = talk to a human (only offered when the merchant
-has a support number). No input re-prompts once, then hangs up (the status
-callback then settles the order to needs_review as usual).
+media-stream agent, the TwiML endpoint speaks the flow's summary with
+Twilio's built-in Bengali voice and gathers one DTMF digit. The digit map
+comes from the merchant's service flow (app/flows): ecommerce is
+1=confirm / 2=cancel / 3=human, courier adds 2=reschedule / 3=refuse /
+4=human. No input re-prompts once, then hangs up (the status callback then
+settles the order to needs_review as usual).
 """
 
 from twilio.twiml.voice_response import Gather, VoiceResponse
 
 from app.core.config import get_settings
+from app.flows import get_flow
 from app.models import Merchant, Order
 
 MAX_PROMPT_ATTEMPTS = 2
@@ -22,21 +24,12 @@ def _say(node, text: str) -> None:
 
 
 def prompt_text(order: Order, merchant: Merchant) -> str:
-    amount = f"{order.total_amount:g}"
+    flow = get_flow(merchant.service_type)
     opening = (
         merchant.custom_greeting.strip()
         or f"আসসালামু আলাইকুম। {merchant.business_name} থেকে বলছি।"
     )
-    lines = [
-        opening,
-        f"{order.customer_name}, আপনার অর্ডার"
-        + (f" {order.items_summary}," if order.items_summary else "")
-        + f" মোট {amount} টাকা, ক্যাশ অন ডেলিভারি।",
-        "অর্ডারটি নিশ্চিত করতে ১ চাপুন। বাতিল করতে ২ চাপুন।",
-    ]
-    if merchant.support_phone:
-        lines.append("প্রতিনিধির সাথে কথা বলতে ৩ চাপুন।")
-    return " ".join(lines)
+    return " ".join([opening, *flow.static_prompt_bn(order, merchant)])
 
 
 def build_prompt_twiml(order: Order, merchant: Merchant, base: str, attempt: int) -> str:
@@ -61,22 +54,21 @@ def build_prompt_twiml(order: Order, merchant: Merchant, base: str, attempt: int
 def build_result_twiml(
     order: Order, merchant: Merchant, base: str, digit: str, attempt: int
 ) -> tuple[str, str]:
-    """TwiML + outcome ("confirmed"/"cancelled"/"transfer"/"") for a pressed digit."""
+    """TwiML + outcome ("confirmed"/"cancelled"/"rescheduled"/"transfer"/"")."""
+    flow = get_flow(merchant.service_type)
     response = VoiceResponse()
-    if digit == "1":
-        _say(response, "ধন্যবাদ! আপনার অর্ডারটি নিশ্চিত করা হয়েছে। ভালো থাকবেন।")
-        response.hangup()
-        return str(response), "confirmed"
-    if digit == "2":
-        _say(response, "ঠিক আছে, আপনার অর্ডারটি বাতিল করা হয়েছে। ধন্যবাদ।")
-        response.hangup()
-        return str(response), "cancelled"
-    if digit == "3" and merchant.support_phone:
-        from app.services.call_service import normalize_bd_phone
+    reply = flow.static_digits(merchant).get(digit)
+    if reply:
+        say_text, outcome = reply
+        if outcome == "transfer":
+            from app.services.call_service import normalize_bd_phone
 
-        _say(response, "আপনাকে একজন প্রতিনিধির সাথে সংযোগ দেওয়া হচ্ছে, একটু লাইনে থাকুন।")
-        response.dial(normalize_bd_phone(merchant.support_phone), timeout=25)
-        return str(response), "transfer"
+            _say(response, "আপনাকে একজন প্রতিনিধির সাথে সংযোগ দেওয়া হচ্ছে, একটু লাইনে থাকুন।")
+            response.dial(normalize_bd_phone(merchant.support_phone), timeout=25)
+            return str(response), "transfer"
+        _say(response, say_text)
+        response.hangup()
+        return str(response), outcome
     # Unrecognized digit: re-prompt within the attempt budget, then give up.
     if attempt < MAX_PROMPT_ATTEMPTS:
         response.redirect(f"{base}/twilio/twiml/{order.id}?attempt={attempt + 1}", method="POST")

@@ -2,9 +2,11 @@ import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useLang } from "../i18n";
+import { serviceText, useServiceType } from "../service";
 
 export default function NewOrder() {
   const { t } = useLang();
+  const labels = serviceText(useServiceType());
   const [form, setForm] = useState({
     order_ref: "",
     customer_name: "",
@@ -39,14 +41,14 @@ export default function NewOrder() {
 
   return (
     <>
-      <h1 className="page-title">{t("নতুন অর্ডার")}</h1>
+      <h1 className="page-title">{t(labels.newItem)}</h1>
       <form className="card form" onSubmit={submit}>
         <div className="form-row">
-          <label>{t("অর্ডার নম্বর (ঐচ্ছিক)")}</label>
+          <label>{t(labels.refLabel)}</label>
           <input value={form.order_ref} onChange={set("order_ref")} placeholder="ORD-1001" />
         </div>
         <div className="form-row">
-          <label>{t("কাস্টমারের নাম *")}</label>
+          <label>{t(labels.customerLabel)}</label>
           <input value={form.customer_name} onChange={set("customer_name")} required />
         </div>
         <div className="form-row">
@@ -58,11 +60,11 @@ export default function NewOrder() {
           <textarea rows={2} value={form.address} onChange={set("address")} />
         </div>
         <div className="form-row">
-          <label>{t("পণ্যের বিবরণ")}</label>
+          <label>{t(labels.itemsLabel)}</label>
           <textarea rows={2} value={form.items_summary} onChange={set("items_summary")} placeholder={t("পাঞ্জাবি (L) x১, শাড়ি x২")} />
         </div>
         <div className="form-row">
-          <label>{t("মোট মূল্য (টাকা)")}</label>
+          <label>{t(labels.amountLabel)}</label>
           <input type="number" min="0" step="0.01" value={form.total_amount} onChange={set("total_amount")} />
         </div>
         <div className="form-row">
@@ -72,7 +74,7 @@ export default function NewOrder() {
         {error && <div className="error">{t(error)}</div>}
         <div style={{ display: "flex", gap: 10 }}>
           <button className="btn" disabled={busy}>
-            {busy ? t("সংরক্ষণ হচ্ছে...") : t("অর্ডার সংরক্ষণ করুন")}
+            {busy ? t("সংরক্ষণ হচ্ছে...") : t(labels.saveButton)}
           </button>
           <button type="button" className="btn secondary" onClick={() => navigate("/orders")}>
             {t("বাতিল")}

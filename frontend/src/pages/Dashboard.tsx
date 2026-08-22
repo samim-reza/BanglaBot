@@ -5,11 +5,14 @@ import { BillingSummary, CallInsights, STATUS_LABELS, OrderStatus } from "../api
 import { GreetingArt } from "../components/art";
 import { DailyOutcomeChart, OutcomeBreakdown } from "../components/InsightsCharts";
 import { useLang } from "../i18n";
+import { serviceText, useServiceType } from "../service";
 
 type Stats = Record<string, number>;
 
 export default function Dashboard() {
   const { t, fmtNum, fmtDate } = useLang();
+  const service = useServiceType();
+  const labels = serviceText(service);
   const [stats, setStats] = useState<Stats | null>(null);
   const [billing, setBilling] = useState<BillingSummary | null>(null);
   const [insights, setInsights] = useState<CallInsights | null>(null);
@@ -22,7 +25,10 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  const keys: OrderStatus[] = ["pending", "calling", "confirmed", "cancelled", "no_answer", "needs_review"];
+  const keys: OrderStatus[] =
+    service === "courier"
+      ? ["pending", "calling", "confirmed", "rescheduled", "cancelled", "no_answer", "needs_review"]
+      : ["pending", "calling", "confirmed", "cancelled", "no_answer", "needs_review"];
 
   const sub = billing?.subscription;
   const usage = billing?.usage;
@@ -36,12 +42,10 @@ export default function Dashboard() {
       <div className="card hero-card">
         <div className="hero-text">
           <h2>{t("স্বাগতম, {name}!", { name: auth.name ?? "" })}</h2>
-          <p className="muted">
-            {t("আজকের অর্ডার তুলুন — কনফার্মেশন কলের দায়িত্ব BanglaBot-এর।")}
-          </p>
+          <p className="muted">{t(labels.heroLine)}</p>
           <p style={{ marginTop: 12 }}>
             <Link className="btn" to="/orders/new">
-              + {t("নতুন অর্ডার")}
+              + {t(labels.newItem)}
             </Link>
           </p>
         </div>
@@ -72,7 +76,7 @@ export default function Dashboard() {
       <div className="stats-grid">
         <div className="card stat">
           <div className="num">{num(stats?.total)}</div>
-          <div className="label">{t("মোট অর্ডার")}</div>
+          <div className="label">{t(labels.totalLabel)}</div>
         </div>
         {keys.map((k) => (
           <div className="card stat" key={k}>

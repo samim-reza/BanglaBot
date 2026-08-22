@@ -3,6 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import flows
 from app.api.deps import get_current_merchant
 from app.core import cache
 from app.db.session import get_db
@@ -144,13 +145,14 @@ async def call_to_confirm(
     if order.status in (OrderStatus.confirmed, OrderStatus.cancelled):
         raise HTTPException(409, "এই অর্ডারের ফলাফল ইতিমধ্যে চূড়ান্ত")
     await entitlement_service.check_can_call(db, merchant)
+    call_label = flows.get_flow(merchant.service_type).call_label_bn
     audit_service.record(
         db,
         actor_role="merchant",
         actor_id=merchant.id,
         actor_name=merchant.business_name,
         action="call_started",
-        detail=f"{order.customer_name}-কে কনফার্মেশন কল শুরু হয়েছে ({order.customer_phone})",
+        detail=f"{order.customer_name}-কে {call_label} শুরু হয়েছে ({order.customer_phone})",
         merchant_id=merchant.id,
     )
     await start_confirmation_call(db, order, merchant)

@@ -1,5 +1,6 @@
 """Originates Twilio confirmation calls and applies call-status updates."""
 
+import asyncio
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException
@@ -56,8 +57,10 @@ async def start_confirmation_call(db: AsyncSession, order: Order, merchant: Merc
             from_=settings.twilio_phone_number,
             url=f"{base}/twilio/twiml/{order.id}",
             method="POST",
+            # "completed" is the only final event the Calls API accepts here; it
+            # fires with the real final CallStatus (no-answer/busy/failed too).
             status_callback=f"{base}/twilio/status/{order.id}",
-            status_callback_event=["completed", "no-answer", "busy", "failed"],
+            status_callback_event=["completed"],
             record=True,
             recording_status_callback=f"{base}/twilio/recording/{order.id}",
             recording_status_callback_event=["completed"],
@@ -83,6 +86,12 @@ async def start_confirmation_call(db: AsyncSession, order: Order, merchant: Merc
     await db.commit()
     await db.refresh(log)
     await cache.delete_prefix(f"insights:{order.merchant_id}:")
+
+    # Warm the opening clips (greeting + first question) in the merchant's own
+    # voice while the phone is still ringing, so the answer is instant.
+    from app.voice import opening
+
+    asyncio.create_task(opening.prefetch(order.id))
     return log
 
 

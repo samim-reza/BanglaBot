@@ -1,5 +1,6 @@
 export type OrderStatus =
-  | "pending" | "calling" | "confirmed" | "cancelled" | "no_answer" | "needs_review";
+  | "pending" | "calling" | "confirmed" | "cancelled" | "no_answer" | "needs_review"
+  | "rescheduled";
 
 export interface Order {
   id: string;
@@ -12,6 +13,8 @@ export interface Order {
   total_amount: string;
   status: OrderStatus;
   notes: string;
+  /** Structured answers the flow agent collected on the last call. */
+  flow_data: Record<string, unknown>;
   call_attempts: number;
   last_call_at: string | null;
   created_at: string;
@@ -36,6 +39,9 @@ export interface OrderDetail extends Order {
 export interface Merchant {
   id: string;
   business_name: string;
+  /** Vertical this account runs — picks the call flow and UI vocabulary. */
+  service_type: string;
+  flow_settings: Record<string, boolean>;
   owner_name: string;
   username: string;
   phone: string;
@@ -101,6 +107,7 @@ export const STATUS_LABELS: Record<OrderStatus, string> = {
   cancelled: "বাতিল",
   no_answer: "ধরেননি",
   needs_review: "পর্যালোচনা দরকার",
+  rescheduled: "রিশিডিউল",
 };
 
 /** Call-log outcome → Bengali label; unknown outcomes render raw. */
@@ -109,6 +116,48 @@ export const OUTCOME_LABELS: Record<string, string> = {
   cancelled: "বাতিল",
   transfer: "মানুষের কাছে",
   auto_dropped: "অটো ড্রপড",
+  rescheduled: "রিশিডিউল",
+  wrong_number: "ভুল নম্বর",
+  relay: "ওনাকে কনফার্ম করতে বলা হয়েছে",
+};
+
+/** Service vertical key → Bengali label (badges/columns). */
+export const SERVICE_LABELS: Record<string, string> = {
+  ecommerce: "ই-কমার্স",
+  courier: "কুরিয়ার",
+};
+
+/** /api/public/service-types row. */
+export interface ServiceTypeInfo {
+  key: string;
+  name_bn: string;
+  description_bn: string;
+  icon: string;
+  order_noun_bn: string;
+}
+
+/** /api/auth/flow-preview response — the merchant's live call script. */
+export interface FlowPreview {
+  service_type: string;
+  service_name_bn: string;
+  service_icon: string;
+  description_bn: string;
+  order_noun_bn: string;
+  settings: { key: string; label_bn: string; hint_bn: string; value: boolean }[];
+  steps_bn: string[];
+}
+
+/** flow_data key → Bengali label; unknown keys render raw. */
+export const FLOW_DATA_LABELS: Record<string, string> = {
+  identity_confirmed: "পরিচয় নিশ্চিত",
+  knows_customer: "কাস্টমারকে চেনেন",
+  wrong_person: "ভুল নম্বর",
+  address_correct: "ঠিকানা সঠিক",
+  new_address: "নতুন ঠিকানা",
+  delivery_time: "ডেলিভারির সময়",
+  note: "এজেন্টের নোট",
+  when: "রিশিডিউল সময়",
+  reason: "কারণ",
 };
 
 export type SubStatus = "trialing" | "active" | "past_due" | "canceled";

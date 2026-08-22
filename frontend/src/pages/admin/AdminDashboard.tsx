@@ -14,7 +14,7 @@ export default function AdminDashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  const keys: OrderStatus[] = ["pending", "calling", "confirmed", "cancelled", "no_answer", "needs_review"];
+  const keys: OrderStatus[] = ["pending", "calling", "confirmed", "rescheduled", "cancelled", "no_answer", "needs_review"];
 
   return (
     <>

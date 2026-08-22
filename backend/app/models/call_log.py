@@ -25,4 +25,6 @@ class CallLog(Base):
     voice_tier: Mapped[str] = mapped_column(String(20), default="")
     # Plan-quota seconds this call consumed (duration × tier multiplier).
     billed_secs: Mapped[int] = mapped_column(Integer, default=0)
+    # Flow node the conversation ended on (analytics: where do calls stall?).
+    final_node: Mapped[str] = mapped_column(String(32), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

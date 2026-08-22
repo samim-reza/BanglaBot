@@ -533,4 +533,99 @@ export const EN: Record<string, string> = {
   "অজানা নয়েজ ফিল্টার মোড": "Unknown noise filter mode",
   "অজানা বার্জ-ইন মোড": "Unknown barge-in mode",
   "নীরবতার সীমা ৫–৩০ সেকেন্ডের মধ্যে হতে হবে": "Silence limit must be between 5 and 30 seconds",
+
+  // ---- service types & node-flow engine ----
+  "ই-কমার্স": "Ecommerce",
+  "কুরিয়ার": "Courier",
+  "সার্ভিস": "Service",
+  "সার্ভিস টাইপ": "Service type",
+  "সার্ভিস টাইপ * (কোন ফ্লো-তে কল হবে)": "Service type * (which call flow)",
+  "আপনার ব্যবসার ধরন *": "Your business type *",
+  "অজানা সার্ভিস টাইপ": "Unknown service type",
+  "অনলাইন শপের অর্ডার কনফার্মেশন কল — কাস্টমার অর্ডারটি নিশ্চিত করছেন কি না।":
+    "Order-confirmation calls for online shops — is the customer confirming the order?",
+  "ডেলিভারির আগে প্রাপককে কল — পার্সেল নেবেন কি না, কখন নেবেন, ঠিকানা ঠিক আছে কি না।":
+    "Pre-delivery calls to recipients — will they take the parcel, when, and is the address right?",
+
+  // statuses & outcomes
+  "রিশিডিউল": "Rescheduled",
+  "ভুল নম্বর": "Wrong number",
+  "ওনাকে কনফার্ম করতে বলা হয়েছে": "Asked them to have the customer confirm",
+
+  // courier vocabulary
+  "পার্সেলসমূহ": "Parcels",
+  "পার্সেল": "Parcel",
+  "নতুন পার্সেল": "New parcel",
+  "পার্সেলের বিবরণ": "Parcel details",
+  "সিওডি টাকা (ক্যাশ অন ডেলিভারি)": "COD amount (cash on delivery)",
+  "সিওডি": "COD",
+  "ট্র্যাকিং নম্বর (ঐচ্ছিক)": "Tracking number (optional)",
+  "প্রাপকের নাম *": "Recipient name *",
+  "প্রাপক": "Recipient",
+  "নাম / ফোন / ট্র্যাকিং নম্বর খুঁজুন": "Search name / phone / tracking number",
+  "মোট পার্সেল": "Total parcels",
+  "কল করে ডেলিভারি নিশ্চিত করুন": "Call to confirm delivery",
+  "কোনো পার্সেল নেই": "No parcels yet",
+  "প্রথম পার্সেল যোগ করলেই এআই ডেলিভারি কল শুরু করা যাবে":
+    "Add your first parcel to start AI delivery calls",
+  "পার্সেল সংরক্ষণ করুন": "Save parcel",
+  "পার্সেল সম্পাদনা": "Edit parcel",
+  "সব পার্সেল": "All parcels",
+  "আজকের পার্সেল তুলুন — ডেলিভারি কলের দায়িত্ব BanglaBot-এর।":
+    "Add today's parcels — BanglaBot handles the delivery calls.",
+
+  // settings: call-flow section
+  "কল ফ্লো": "Call flow",
+  "সার্ভিস অনুযায়ী কলের ধাপ ও প্রশ্ন": "Call steps and questions for your service",
+  "এজেন্ট ধাপে ধাপে প্রশ্ন করে — কাস্টমার আগে থেকে কিছু বলে দিলে সেই ধাপ নিজে থেকেই বাদ যায়।":
+    "The agent asks step by step — steps the customer already answered are skipped automatically.",
+  "আপনার সার্ভিস": "Your service",
+  "সার্ভিস টাইপ বদলাতে হলে প্ল্যাটফর্ম অ্যাডমিনের সাথে যোগাযোগ করুন।":
+    "Contact the platform admin to change your service type.",
+  "ঐচ্ছিক ধাপ": "Optional steps",
+  "কলের ধাপগুলো (বর্তমান সেটিং অনুযায়ী)": "Call steps (with current settings)",
+  "সেভ করার পরে তালিকাটি নতুন সেটিং অনুযায়ী আপডেট হবে।":
+    "After saving, the list updates to match the new settings.",
+
+  // flow toggles (labels/hints served by the backend)
+  "ডেলিভারি ঠিকানা যাচাই": "Verify delivery address",
+  "কনফার্মের আগে এজেন্ট ঠিকানাটি পড়ে শুনিয়ে ঠিক আছে কি না জিজ্ঞেস করবে।":
+    "Before confirming, the agent reads the address back and asks if it is right.",
+  "এজেন্ট ঠিকানাটি পড়ে শুনিয়ে ঠিক আছে কি না জিজ্ঞেস করবে।":
+    "The agent reads the address back and asks if it is right.",
+  "সুবিধাজনক সময় জানা": "Ask preferred time",
+  "এজেন্ট জিজ্ঞেস করবে আজ দিনের কোন সময়ে ডেলিভারি নিতে সুবিধা হবে।":
+    "The agent asks what time of day suits the delivery.",
+
+  // flow step previews (served by the backend)
+  "সালাম ও পরিচয় (শুরুর কথা)": "Greeting & introduction (opening line)",
+  "সালাম, তারপর আমি কি নাম-এর সাথে কথা বলছি?":
+    "Greeting, then: am I speaking with {name}?",
+  "কাস্টমারের পরিচয় নিশ্চিত করা": "Confirm the customer's identity",
+  "প্রাপকের পরিচয় নিশ্চিত করা": "Confirm the recipient's identity",
+  "হ্যাঁ হলে অর্ডারের বিবরণ বলে কনফার্ম/বাতিল জানা":
+    "If yes: read the order and ask to confirm or cancel",
+  "না হলে নাম-কে চিনেন? — চেনেন তো কনফার্ম করতে বলা; না চিনলে দুঃখ করে কল শেষ":
+    "If no: do you know {name}? If yes, ask them to confirm; if not, apologize and end",
+  "না হলে নাম-কে চিনেন? — চেনেন তো রিসিভ করতে বলা; না চিনলে দুঃখ করে কল শেষ":
+    "If no: do you know {name}? If yes, ask them to receive; if not, apologize and end",
+  "অর্ডারের বিবরণ বলে কনফার্ম/বাতিল জানা": "Read the order summary and get confirm/cancel",
+  "ধন্যবাদ জানিয়ে কল শেষ": "Thank the customer and end the call",
+  "পার্সেলের খবর দিয়ে ঠিকানা যাচাই": "Announce the parcel and verify the address",
+  "পার্সেলের খবর জানানো": "Announce the parcel",
+  "সুবিধাজনক ডেলিভারির সময় জানা": "Ask the preferred delivery time",
+  "ডেলিভারি নিশ্চিত / রিশিডিউল / ফেরত জানা": "Get delivery confirm / reschedule / return",
+
+  // order detail: collected call data
+  "কল থেকে পাওয়া তথ্য": "Details collected on the call",
+  "পরিচয় নিশ্চিত": "Identity confirmed",
+  "কাস্টমারকে চেনেন": "Knows the customer",
+  "ঠিকানা সঠিক": "Address correct",
+  "নতুন ঠিকানা": "New address",
+  "ডেলিভারির সময়": "Delivery time",
+  "এজেন্টের নোট": "Agent note",
+  "রিশিডিউল সময়": "Reschedule time",
+  "কারণ": "Reason",
+  "হ্যাঁ": "Yes",
+  "না": "No",
 };

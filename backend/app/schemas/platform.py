@@ -5,6 +5,14 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.merchant import MerchantOut
 
 
+def _valid_service_type(v: str) -> str:
+    from app.flows import is_valid_service
+
+    if not is_valid_service(v):
+        raise ValueError("অজানা সার্ভিস টাইপ")
+    return v
+
+
 class SignupRequest(BaseModel):
     business_name: str = Field(min_length=1)
     owner_name: str = ""
@@ -12,13 +20,18 @@ class SignupRequest(BaseModel):
     password: str = Field(min_length=6)
     phone: str = ""
     email: str = ""
+    service_type: str = "ecommerce"
+
+    _service = field_validator("service_type")(_valid_service_type)
 
 
 class MerchantSelfUpdate(BaseModel):
+    # service_type is deliberately absent: only the platform admin changes it.
     owner_name: str | None = None
     phone: str | None = None
     support_phone: str | None = None
     email: str | None = None
+    flow_settings: dict[str, bool] | None = None
     custom_greeting: str | None = Field(default=None, max_length=200)
     max_call_seconds: int | None = None  # 0 = platform default
     voice_tier: str | None = None

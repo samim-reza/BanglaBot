@@ -16,7 +16,7 @@ from pipecat.processors.aggregators.llm_response_universal import (
     LLMContextAggregatorPair,
     LLMUserAggregatorParams,
 )
-from pipecat.frames.frames import LLMRunFrame, TTSSpeakFrame
+from pipecat.frames.frames import TTSSpeakFrame
 from pipecat.runner.utils import parse_telephony_websocket
 from pipecat.serializers.twilio import TwilioFrameSerializer
 from pipecat.services.openai.llm import OpenAILLMService
@@ -30,10 +30,11 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.db.session import AsyncSessionLocal
+from app.flows import FlowRuntime, get_flow
 from app.models import CallLog, Merchant, Order, OrderStatus
 from app.voice import behavior
-from app.voice.prompts import build_system_prompt, opening_greeting
-from app.voice.tools import CallAgentTools, tool_schemas
+from app.voice.prompts import build_system_prompt
+from app.voice.tools import FlowCallTools, tool_schemas
 from app.voice.tts import create_tts_service
 
 
@@ -90,13 +91,24 @@ async def run_call_agent(websocket: WebSocket) -> None:
     tts = create_tts_service(merchant.voice_tier)
     llm = OpenAILLMService(api_key=settings.openai_api_key, model=settings.openai_llm_model)
 
-    tools = CallAgentTools(order_id=order.id, call_sid=call_sid, support_phone=merchant.support_phone)
-    tools.register(llm)
-
-    context = LLMContext(
-        messages=[{"role": "system", "content": build_system_prompt(order, merchant)}],
-        tools=tool_schemas(),
+    # The merchant's service (ecommerce/courier) picks the conversation flow;
+    # the runtime derives the current node from the collected answers and
+    # appends step directives to the context tail as the call progresses.
+    flow = get_flow(merchant.service_type)
+    context = LLMContext(tools=tool_schemas(flow))
+    runtime = FlowRuntime(flow, order, merchant, context)
+    context.set_messages(
+        [{"role": "system", "content": build_system_prompt(order, merchant, runtime)}]
     )
+    context.add_message({"role": "system", "content": runtime.initial_directive_bn()})
+
+    tools = FlowCallTools(
+        order_id=order.id,
+        call_sid=call_sid,
+        support_phone=merchant.support_phone,
+        runtime=runtime,
+    )
+    tools.register(llm)
     # Merchant-tunable call behavior (defaults in app/voice/behavior.py):
     # noise_mode = VAD strictness, barge_in_mode = when the caller may
     # interrupt, silence_hangup_secs = auto-drop after caller silence.
@@ -141,11 +153,14 @@ async def run_call_agent(websocket: WebSocket) -> None:
     @transport.event_handler("on_client_connected")
     async def on_client_connected(transport, client):
         logger.info(f"Call {call_sid} connected for order {order.id}")
-        # Speak the greeting with the selected TTS (not Twilio <Say>), then let
-        # the LLM continue. TTS pauses inbound frames so the two don't overlap.
-        await task.queue_frames(
-            [TTSSpeakFrame(opening_greeting(merchant)), LLMRunFrame()]
-        )
+        # The greeting was already spoken by TwiML <Say> before the stream
+        # connected (instant, no pipeline latency). Open with the flow's first
+        # question deterministically — no LLM round-trip — and record it as the
+        # assistant's words so the model knows it was asked. Speaking through
+        # the pipeline also arms the caller-silence auto-drop timer.
+        question = runtime.opening_question_bn()
+        context.add_message({"role": "assistant", "content": question})
+        await task.queue_frames([TTSSpeakFrame(question)])
 
     @transport.event_handler("on_client_disconnected")
     async def on_client_disconnected(transport, client):
@@ -156,7 +171,7 @@ async def run_call_agent(websocket: WebSocket) -> None:
     try:
         await runner.run(task)
     finally:
-        await _save_transcript(call_sid, _transcript_from_context(context))
+        await _save_call_state(call_sid, order.id, _transcript_from_context(context), runtime)
 
 
 async def _mark_auto_dropped(call_sid: str, order_id: str) -> None:
@@ -175,13 +190,21 @@ async def _mark_auto_dropped(call_sid: str, order_id: str) -> None:
             await db.commit()
 
 
-async def _save_transcript(call_sid: str, transcript: str) -> None:
-    if not transcript:
-        return
+async def _save_call_state(
+    call_sid: str, order_id: str, transcript: str, runtime
+) -> None:
+    """Persist the transcript, the node the call ended on and the collected
+    answers (merged over any terminal write, which may hold extra fields)."""
     async with AsyncSessionLocal() as db:
         log = (
             await db.execute(select(CallLog).where(CallLog.twilio_call_sid == call_sid))
         ).scalar_one_or_none()
         if log:
-            log.transcript = transcript
-            await db.commit()
+            if transcript:
+                log.transcript = transcript
+            log.final_node = runtime.current_node
+        if runtime.slots:
+            order = await db.get(Order, order_id)
+            if order:
+                order.flow_data = {**(order.flow_data or {}), **runtime.slots}
+        await db.commit()

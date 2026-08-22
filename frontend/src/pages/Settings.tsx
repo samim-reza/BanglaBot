@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
-import { Merchant, VoiceTier } from "../api/types";
+import { FlowPreview, Merchant, VoiceTier } from "../api/types";
 import { useLang } from "../i18n";
 
 const GREETING_MAX = 200;
@@ -25,6 +25,7 @@ const BARGE_IN_MODES = [
 const SECTIONS = [
   { key: "profile", icon: "🏪", label: "প্রোফাইল", hint: "দোকানের নাম ও যোগাযোগের তথ্য" },
   { key: "agent", icon: "🎙", label: "এজেন্ট ও ভয়েস", hint: "এজেন্ট কীভাবে কথা বলবে ও কোন কণ্ঠে" },
+  { key: "flow", icon: "🔀", label: "কল ফ্লো", hint: "সার্ভিস অনুযায়ী কলের ধাপ ও প্রশ্ন" },
   { key: "security", icon: "🔒", label: "নিরাপত্তা", hint: "লগইন পাসওয়ার্ড বদলান" },
 ] as const;
 
@@ -101,6 +102,10 @@ export default function Settings() {
 
   const [agentMsg, setAgentMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [agentBusy, setAgentBusy] = useState(false);
+  const [flow, setFlow] = useState<FlowPreview | null>(null);
+  const [flowForm, setFlowForm] = useState<Record<string, boolean>>({});
+  const [flowMsg, setFlowMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [flowBusy, setFlowBusy] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passMsg, setPassMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -127,7 +132,35 @@ export default function Settings() {
       })
       .catch((e) => setProfileMsg({ ok: false, text: e.message }));
     api<VoiceTier[]>("/api/public/voice-tiers").then(setTiers).catch(() => {});
+    loadFlow();
   }, []);
+
+  function loadFlow() {
+    api<FlowPreview>("/api/auth/flow-preview")
+      .then((f) => {
+        setFlow(f);
+        setFlowForm(Object.fromEntries(f.settings.map((s) => [s.key, s.value])));
+      })
+      .catch(() => {});
+  }
+
+  async function saveFlow(e: FormEvent) {
+    e.preventDefault();
+    setFlowMsg(null);
+    setFlowBusy(true);
+    try {
+      await api<Merchant>("/api/auth/me", {
+        method: "PATCH",
+        body: { flow_settings: flowForm },
+      });
+      loadFlow();
+      setFlowMsg({ ok: true, text: "সংরক্ষণ হয়েছে" });
+    } catch (err) {
+      setFlowMsg({ ok: false, text: (err as Error).message });
+    } finally {
+      setFlowBusy(false);
+    }
+  }
 
   const set = (key: string) => (e: { target: { value: string } }) =>
     setForm((f) => ({ ...f, [key]: e.target.value }));
@@ -465,6 +498,87 @@ export default function Settings() {
                   {agentBusy ? t("সংরক্ষণ হচ্ছে...") : t("সংরক্ষণ করুন")}
                 </button>
               </div>
+            </form>
+          )}
+
+          {section === "flow" && (
+            <form className="card form" onSubmit={saveFlow}>
+              <div className="card-head">
+                <h2>{t("কল ফ্লো")}</h2>
+                <p className="muted">
+                  {t("এজেন্ট ধাপে ধাপে প্রশ্ন করে — কাস্টমার আগে থেকে কিছু বলে দিলে সেই ধাপ নিজে থেকেই বাদ যায়।")}
+                </p>
+              </div>
+              {!flow ? (
+                <p className="muted">{t("লোড হচ্ছে...")}</p>
+              ) : (
+                <>
+                  <div className="form-row">
+                    <label>{t("আপনার সার্ভিস")}</label>
+                    <div>
+                      <span className="badge active">
+                        {flow.service_icon} {t(flow.service_name_bn)}
+                      </span>{" "}
+                      <span className="muted" style={{ fontSize: 13.5 }}>
+                        {t(flow.description_bn)}
+                      </span>
+                    </div>
+                    <div className="muted hint">
+                      {t("সার্ভিস টাইপ বদলাতে হলে প্ল্যাটফর্ম অ্যাডমিনের সাথে যোগাযোগ করুন।")}
+                    </div>
+                  </div>
+
+                  {flow.settings.length > 0 && (
+                    <div className="form-row">
+                      <label>{t("ঐচ্ছিক ধাপ")}</label>
+                      <div style={{ display: "grid", gap: 8 }}>
+                        {flow.settings.map((s) => (
+                          <label
+                            key={s.key}
+                            style={{ display: "flex", gap: 8, alignItems: "start", fontWeight: 400 }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={flowForm[s.key] ?? s.value}
+                              onChange={(e) =>
+                                setFlowForm((f) => ({ ...f, [s.key]: e.target.checked }))
+                              }
+                              style={{ marginTop: 3 }}
+                            />
+                            <span>
+                              {t(s.label_bn)}
+                              <span className="muted" style={{ display: "block", fontSize: 13 }}>
+                                {t(s.hint_bn)}
+                              </span>
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="form-row">
+                    <label>{t("কলের ধাপগুলো (বর্তমান সেটিং অনুযায়ী)")}</label>
+                    <ol style={{ paddingInlineStart: 20, display: "grid", gap: 6, margin: 0 }}>
+                      {flow.steps_bn.map((step, i) => (
+                        <li key={i}>{t(step)}</li>
+                      ))}
+                    </ol>
+                    <div className="muted hint">
+                      {t("সেভ করার পরে তালিকাটি নতুন সেটিং অনুযায়ী আপডেট হবে।")}
+                    </div>
+                  </div>
+
+                  <div className="form-actions">
+                    {flowMsg && (
+                      <span className={flowMsg.ok ? "save-ok" : "error"}>{t(flowMsg.text)}</span>
+                    )}
+                    <button className="btn" disabled={flowBusy}>
+                      {flowBusy ? t("সংরক্ষণ হচ্ছে...") : t("সংরক্ষণ করুন")}
+                    </button>
+                  </div>
+                </>
+              )}
             </form>
           )}
 

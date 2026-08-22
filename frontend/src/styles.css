@@ -86,6 +86,7 @@ tr:hover td { background: #fafcfc; }
 .badge.cancelled { background: #fee2e2; color: #991b1b; }
 .badge.no_answer { background: #ede9fe; color: #5b21b6; }
 .badge.needs_review { background: #ffedd5; color: #9a3412; }
+.badge.rescheduled { background: #cffafe; color: #155e75; }
 .badge.inactive { background: #f3f4f6; color: #6b7280; }
 .badge.active { background: #d1fae5; color: #065f46; }
 

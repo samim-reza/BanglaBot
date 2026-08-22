@@ -14,8 +14,9 @@ from app.models import CallLog, Merchant, Order, OrderStatus
 from app.services import voice_tiers
 from app.services.call_service import apply_status_callback
 from app.services.recording_service import save_recording
-from app.voice import static_call
+from app.voice import opening, static_call
 from app.voice.agent import run_call_agent
+from app.voice.prompts import opening_greeting
 
 router = APIRouter(tags=["twilio"])
 
@@ -64,14 +65,46 @@ async def twiml_for_order(order_id: str, request: Request, attempt: int = 1) -> 
 
     ws_url = base.replace("https://", "wss://").replace("http://", "ws://") + "/twilio/ws"
     response = VoiceResponse()
-    # Connect immediately so the first words use the merchant's selected TTS
-    # voice. A Twilio <Say> here would greet in a different (Google) voice.
+    # Greet BEFORE connecting the stream so the caller hears a voice within
+    # ~2s of answering, with zero pipeline latency. Preferred: <Play> the
+    # greeting pre-synthesized in the merchant's own agent voice (prefetched
+    # into the audio cache while the phone was ringing — see voice/opening).
+    # Fallback for tiers without one-shot synthesis: Twilio <Say>. The agent
+    # then continues with the flow's first question over the media stream.
+    if merchant and opening.supported(merchant):
+        response.play(f"{base}/twilio/opening/{order_id}")
+    elif merchant:
+        response.say(
+            opening_greeting(merchant),
+            language="bn-IN",
+            voice=get_settings().twilio_say_voice,
+        )
     connect = Connect()
     stream = Stream(url=ws_url)
     stream.parameter(name="order_id", value=order_id)
     connect.append(stream)
     response.append(connect)
     return Response(content=str(response), media_type="application/xml")
+
+
+@router.get("/twilio/opening/{order_id}")
+async def opening_audio(order_id: str) -> Response:
+    """The greeting clip Twilio <Play>s before connecting the media stream.
+
+    Fetched by Twilio with a plain GET (media requests aren't TwiML posts, so
+    no signature check); the order id is an unguessable UUID, and the clip is
+    normally a disk cache hit thanks to the ring-time prefetch.
+    """
+    async with AsyncSessionLocal() as db:
+        order = await db.get(Order, order_id)
+        merchant = await db.get(Merchant, order.merchant_id) if order else None
+    if not order or not merchant:
+        raise HTTPException(404, "unknown order")
+    wav = await opening.greeting_wav(order, merchant)
+    if wav is None:
+        # Twilio logs the failed <Play> and continues into <Connect>.
+        raise HTTPException(404, "no opening clip")
+    return Response(content=wav, media_type="audio/wav")
 
 
 @router.post("/twilio/gather/{order_id}")
@@ -94,6 +127,7 @@ async def gather_result(order_id: str, request: Request, attempt: int = 1) -> Re
             order.status = {
                 "confirmed": OrderStatus.confirmed,
                 "cancelled": OrderStatus.cancelled,
+                "rescheduled": OrderStatus.rescheduled,
                 "transfer": OrderStatus.needs_review,
             }[outcome]
             log = (

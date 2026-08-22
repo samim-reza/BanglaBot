@@ -4,6 +4,8 @@ import {
   AdminMerchant,
   Page,
   Plan,
+  SERVICE_LABELS,
+  ServiceTypeInfo,
   SubStatus,
   SUB_STATUS_LABELS,
   VoiceTier,
@@ -22,6 +24,7 @@ const EMPTY = {
   phone: "",
   support_phone: "",
   email: "",
+  service_type: "ecommerce",
 };
 const EMPTY_SUB = {
   plan_key: "",
@@ -40,6 +43,7 @@ const EMPTY_EDIT = {
   custom_greeting: "",
   max_call_seconds: 0,
   voice_tier: "very_basic",
+  service_type: "ecommerce",
 };
 const DURATION_CHOICES = [0, 60, 120, 180, 240, 300, 360, 480, 600];
 
@@ -58,6 +62,7 @@ export default function AdminMerchants() {
   const [editForm, setEditForm] = useState(EMPTY_EDIT);
   const [editBusy, setEditBusy] = useState(false);
   const [tiers, setTiers] = useState<VoiceTier[]>([]);
+  const [services, setServices] = useState<ServiceTypeInfo[]>([]);
 
   const load = useCallback(() => {
     api<Page<AdminMerchant>>(`/api/admin/merchants?page=${page}&page_size=${PAGE_SIZE}`)
@@ -70,6 +75,7 @@ export default function AdminMerchants() {
   useEffect(() => {
     api<Plan[]>("/api/admin/plans").then(setPlans).catch(() => {});
     api<VoiceTier[]>("/api/public/voice-tiers").then(setTiers).catch(() => {});
+    api<ServiceTypeInfo[]>("/api/public/service-types").then(setServices).catch(() => {});
   }, []);
 
   const set = (key: string) => (e: { target: { value: string } }) =>
@@ -146,6 +152,7 @@ export default function AdminMerchants() {
       custom_greeting: merchant.custom_greeting,
       max_call_seconds: merchant.max_call_seconds,
       voice_tier: merchant.voice_tier || "very_basic",
+      service_type: merchant.service_type || "ecommerce",
     });
   }
 
@@ -202,6 +209,16 @@ export default function AdminMerchants() {
       {showForm && (
         <form className="card form" style={{ marginBottom: 16 }} onSubmit={submit}>
           <div className="form-row">
+            <label>{t("সার্ভিস টাইপ * (কোন ফ্লো-তে কল হবে)")}</label>
+            <select value={form.service_type} onChange={set("service_type")}>
+              {services.map((service) => (
+                <option key={service.key} value={service.key}>
+                  {service.icon} {t(service.name_bn)} — {t(service.description_bn)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="form-row">
             <label>{t("ব্যবসার নাম *")}</label>
             <input value={form.business_name} onChange={set("business_name")} required />
           </div>
@@ -237,6 +254,7 @@ export default function AdminMerchants() {
           <thead>
             <tr>
               <th>{t("ব্যবসা")}</th>
+              <th>{t("সার্ভিস")}</th>
               <th>{t("মালিক")}</th>
               <th>{t("ইউজারনেম")}</th>
               <th>{t("সাপোর্ট নম্বর")}</th>
@@ -251,6 +269,10 @@ export default function AdminMerchants() {
               <Fragment key={merchant.id}>
                 <tr>
                   <td>{merchant.business_name}</td>
+                  <td>
+                    {merchant.service_type === "courier" ? "📦 " : "🛍️ "}
+                    {t(SERVICE_LABELS[merchant.service_type] ?? merchant.service_type)}
+                  </td>
                   <td>{merchant.owner_name || "—"}</td>
                   <td>{merchant.username}</td>
                   <td>{merchant.support_phone || "—"}</td>
@@ -287,13 +309,27 @@ export default function AdminMerchants() {
                 </tr>
                 {editFor === merchant.id && (
                   <tr>
-                    <td colSpan={8} style={{ background: "#fafbfc" }}>
+                    <td colSpan={9} style={{ background: "#fafbfc" }}>
                       <form
                         className="form"
                         style={{ maxWidth: "none", padding: "8px 0" }}
                         onSubmit={(e) => saveEdit(e, merchant)}
                       >
                         <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "end" }}>
+                          <div className="form-row">
+                            <label>{t("সার্ভিস টাইপ")}</label>
+                            <select
+                              value={editForm.service_type}
+                              onChange={setEdit("service_type")}
+                              style={{ width: 150 }}
+                            >
+                              {services.map((service) => (
+                                <option key={service.key} value={service.key}>
+                                  {service.icon} {t(service.name_bn)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                           <div className="form-row">
                             <label>{t("ব্যবসার নাম *")}</label>
                             <input
@@ -387,7 +423,7 @@ export default function AdminMerchants() {
                 )}
                 {subFor === merchant.id && (
                   <tr>
-                    <td colSpan={8} style={{ background: "#fafbfc" }}>
+                    <td colSpan={9} style={{ background: "#fafbfc" }}>
                       <form
                         className="form"
                         style={{ maxWidth: "none", padding: "8px 0" }}
@@ -459,7 +495,7 @@ export default function AdminMerchants() {
             ))}
             {data && data.items.length === 0 && (
               <tr>
-                <td colSpan={8}>
+                <td colSpan={9}>
                   <EmptyState art={<GreetingArt />} title={t("কোনো মার্চেন্ট নেই")} />
                 </td>
               </tr>

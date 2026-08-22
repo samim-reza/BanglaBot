@@ -27,6 +27,7 @@ from app.schemas.common import Page
 from app.schemas.merchant import MerchantCreate, MerchantOut, MerchantUpdate
 from app.schemas.order import OrderOut, OrderUpdate
 from app.schemas.platform import AdminMerchantOut, AuditLogOut, MerchantOption
+from app import flows
 from app.services import audit_service, billing_service, order_service
 
 router = APIRouter(
@@ -213,6 +214,11 @@ async def update_merchant(
         password = data.pop("password")
         if password:
             merchant.password_hash = hash_password(password)
+    if "flow_settings" in data:
+        service = data.get("service_type") or merchant.service_type
+        data["flow_settings"] = flows.validate_flow_settings(
+            service, data["flow_settings"] or {}
+        )
     for field, value in data.items():
         setattr(merchant, field, value)
     audit_service.record(

@@ -1,17 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
-import { Order, OrderStatus, Page, STATUS_LABELS } from "../api/types";
+import { Order, Page, STATUS_LABELS } from "../api/types";
 import EmptyState from "../components/EmptyState";
 import Pagination from "../components/Pagination";
 import { BoxArt } from "../components/art";
 import StatusBadge from "../components/StatusBadge";
 import { useLang } from "../i18n";
+import { CALLABLE_STATUSES, serviceText, useServiceType } from "../service";
 
 const PAGE_SIZE = 15;
 
 export default function Orders() {
   const { t, fmtNum, fmtMoney } = useLang();
+  const labels = serviceText(useServiceType());
   const [data, setData] = useState<Page<Order> | null>(null);
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
@@ -53,10 +55,10 @@ export default function Orders() {
 
   return (
     <>
-      <h1 className="page-title">{t("অর্ডারসমূহ")}</h1>
+      <h1 className="page-title">{t(labels.navOrders)}</h1>
       <div className="toolbar">
         <input
-          placeholder={t("নাম / ফোন / অর্ডার নম্বর খুঁজুন")}
+          placeholder={t(labels.searchPlaceholder)}
           value={search}
           onChange={(e) => {
             setSearch(e.target.value);
@@ -80,7 +82,7 @@ export default function Orders() {
         </select>
         <span className="spacer" />
         <Link to="/orders/new" className="btn">
-          + {t("নতুন অর্ডার")}
+          + {t(labels.newItem)}
         </Link>
       </div>
       {error && <p className="error">{t(error)}</p>}
@@ -88,11 +90,11 @@ export default function Orders() {
         <table>
           <thead>
             <tr>
-              <th>{t("অর্ডার")}</th>
-              <th>{t("কাস্টমার")}</th>
+              <th>{t(labels.noun)}</th>
+              <th>{t(labels.customerShort)}</th>
               <th>{t("ফোন")}</th>
-              <th>{t("পণ্য")}</th>
-              <th>{t("মূল্য")}</th>
+              <th>{t(labels.itemsShort)}</th>
+              <th>{t(labels.amountShort)}</th>
               <th>{t("স্ট্যাটাস")}</th>
               <th>{t("কল")}</th>
               <th></th>
@@ -115,7 +117,7 @@ export default function Orders() {
                 </td>
                 <td className="muted">{t("{n} বার", { n: fmtNum(order.call_attempts) })}</td>
                 <td>
-                  {["pending", "no_answer", "needs_review"].includes(order.status) && (
+                  {CALLABLE_STATUSES.includes(order.status) && (
                     <button className="btn small" onClick={() => startCall(order.id)}>
                       📞 {t("কল করুন")}
                     </button>
@@ -128,11 +130,11 @@ export default function Orders() {
                 <td colSpan={8}>
                   <EmptyState
                     art={<BoxArt />}
-                    title={t("কোনো অর্ডার নেই")}
-                    hint={t("প্রথম অর্ডার যোগ করলেই এআই কল শুরু করা যাবে")}
+                    title={t(labels.emptyTitle)}
+                    hint={t(labels.emptyHint)}
                     action={
                       <Link to="/orders/new" className="btn small">
-                        + {t("নতুন অর্ডার")}
+                        + {t(labels.newItem)}
                       </Link>
                     }
                   />

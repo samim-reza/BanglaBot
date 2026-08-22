@@ -3,6 +3,14 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+def _valid_service(v: str | None) -> str | None:
+    from app.flows import is_valid_service
+
+    if v is not None and not is_valid_service(v):
+        raise ValueError("অজানা সার্ভিস টাইপ")
+    return v
+
+
 class MerchantCreate(BaseModel):
     business_name: str
     owner_name: str = ""
@@ -11,6 +19,10 @@ class MerchantCreate(BaseModel):
     phone: str = ""
     email: str = ""
     support_phone: str = ""
+    # Which vertical this account runs (ecommerce/courier) — admin's choice.
+    service_type: str = "ecommerce"
+
+    _service = field_validator("service_type")(_valid_service)
 
 
 class MerchantUpdate(BaseModel):
@@ -22,6 +34,10 @@ class MerchantUpdate(BaseModel):
     phone: str | None = None
     email: str | None = None
     support_phone: str | None = None
+    service_type: str | None = None
+    flow_settings: dict[str, bool] | None = None
+
+    _service = field_validator("service_type")(_valid_service)
     custom_greeting: str | None = Field(default=None, max_length=200)
     max_call_seconds: int | None = None  # 0 = platform default
     voice_tier: str | None = None
@@ -79,6 +95,8 @@ class MerchantOut(BaseModel):
 
     id: str
     business_name: str
+    service_type: str
+    flow_settings: dict
     owner_name: str
     username: str
     phone: str

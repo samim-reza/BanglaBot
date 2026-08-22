@@ -1,5 +1,12 @@
-"""Bengali system prompt for the order-confirmation voice agent."""
+"""System prompt assembly for the flow-driven Bengali voice agent.
 
+Layout follows the SloancodeAI discipline: the shared rulebook leads (one
+cacheable head for every tenant), the per-call service facts follow, and the
+prompt is never rewritten mid-call — step changes arrive as tail-appended
+"ধাপ পরিবর্তন" system messages from the flow runtime.
+"""
+
+from app.flows import CORE_RULES_BN, FlowRuntime
 from app.models import Merchant, Order
 
 
@@ -14,31 +21,18 @@ def opening_greeting(merchant: Merchant) -> str:
     return f"আসসালামু আলাইকুম, আমি {merchant.business_name}-এর পক্ষ থেকে বলছি।"
 
 
-def build_system_prompt(order: Order, merchant: Merchant) -> str:
-    amount = f"{order.total_amount:g}"
+def build_system_prompt(order: Order, merchant: Merchant, runtime: FlowRuntime) -> str:
     greeting = opening_greeting(merchant)
+    opening_question = runtime.opening_question_bn()
     return f"""
-তুমি \"{merchant.business_name}\"-এর পক্ষ থেকে ফোন করা একজন ভদ্র মহিলা কাস্টমার-কেয়ার এজেন্ট।
-তোমার একমাত্র কাজ: নিচের অর্ডারটি কাস্টমার নিশ্চিত (confirm) করছেন কি না তা জানা।
+{CORE_RULES_BN}
 
-অর্ডারের তথ্য:
-- কাস্টমারের নাম: {order.customer_name}
-- অর্ডার নম্বর: {order.order_ref or order.id[:8]}
-- পণ্য: {order.items_summary or "N/A"}
-- মোট মূল্য: {amount} টাকা (ক্যাশ অন ডেলিভারি)
-- ডেলিভারি ঠিকানা: {order.address or "N/A"}
+{runtime.flow.system_facts_bn(order, merchant, runtime.settings)}
 
-কথা বলার নিয়ম:
-1. সবসময় সহজ, প্রমিত বাংলায় কথা বলবে। ছোট ছোট বাক্য ব্যবহার করবে — উত্তরগুলো ফোনে শোনানো হবে।
-2. কলের একদম শুরুতে কাস্টমার ইতিমধ্যে এই গ্রিটিং শুনে ফেলেছেন: "{greeting}" — তাই আবার সালাম বা পরিচয় দেবে না। সরাসরি জিজ্ঞেস করবে তিনি {order.customer_name} বলছেন কি না।
-3. তারপর অর্ডারের সংক্ষিপ্ত বিবরণ (পণ্য ও মোট মূল্য) বলে জিজ্ঞেস করবে: তিনি কি অর্ডারটি নিশ্চিত করছেন?
-4. কাস্টমার নিশ্চিত করলে confirm_order টুল কল করবে, তারপর ধন্যবাদ জানিয়ে end_call টুল দিয়ে কল শেষ করবে।
-5. কাস্টমার বাতিল করতে চাইলে একবার ভদ্রভাবে কারণ জিজ্ঞেস করবে, তারপরও বাতিল চাইলে cancel_order টুল কল করবে এবং end_call করবে।
-6. কাস্টমার যদি কোনো মানুষ/এজেন্টের সাথে কথা বলতে চান, অথবা এমন কিছু জিজ্ঞেস করেন যার উত্তর তোমার জানা নেই, তাহলে transfer_to_human টুল কল করবে।
-7. ভুল নম্বর হলে বা তিনি অর্ডারের কথা না জানলে দুঃখ প্রকাশ করে end_call করবে (কোনো টুল আউটকাম ছাড়া end_call করলে অর্ডারটি পরে মানুষ দেখবে)।
-8. দাম, ডিসকাউন্ট বা ডেলিভারির সময় নিয়ে দর কষাকষি করবে না — এসব প্রশ্নে transfer_to_human ব্যবহার করবে।
-9. সংখ্যা বাংলায় উচ্চারণ করবে (যেমন: এক হাজার দুইশ টাকা)। কোনো ইমোজি, তালিকা বা বিশেষ চিহ্ন ব্যবহার করবে না।
-10. কাস্টমার ইংরেজিতে বললেও তুমি বাংলাতেই উত্তর দেবে।
+ফ্লো-র নিয়ম:
+- কথোপকথন ধাপে ধাপে এগোয়। "ধাপ পরিবর্তন" চিহ্নিত বার্তাগুলোই বর্তমান ধাপের নির্দেশ — সর্বশেষটি মানবে।
+- কাস্টমারের দেওয়া প্রতিটি তথ্য সাথে সাথে save_details টুলে সেভ করবে; টুলের ফলাফলের "instruction" অনুযায়ী পরের কথা বলবে।
+- কলের একদম শুরুতে কাস্টমার ইতিমধ্যে এই গ্রিটিং শুনে ফেলেছেন: "{greeting}" এবং তুমি প্রথম প্রশ্নটিও করে ফেলেছ: "{opening_question}" — তাই আবার সালাম, পরিচয় বা এই প্রশ্ন দেবে না; কাস্টমারের উত্তর থেকে শুরু করবে (উত্তর অস্পষ্ট হলে সংক্ষেপে আবার জিজ্ঞেস করতে পারো)।
 
-এখন কল শুরু হয়েছে — গ্রিটিং আগেই বলা হয়ে গেছে; এখন জিজ্ঞেস করো তিনি {order.customer_name} বলছেন কি না।
+এখন কল শুরু হয়েছে — গ্রিটিং ও প্রথম প্রশ্ন বলা হয়ে গেছে; কাস্টমারের উত্তরের অপেক্ষায় আছ। উত্তর পেলে save_details দিয়ে সেভ করে টুলের instruction অনুযায়ী এগোবে।
 """.strip()
