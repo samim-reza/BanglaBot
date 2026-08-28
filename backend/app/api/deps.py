@@ -1,50 +1,31 @@
-"""Auth dependencies: resolve the current merchant or platform admin from JWT."""
+"""FastAPI dependencies: the logged-in merchant, or the platform admin."""
 
-from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from __future__ import annotations
+
+from fastapi import Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import decode_token
+from app.core.security import bearer_payload, require_roles
 from app.db.session import get_db
-from app.models import Merchant, PlatformAdmin
+from app.models import Merchant
 
-bearer = HTTPBearer(auto_error=False)
-
-
-def _unauthorized(detail: str = "Not authenticated"):
-    return HTTPException(status.HTTP_401_UNAUTHORIZED, detail)
-
-
-def _payload(creds: HTTPAuthorizationCredentials | None) -> dict:
-    if not creds:
-        raise _unauthorized()
-    try:
-        return decode_token(creds.credentials)
-    except Exception:
-        raise _unauthorized("Invalid or expired token")
+MERCHANT_ROLE = "merchant"
+ADMIN_ROLE = "admin"
 
 
 async def get_current_merchant(
-    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
+    payload: dict = Depends(bearer_payload),
     db: AsyncSession = Depends(get_db),
 ) -> Merchant:
-    payload = _payload(creds)
-    if payload.get("role") != "merchant":
-        raise _unauthorized("Merchant account required")
-    merchant = await db.get(Merchant, payload.get("sub"))
-    if not merchant or not merchant.active:
-        raise _unauthorized("Account not found or disabled")
+    require_roles(payload, {MERCHANT_ROLE})
+    merchant = await db.get(Merchant, str(payload.get("sub") or ""))
+    if merchant is None:
+        raise HTTPException(status_code=401, detail="Merchant account not found")
+    if not merchant.active:
+        raise HTTPException(status_code=403, detail="Merchant account is disabled")
     return merchant
 
 
-async def get_current_admin(
-    creds: HTTPAuthorizationCredentials | None = Depends(bearer),
-    db: AsyncSession = Depends(get_db),
-) -> PlatformAdmin:
-    payload = _payload(creds)
-    if payload.get("role") != "admin":
-        raise _unauthorized("Admin account required")
-    admin = await db.get(PlatformAdmin, payload.get("sub"))
-    if not admin:
-        raise _unauthorized("Admin not found")
-    return admin
+async def require_admin(payload: dict = Depends(bearer_payload)) -> dict:
+    require_roles(payload, {ADMIN_ROLE})
+    return payload

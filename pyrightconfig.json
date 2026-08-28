@@ -1,0 +1,15 @@
+{
+  "include": ["backend/app", "backend/tests"],
+  "executionEnvironments": [
+    {
+      "root": "backend",
+      "extraPaths": ["backend"],
+      "pythonVersion": "3.12"
+    }
+  ],
+  "typeCheckingMode": "basic",
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "reportUnusedImport": "warning",
+  "reportAttributeAccessIssue": "none"
+}

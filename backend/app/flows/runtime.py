@@ -1,57 +1,63 @@
-"""Per-call flow runtime: slots + derived current node.
+"""Per-call flow runtime: the slot store + the node derived from it.
 
-Mirrors SloancodeAI's live engine: `advance()` recomputes the node from the
-slots after every save; a node change appends a Bengali "ধাপ পরিবর্তন"
-directive to the tail of the conversation context (never rewriting the
-system prompt), and the returned instruction carries the backend-owned
-wording of the next question.
-
-`context` only needs an `add_message({"role": ..., "content": ...})` method
-(pipecat's LLMContext has one); tests pass a stub.
+``save()`` stores what the model extracted, re-derives the stage/node and
+returns the tool result the model reads (``ok`` / ``saved`` / ``instruction``).
+A node change is reported through ``on_directive`` so the bridge can append the
+directive as a tail system message.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import Any, Callable
 
-from loguru import logger
+import structlog
 
-from app.flows.base import Flow, build_node_directive_bn
+from app.flows.base import STAGE_DONE, Flow, Instruction
+from app.voice.languages import normalize_language
 
-if TYPE_CHECKING:  # pragma: no cover
-    from app.models import Merchant, Order
+logger = structlog.get_logger(__name__)
 
 
 class FlowRuntime:
-    def __init__(self, flow: Flow, order: "Order", merchant: "Merchant", context: Any = None):
+    def __init__(
+        self,
+        flow: Flow,
+        order: Any,
+        merchant: Any,
+        *,
+        language: str | None = None,
+        on_directive: Callable[[str], None] | None = None,
+    ) -> None:
         self.flow = flow
         self.order = order
         self.merchant = merchant
-        self.context = context
-        self.settings = flow.merged_settings(merchant)
-        self.slots: dict[str, Any] = flow.initial_slots(order, merchant, self.settings)
-        self.stage = flow.next_missing_stage(self.slots, self.settings, order)
-        self.current_node = flow.node_for_stage(self.stage)
+        self.language = normalize_language(language or getattr(merchant, "language", None))
+        self.on_directive = on_directive
+        self.slots: dict[str, Any] = dict(flow.initial_slots(order, merchant))
+        self.outcome: str = ""
+        self.reasks: int = 0
+        self.stage: str = flow.next_stage(self.slots, order, merchant)
+        self.current_node: str = flow.node_for_stage(self.stage)
+        self.directives: list[str] = []
 
-    # ---- prompt bootstrap ------------------------------------------------
+    # ---- prompt bootstrap ----------------------------------------------------
+    def greeting(self) -> str:
+        return self.flow.greeting(self.merchant, self.language)
 
-    def initial_directive_bn(self) -> str:
-        return build_node_directive_bn(self.flow, self.current_node, self.order, self.merchant)
+    def opening_question(self) -> str:
+        return self.flow.opening_question(self.order, self.language)
 
-    def opening_question_bn(self) -> str:
-        """The deterministic first question spoken right after the greeting."""
-        return self.flow.opening_question_bn(self.order, self.merchant)
+    def initial_directive(self) -> str:
+        return self.flow.node_directive(self.current_node, self.order, self.merchant, self.language)
 
-    def current_instruction_bn(self) -> str:
-        return self.flow.spoken_instruction_bn(
-            self.stage, self.slots, self.settings, self.order, self.merchant
-        )
+    def set_language(self, language: str) -> None:
+        self.language = normalize_language(language)
 
-    # ---- the loop --------------------------------------------------------
+    # ---- the loop -------------------------------------------------------------
+    def current_instruction(self) -> Instruction:
+        return self.flow.instruction(self.stage, self.slots, self.order, self.merchant, self.language)
 
-    def save(self, fields: dict[str, Any]) -> dict[str, Any]:
-        """Store the slots the model extracted, re-derive the node, and return
-        the tool result the model reads (ok/saved/instruction)."""
+    def save(self, fields: dict[str, Any] | None) -> dict[str, Any]:
         known = self.flow.slot_properties()
         saved = {
             key: value
@@ -61,29 +67,37 @@ class FlowRuntime:
         self.slots.update(saved)
         return self.advance(saved_keys=sorted(saved))
 
+    def mark_decided(self, outcome: str) -> None:
+        """A terminal fired: the decision slot is filled and the flow is done."""
+        self.outcome = outcome
+        self.slots["decision"] = outcome
+        self.advance()
+
     def advance(self, saved_keys: list[str] | None = None) -> dict[str, Any]:
-        self.stage = self.flow.next_missing_stage(self.slots, self.settings, self.order)
+        self.stage = self.flow.next_stage(self.slots, self.order, self.merchant)
         node = self.flow.node_for_stage(self.stage)
         if node != self.current_node:
-            directive = build_node_directive_bn(self.flow, node, self.order, self.merchant)
-            if self.context is not None:
-                self.context.add_message({"role": "system", "content": directive})
-            logger.info(
-                f"flow_node_transition order={self.order.id} "
-                f"{self.current_node} -> {node} (stage={self.stage})"
-            )
+            directive = self.flow.node_directive(node, self.order, self.merchant, self.language)
+            self.directives.append(directive)
+            if self.on_directive is not None:
+                self.on_directive(directive)
+            logger.info("flow_node_transition", from_node=self.current_node, to_node=node, stage=self.stage)
             self.current_node = node
+        instruction = self.current_instruction()
         return {
             "ok": True,
             "saved": saved_keys or [],
-            "instruction": self.current_instruction_bn(),
+            "stage": self.stage,
+            "instruction": instruction.for_model(self.language),
         }
 
-    # ---- persistence -----------------------------------------------------
+    @property
+    def done(self) -> bool:
+        return self.stage == STAGE_DONE
 
+    # ---- persistence ------------------------------------------------------------
     def flow_data(self, extra: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Everything the call learned, written to orders.flow_data."""
-        data = dict(self.slots)
+        data = {key: value for key, value in self.slots.items() if key != "decision"}
         if extra:
-            data.update({k: v for k, v in extra.items() if v not in (None, "")})
+            data.update({key: value for key, value in extra.items() if value not in (None, "")})
         return data

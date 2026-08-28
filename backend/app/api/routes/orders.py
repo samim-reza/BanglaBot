@@ -1,110 +1,93 @@
-"""Merchant-facing order endpoints (all scoped to the logged-in merchant)."""
+"""Merchant-scoped orders: list, create, detail, edit, delete, call, recordings."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from __future__ import annotations
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app import flows
 from app.api.deps import get_current_merchant
-from app.core import cache
 from app.db.session import get_db
-from app.models import CallLog, Merchant, Order, OrderStatus
-from app.schemas.common import Page
-from app.schemas.order import OrderCreate, OrderDetail, OrderOut, OrderUpdate
-from app.services import audit_service, entitlement_service, order_service, recording_service
-from app.services.call_service import reconcile_stale_calls, start_confirmation_call
+from app.models import CallLog, Merchant
+from app.schemas.order import OrderCreate, OrderDetailOut, OrderOut, OrderPage, OrderStats, OrderUpdate
+from app.services import call_service, order_service
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
 
-async def _own_order(db: AsyncSession, merchant: Merchant, order_id: str) -> Order:
-    order = await db.get(Order, order_id)
-    if not order or order.merchant_id != merchant.id:
-        raise HTTPException(404, "অর্ডার পাওয়া যায়নি")
-    return order
-
-
-@router.get("", response_model=Page[OrderOut])
+@router.get("", response_model=OrderPage)
 async def list_orders(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    status: OrderStatus | None = None,
-    search: str | None = None,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=200),
+    status: str = Query(default=""),
+    search: str = Query(default=""),
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    # Settle any order stuck in "calling" whose status webhook got lost.
-    await reconcile_stale_calls(db, merchant)
-    items, total = await order_service.paginate_orders(
-        db, merchant_id=merchant.id, status=status, search=search, page=page, page_size=page_size
+    await call_service.reconcile_stale_calls(db, merchant)
+    rows, total = await order_service.list_orders(
+        db,
+        merchant_id=merchant.id,
+        status=order_service.parse_status(status),
+        search=search,
+        page=page,
+        page_size=page_size,
     )
-    return Page(items=items, total=total, page=page, page_size=page_size)
+    return OrderPage(items=[order_service.serialize_order(row) for row in rows], total=total, page=page, page_size=page_size)
 
 
 @router.post("", response_model=OrderOut, status_code=201)
 async def create_order(
-    body: OrderCreate,
+    data: OrderCreate,
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    order = Order(merchant_id=merchant.id, **body.model_dump())
-    db.add(order)
-    await db.commit()
-    await db.refresh(order)
-    return order
+    order = await order_service.create_order(db, merchant, data)
+    return order_service.serialize_order(order)
 
 
-@router.get("/stats")
-async def order_stats(
-    merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)
-):
-    await reconcile_stale_calls(db, merchant)
-    return await order_service.status_counts(db, merchant_id=merchant.id)
+@router.get("/stats", response_model=OrderStats)
+async def stats(merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
+    await call_service.reconcile_stale_calls(db, merchant)
+    return OrderStats(**await order_service.order_stats(db, merchant.id))
 
 
-@router.get("/insights")
-async def order_insights(
-    days: int = Query(30, ge=7, le=90),
+@router.get("/recordings/{log_id}")
+async def recording(
+    log_id: str,
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    # Cached until a call starts/finishes for this merchant (see call_service),
-    # with a short TTL so the daily rollover can't be stale for long.
-    cache_key = f"insights:{merchant.id}:{days}"
-    cached = await cache.get_json(cache_key)
-    if cached is not None:
-        return cached
-    data = await order_service.call_insights(db, merchant.id, days=days)
-    await cache.set_json(cache_key, data, 120)
-    return data
+    log = await db.get(CallLog, log_id)
+    if log is None or log.merchant_id != merchant.id:
+        raise HTTPException(status_code=404, detail="Call log not found")
+    content, media_type = await call_service.fetch_recording(log)
+    return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, max-age=3600"})
 
 
-@router.get("/{order_id}", response_model=OrderDetail)
-async def get_order(
+@router.get("/{order_id}", response_model=OrderDetailOut)
+async def order_detail(
     order_id: str,
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    await reconcile_stale_calls(db, merchant)
-    order = await _own_order(db, merchant, order_id)
-    logs = await order_service.get_call_logs(db, order.id)
-    detail = OrderDetail.model_validate(order)
-    detail.call_logs = logs  # type: ignore[assignment]
-    return detail
+    await call_service.reconcile_stale_calls(db, merchant)
+    order = await order_service.get_order(db, merchant, order_id)
+    logs = await order_service.order_call_logs(db, order.id)
+    payload = order_service.serialize_order(order)
+    payload["call_logs"] = [order_service.serialize_call_log(log) for log in logs]
+    return payload
 
 
 @router.patch("/{order_id}", response_model=OrderOut)
 async def update_order(
     order_id: str,
-    body: OrderUpdate,
+    data: OrderUpdate,
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    order = await _own_order(db, merchant, order_id)
-    for field, value in body.model_dump(exclude_unset=True).items():
-        setattr(order, field, value)
-    await db.commit()
-    await db.refresh(order)
-    return order
+    order = await order_service.get_order(db, merchant, order_id)
+    order = await order_service.update_order(db, order, data)
+    return order_service.serialize_order(order)
 
 
 @router.delete("/{order_id}", status_code=204)
@@ -113,48 +96,17 @@ async def delete_order(
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    order = await _own_order(db, merchant, order_id)
-    # Detach call logs instead of deleting them: they stay in the usage metering
-    # window, so deleting orders cannot reset the monthly call quota.
-    for log in await order_service.get_call_logs(db, order.id):
-        log.order_id = None
-    await db.delete(order)
-    await db.commit()
-
-
-@router.get("/recordings/{log_id}")
-async def play_recording(
-    log_id: str,
-    merchant: Merchant = Depends(get_current_merchant),
-    db: AsyncSession = Depends(get_db),
-):
-    log = await db.get(CallLog, log_id)
-    if not log or log.merchant_id != merchant.id or not log.recording_sid:
-        raise HTTPException(404, "রেকর্ডিং পাওয়া যায়নি")
-    return await recording_service.stream_recording(log.recording_sid)
+    order = await order_service.get_order(db, merchant, order_id)
+    await order_service.delete_order(db, order)
+    return Response(status_code=204)
 
 
 @router.post("/{order_id}/call", response_model=OrderOut)
-async def call_to_confirm(
+async def call_order(
     order_id: str,
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    await reconcile_stale_calls(db, merchant)
-    order = await _own_order(db, merchant, order_id)
-    if order.status in (OrderStatus.confirmed, OrderStatus.cancelled):
-        raise HTTPException(409, "এই অর্ডারের ফলাফল ইতিমধ্যে চূড়ান্ত")
-    await entitlement_service.check_can_call(db, merchant)
-    call_label = flows.get_flow(merchant.service_type).call_label_bn
-    audit_service.record(
-        db,
-        actor_role="merchant",
-        actor_id=merchant.id,
-        actor_name=merchant.business_name,
-        action="call_started",
-        detail=f"{order.customer_name}-কে {call_label} শুরু হয়েছে ({order.customer_phone})",
-        merchant_id=merchant.id,
-    )
-    await start_confirmation_call(db, order, merchant)
-    await db.refresh(order)
-    return order
+    order = await order_service.get_order(db, merchant, order_id)
+    await call_service.start_confirmation_call(db, order, merchant)
+    return order_service.serialize_order(order)

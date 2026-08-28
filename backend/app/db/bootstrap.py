@@ -1,219 +1,153 @@
-"""Create tables and seed the platform admin, settings, plans and trials on startup."""
+"""Schema + seed on boot: ``create_all``, idempotent column patches, seeds.
 
-import asyncio
+There is no migration tool. ``create_all`` builds missing tables from the
+models but never alters an existing one, so every column added after a
+table's first deploy is restated below as an ``ADD COLUMN IF NOT EXISTS``.
+Everything here must be safe to run repeatedly against an up-to-date database.
+"""
 
-from loguru import logger
+from __future__ import annotations
+
+from decimal import Decimal
+
+import structlog
 from sqlalchemy import select, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
 
 from app.core.config import get_settings
 from app.core.security import hash_password
+from app.db.base import Base
 from app.db.session import AsyncSessionLocal, engine
-from app.models import (
-    Base,
-    CallCost,
-    CallLog,
-    CostRate,
-    Merchant,
-    Plan,
-    PlatformAdmin,
-    PlatformSettings,
-    Subscription,
-)
-from app.services import billing_service, finance_service
+from app.models import CallLog, Merchant, Order
 
-PLAN_SEEDS = [
-    {
-        "key": "trial",
-        "name_bn": "ফ্রি ট্রায়াল",
-        "price_monthly": 0,
-        "max_calls_per_month": 20,
-        "max_minutes_per_month": 60,
-        "trial_days": 14,
-        "is_default_trial": True,
-        "features": [
-            "১৪ দিন ফ্রি ট্রায়াল",
-            "২০টি কনফার্মেশন কল",
-            "বাংলা এআই ভয়েস এজেন্ট",
-            "লাইভ ড্যাশবোর্ড",
-        ],
-        "sort_order": 0,
-    },
-    {
-        "key": "starter",
-        "name_bn": "স্টার্টার",
-        "price_monthly": 1500,
-        "max_calls_per_month": 300,
-        "max_minutes_per_month": 900,
-        "features": [
-            "মাসে ৩০০টি কল",
-            "কল ট্রান্সক্রিপ্ট",
-            "বাংলা এআই ভয়েস এজেন্ট",
-            "ইমেইল সাপোর্ট",
-        ],
-        "sort_order": 1,
-    },
-    {
-        "key": "growth",
-        "name_bn": "গ্রোথ",
-        "price_monthly": 4000,
-        "max_calls_per_month": 1000,
-        "max_minutes_per_month": 3000,
-        "features": [
-            "মাসে ১০০০টি কল",
-            "কল ট্রান্সক্রিপ্ট",
-            "অগ্রাধিকার সাপোর্ট",
-            "সব ফিচার",
-        ],
-        "sort_order": 2,
-    },
-]
+logger = structlog.get_logger(__name__)
+
+#: Importing the models registers their tables on ``Base.metadata`` for create_all.
+REGISTERED_MODELS = (Merchant, Order, CallLog)
+
+SCHEMA_PATCHES: tuple[str, ...] = (
+    # merchants
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS owner_name VARCHAR(120) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS phone VARCHAR(32) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS email VARCHAR(160) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS support_phone VARCHAR(32) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS custom_greeting TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ALTER COLUMN custom_greeting TYPE TEXT",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS language VARCHAR(8) NOT NULL DEFAULT 'bn'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS supported_languages JSONB NOT NULL DEFAULT '[\"bn\", \"en\"]'::jsonb",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS voice_persona VARCHAR(12) NOT NULL DEFAULT 'female'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS verify_address BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS max_call_seconds INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS silence_hangup_secs INTEGER NOT NULL DEFAULT 10",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true",
+    "ALTER TABLE merchants ALTER COLUMN password_hash TYPE VARCHAR(160)",
+    # A previous deployment kept verify_address inside a flow_settings JSON blob.
+    """DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'merchants' AND column_name = 'flow_settings') THEN
+            UPDATE merchants SET verify_address = true
+            WHERE verify_address = false AND (flow_settings->>'verify_address') = 'true';
+        END IF;
+    END $$;""",
+    # orders — a previous deployment had a courier-only 'rescheduled' status.
+    """DO $$ BEGIN
+        IF to_regtype('banglabot_order_status') IS NOT NULL THEN
+            UPDATE orders SET status = 'needs_review' WHERE status::text = 'rescheduled';
+        END IF;
+    END $$;""",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_ref VARCHAR(60) NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_summary TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS currency VARCHAR(8) NOT NULL DEFAULT 'BDT'",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS flow_data JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS call_attempts INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS last_call_at TIMESTAMPTZ",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now()",
+    "CREATE INDEX IF NOT EXISTS ix_orders_merchant_status ON orders (merchant_id, status)",
+    "CREATE INDEX IF NOT EXISTS ix_orders_merchant_created ON orders (merchant_id, created_at DESC)",
+    # call_logs
+    "ALTER TABLE call_logs ALTER COLUMN order_id DROP NOT NULL",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS recording_sid VARCHAR(64) NOT NULL DEFAULT ''",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS outcome VARCHAR(32) NOT NULL DEFAULT ''",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS transcript TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS language VARCHAR(8) NOT NULL DEFAULT ''",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS duration_secs INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS final_node VARCHAR(32) NOT NULL DEFAULT ''",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS llm_prompt_tokens INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS llm_completion_tokens INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS tts_chars INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS tts_cache_hits INTEGER NOT NULL DEFAULT 0",
+    "CREATE INDEX IF NOT EXISTS ix_call_logs_merchant_created ON call_logs (merchant_id, created_at DESC)",
+)
+
+
+async def apply_schema_patches(conn: AsyncConnection) -> None:
+    for statement in SCHEMA_PATCHES:
+        await conn.execute(text(statement))
+
+
+async def create_schema() -> None:
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+        await apply_schema_patches(conn)
+
+
+DEMO_USERNAME = "demo"
+DEMO_PASSWORD = "demo123"
+
+
+async def seed_demo_merchant(session: AsyncSession) -> Merchant:
+    """Idempotent demo login ``demo`` / ``demo123`` with two sample orders."""
+    merchant = await session.scalar(select(Merchant).where(Merchant.username == DEMO_USERNAME))
+    if merchant is None:
+        merchant = Merchant(
+            business_name="Demo Shop",
+            owner_name="Demo Owner",
+            username=DEMO_USERNAME,
+            password_hash=hash_password(DEMO_PASSWORD),
+            phone="+8801700000000",
+            email="demo@example.com",
+            support_phone="",
+            language="bn",
+            supported_languages=["bn", "en"],
+        )
+        session.add(merchant)
+        await session.flush()
+    has_orders = await session.scalar(select(Order.id).where(Order.merchant_id == merchant.id).limit(1))
+    if not has_orders:
+        session.add_all(
+            [
+                Order(
+                    merchant_id=merchant.id,
+                    order_ref="DEMO-1001",
+                    customer_name="রাহিম উদ্দিন",
+                    customer_phone="+8801711111111",
+                    address="বাড়ি ১২, রোড ৫, ধানমন্ডি, ঢাকা",
+                    items_summary="পাঞ্জাবি (L) x1, পায়জামা x1",
+                    total_amount=Decimal("1850.00"),
+                    notes="",
+                ),
+                Order(
+                    merchant_id=merchant.id,
+                    order_ref="DEMO-1002",
+                    customer_name="Nusrat Jahan",
+                    customer_phone="+8801822222222",
+                    address="Flat 4B, House 7, Sector 11, Uttara, Dhaka",
+                    items_summary="Cotton saree x2",
+                    total_amount=Decimal("3200.00"),
+                    notes="Deliver after 5pm",
+                ),
+            ]
+        )
+    await session.commit()
+    return merchant
 
 
 async def bootstrap() -> None:
-    last_exc: Exception | None = None
-    for attempt in range(1, 4):
-        try:
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-            last_exc = None
-            break
-        except (TimeoutError, OSError, ConnectionError, OperationalError) as exc:
-            last_exc = exc
-            logger.warning(f"database not reachable (attempt {attempt}/3): {exc}")
-            await engine.dispose()
-            await asyncio.sleep(2 * attempt)
-    if last_exc:
-        raise RuntimeError(
-            "Could not connect to Postgres. Check DATABASE_URL in backend/.env "
-            "and that the Supabase project is running (free-tier projects pause)."
-        ) from last_exc
-
-    # Idempotent migrations for databases created before the SaaS port.
-    for statement in (
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS email VARCHAR(160) NOT NULL DEFAULT ''",
-        # Logs are detached (not deleted) with their order so usage metering survives.
-        "ALTER TABLE call_logs ALTER COLUMN order_id DROP NOT NULL",
-        "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS recording_sid VARCHAR(64) NOT NULL DEFAULT ''",
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS custom_greeting VARCHAR(200) NOT NULL DEFAULT ''",
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS max_call_seconds INTEGER NOT NULL DEFAULT 0",
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS voice_tier VARCHAR(20) NOT NULL DEFAULT 'very_basic'",
-        "ALTER TABLE merchants ALTER COLUMN voice_tier SET DEFAULT 'very_basic'",
-        # Remap merchants still on the first 3-tier catalog; old call-log
-        # snapshots keep their keys (billed_secs is already frozen) and are
-        # resolved through voice_tiers.LEGACY_ALIASES.
-        "UPDATE merchants SET voice_tier='very_basic' WHERE voice_tier='standard'",
-        "UPDATE merchants SET voice_tier='basic' WHERE voice_tier='better'",
-        "UPDATE merchants SET voice_tier='advance' WHERE voice_tier='best'",
-        # Call-behavior knobs (modes & defaults in app/voice/behavior.py).
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS noise_mode VARCHAR(10) NOT NULL DEFAULT 'normal'",
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS barge_in_mode VARCHAR(12) NOT NULL DEFAULT 'protected'",
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS silence_hangup_secs INTEGER NOT NULL DEFAULT 10",
-        "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS voice_tier VARCHAR(20) NOT NULL DEFAULT ''",
-        "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS billed_secs INTEGER NOT NULL DEFAULT 0",
-        # Service verticals + node-flow engine (app/flows). PG12+ allows enum
-        # ADD VALUE inside a transaction as long as it isn't used in the same one.
-        "ALTER TYPE banglabot_order_status ADD VALUE IF NOT EXISTS 'rescheduled'",
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS service_type VARCHAR(20) NOT NULL DEFAULT 'ecommerce'",
-        "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS flow_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS flow_data JSONB NOT NULL DEFAULT '{}'::jsonb",
-        "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS final_node VARCHAR(32) NOT NULL DEFAULT ''",
-        # Calls priced before the tier system bill at face value (multiplier 1.0).
-        "UPDATE call_logs SET billed_secs = duration_secs WHERE billed_secs = 0 AND duration_secs > 0",
-        # Query-shaped composite indexes: usage metering + insights scan call_logs
-        # by (merchant, period); order lists filter by (merchant, status) and
-        # paginate by (merchant, created_at).
-        "CREATE INDEX IF NOT EXISTS ix_call_logs_merchant_created ON call_logs (merchant_id, created_at)",
-        "CREATE INDEX IF NOT EXISTS ix_orders_merchant_status ON orders (merchant_id, status)",
-        "CREATE INDEX IF NOT EXISTS ix_orders_merchant_created ON orders (merchant_id, created_at DESC)",
-        "CREATE INDEX IF NOT EXISTS ix_audit_logs_created ON audit_logs (created_at DESC)",
-    ):
-        try:
-            async with engine.begin() as conn:
-                await conn.execute(text(statement))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning(f"migration skipped ({statement.split(' ')[2]}): {exc}")
-
+    """Called from the app lifespan: schema, patches and (optionally) demo data."""
     settings = get_settings()
-    async with AsyncSessionLocal() as db:
-        admin = (
-            await db.execute(
-                select(PlatformAdmin).where(PlatformAdmin.username == settings.admin_username)
-            )
-        ).scalar_one_or_none()
-        if not admin:
-            db.add(
-                PlatformAdmin(
-                    username=settings.admin_username,
-                    name="Platform Admin",
-                    password_hash=hash_password(settings.admin_password),
-                )
-            )
-            await db.commit()
-            logger.info(f"Seeded platform admin '{settings.admin_username}'")
-        if settings.admin_password == "admin123":
-            logger.warning(
-                "Platform admin uses the DEFAULT password — set ADMIN_PASSWORD in "
-                "backend/.env before exposing this app publicly"
-            )
-
-        if not await db.get(PlatformSettings, "default"):
-            db.add(PlatformSettings(id="default"))
-            await db.commit()
-            logger.info("Seeded platform settings")
-
-        seeded_plans = 0
-        for seed in PLAN_SEEDS:
-            plan = (
-                await db.execute(select(Plan).where(Plan.key == seed["key"]))
-            ).scalar_one_or_none()
-            if not plan:
-                db.add(Plan(**seed))
-                seeded_plans += 1
-        if seeded_plans:
-            await db.commit()
-            logger.info(f"Seeded {seeded_plans} plans")
-
-        settings_row = await billing_service.get_settings_row(db)
-        merchants = (
-            await db.execute(
-                select(Merchant).where(Merchant.id.not_in(select(Subscription.merchant_id)))
-            )
-        ).scalars()
-        backfilled = 0
-        for merchant in merchants:
-            await billing_service.start_trial(db, merchant, settings_row)
-            backfilled += 1
-        if backfilled:
-            await db.commit()
-            logger.info(f"Backfilled trial subscriptions for {backfilled} merchants")
-
-        # Seed the cost-rate catalog (append-only; only missing keys get a row).
-        existing_keys = {
-            key for (key,) in (await db.execute(select(CostRate.cost_key).distinct())).all()
-        }
-        seeded_rates = 0
-        for seed in finance_service.RATE_SEEDS:
-            if seed["cost_key"] not in existing_keys:
-                db.add(CostRate(**seed))
-                seeded_rates += 1
-        if seeded_rates:
-            await db.commit()
-            logger.info(f"Seeded {seeded_rates} cost rates")
-
-        # Backfill cost rows for completed calls recorded before the finance engine.
-        uncosted = (
-            await db.execute(
-                select(CallLog).where(
-                    CallLog.duration_secs > 0,
-                    CallLog.id.not_in(select(CallCost.call_log_id)),
-                )
-            )
-        ).scalars()
-        costed = 0
-        for log in uncosted:
-            if await finance_service.compute_call_cost(db, log):
-                costed += 1
-        if costed:
-            await db.commit()
-            logger.info(f"Backfilled costs for {costed} calls")
+    await create_schema()
+    if settings.auto_seed_demo_data:
+        async with AsyncSessionLocal() as session:
+            await seed_demo_merchant(session)
+        await logger.ainfo("demo_data_seeded", username=DEMO_USERNAME)

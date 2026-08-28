@@ -1,0 +1,5 @@
+# Test-only dependencies. Not installed in the Docker image.
+-r requirements.txt
+pytest==8.4.2
+pytest-asyncio==1.4.0
+pyflakes>=3.2

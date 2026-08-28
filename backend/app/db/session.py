@@ -1,53 +1,59 @@
-"""Async SQLAlchemy engine/session bound to Supabase Postgres."""
+"""One async engine + session factory built from ``settings.database_url``.
+
+``postgres://`` / ``postgresql://`` URLs are rewritten to the asyncpg driver
+and libpq's ``sslmode`` query option is stripped (asyncpg rejects it; TLS is
+configured through ``connect_args`` from ``database_ssl`` instead).
+"""
+
+from __future__ import annotations
 
 import ssl
+from collections.abc import AsyncGenerator
 
-from sqlalchemy.engine.url import make_url
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.config import get_settings
 
 
-def _connect_args(database_url: str) -> dict:
-    """Keep asyncpg working against Supabase's pgbouncer session pooler.
+def normalized_database_url(raw_url: str) -> str:
+    url = make_url(raw_url)
+    if url.drivername in {"postgres", "postgresql"}:
+        url = url.set(drivername="postgresql+asyncpg")
+    query = dict(url.query)
+    query.pop("sslmode", None)
+    return url.set(query=query).render_as_string(hide_password=False)
 
-    Default asyncpg SSL negotiation can hang until TimeoutError against the
-    pooler. `ssl.create_default_context()` also hangs; a TLS client context
-    with verification disabled encrypts without stalling. Prepared-statement
-    caches must stay off for pgbouncer.
-    """
-    args: dict = {
-        "timeout": 20,
-        "command_timeout": 60,
-        "statement_cache_size": 0,
-        "prepared_statement_cache_size": 0,
-        "server_settings": {"jit": "off", "application_name": "banglabot"},
-    }
-    host = (make_url(database_url).host or "").lower()
-    if host not in {"localhost", "127.0.0.1", "::1"}:
-        ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        args["ssl"] = ctx
-    else:
-        args["ssl"] = False
+
+def _connect_args() -> dict:
+    settings = get_settings()
+    args: dict = {}
+    if settings.database_ssl:
+        args["ssl"] = ssl.create_default_context() if settings.database_ssl_verify else ssl._create_unverified_context()
+    host = make_url(settings.database_url).host or ""
+    if "pooler" in host or "pgbouncer" in host:
+        # Transaction poolers cannot hold asyncpg's server-side prepared statements.
+        args["statement_cache_size"] = 0
     return args
 
 
-_settings = get_settings()
-engine = create_async_engine(
-    _settings.database_url,
-    pool_size=5,
-    max_overflow=5,
-    pool_pre_ping=True,
-    pool_recycle=180,
-    pool_timeout=30,
-    connect_args=_connect_args(_settings.database_url),
-)
+def build_engine() -> AsyncEngine:
+    settings = get_settings()
+    return create_async_engine(
+        normalized_database_url(settings.database_url),
+        echo=False,
+        pool_pre_ping=True,
+        pool_size=settings.database_pool_size,
+        max_overflow=settings.database_pool_max_overflow,
+        pool_recycle=1800,
+        connect_args=_connect_args(),
+    )
 
-AsyncSessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+engine: AsyncEngine = build_engine()
+AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 
-async def get_db():
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session

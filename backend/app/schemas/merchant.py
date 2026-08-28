@@ -2,92 +2,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.voice.languages import LANGUAGE_NAMES, normalize_language
 
-def _valid_service(v: str | None) -> str | None:
-    from app.flows import is_valid_service
-
-    if v is not None and not is_valid_service(v):
-        raise ValueError("অজানা সার্ভিস টাইপ")
-    return v
-
-
-class MerchantCreate(BaseModel):
-    business_name: str
-    owner_name: str = ""
-    username: str
-    password: str
-    phone: str = ""
-    email: str = ""
-    support_phone: str = ""
-    # Which vertical this account runs (ecommerce/courier) — admin's choice.
-    service_type: str = "ecommerce"
-
-    _service = field_validator("service_type")(_valid_service)
-
-
-class MerchantUpdate(BaseModel):
-    """Admin-side merchant edit — covers profile and agent settings alike."""
-
-    business_name: str | None = None
-    owner_name: str | None = None
-    password: str | None = None
-    phone: str | None = None
-    email: str | None = None
-    support_phone: str | None = None
-    service_type: str | None = None
-    flow_settings: dict[str, bool] | None = None
-
-    _service = field_validator("service_type")(_valid_service)
-    custom_greeting: str | None = Field(default=None, max_length=200)
-    max_call_seconds: int | None = None  # 0 = platform default
-    voice_tier: str | None = None
-    noise_mode: str | None = None
-    barge_in_mode: str | None = None
-    silence_hangup_secs: int | None = None
-    active: bool | None = None
-
-    @field_validator("max_call_seconds")
-    @classmethod
-    def _valid_call_limit(cls, v: int | None) -> int | None:
-        if v is not None and v != 0 and not (60 <= v <= 600):
-            raise ValueError("কলের সর্বোচ্চ সময় ৬০–৬০০ সেকেন্ডের মধ্যে হতে হবে (০ = ডিফল্ট)")
-        return v
-
-    @field_validator("voice_tier")
-    @classmethod
-    def _valid_voice_tier(cls, v: str | None) -> str | None:
-        from app.services.voice_tiers import is_valid_tier
-
-        if v is not None and not is_valid_tier(v):
-            raise ValueError("অজানা ভয়েস কোয়ালিটি")
-        return v
-
-    @field_validator("noise_mode")
-    @classmethod
-    def _valid_noise_mode(cls, v: str | None) -> str | None:
-        from app.voice.behavior import is_valid_noise_mode
-
-        if v is not None and not is_valid_noise_mode(v):
-            raise ValueError("অজানা নয়েজ ফিল্টার মোড")
-        return v
-
-    @field_validator("barge_in_mode")
-    @classmethod
-    def _valid_barge_in(cls, v: str | None) -> str | None:
-        from app.voice.behavior import is_valid_barge_in_mode
-
-        if v is not None and not is_valid_barge_in_mode(v):
-            raise ValueError("অজানা বার্জ-ইন মোড")
-        return v
-
-    @field_validator("silence_hangup_secs")
-    @classmethod
-    def _valid_silence_secs(cls, v: int | None) -> int | None:
-        from app.voice.behavior import SILENCE_HANGUP_MAX, SILENCE_HANGUP_MIN
-
-        if v is not None and not (SILENCE_HANGUP_MIN <= v <= SILENCE_HANGUP_MAX):
-            raise ValueError("নীরবতার সীমা ৫–৩০ সেকেন্ডের মধ্যে হতে হবে")
-        return v
+VOICE_PERSONAS = ("female", "male")
 
 
 class MerchantOut(BaseModel):
@@ -95,18 +12,79 @@ class MerchantOut(BaseModel):
 
     id: str
     business_name: str
-    service_type: str
-    flow_settings: dict
     owner_name: str
     username: str
     phone: str
     email: str
     support_phone: str
     custom_greeting: str
+    language: str
+    supported_languages: list[str]
+    voice_persona: str
+    verify_address: bool
     max_call_seconds: int
-    voice_tier: str
-    noise_mode: str
-    barge_in_mode: str
     silence_hangup_secs: int
     active: bool
-    created_at: datetime
+    created_at: datetime | None = None
+
+
+class MerchantSettingsUpdate(BaseModel):
+    """Fields a merchant may change about themselves (PATCH /api/auth/me)."""
+
+    business_name: str | None = Field(default=None, min_length=1, max_length=160)
+    owner_name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=32)
+    email: str | None = Field(default=None, max_length=160)
+    support_phone: str | None = Field(default=None, max_length=32)
+    custom_greeting: str | None = Field(default=None, max_length=300)
+    language: str | None = None
+    supported_languages: list[str] | None = None
+    voice_persona: str | None = None
+    verify_address: bool | None = None
+    max_call_seconds: int | None = Field(default=None, ge=0, le=900)
+    silence_hangup_secs: int | None = Field(default=None, ge=5, le=60)
+
+    @field_validator("language")
+    @classmethod
+    def _language(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        code = normalize_language(value, fallback="")
+        if not code:
+            raise ValueError(f"language must be one of {', '.join(LANGUAGE_NAMES)}")
+        return code
+
+    @field_validator("supported_languages")
+    @classmethod
+    def _supported(cls, value: list[str] | None) -> list[str] | None:
+        if value is None:
+            return None
+        codes: list[str] = []
+        for item in value:
+            code = normalize_language(item, fallback="")
+            if not code:
+                raise ValueError(f"unsupported language code: {item}")
+            if code not in codes:
+                codes.append(code)
+        if not codes:
+            raise ValueError("at least one supported language is required")
+        return codes
+
+    @field_validator("voice_persona")
+    @classmethod
+    def _persona(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        persona = str(value).strip().lower()
+        if persona not in VOICE_PERSONAS:
+            raise ValueError("voice_persona must be 'female' or 'male'")
+        return persona
+
+    @field_validator("max_call_seconds")
+    @classmethod
+    def _max_call(cls, value: int | None) -> int | None:
+        if value is None or value == 0:
+            return value
+        if value < 60:
+            raise ValueError("max_call_seconds must be 0 (platform default) or at least 60")
+        return value

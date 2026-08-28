@@ -1,0 +1,415 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Light teal theme ported from the original Vite app:
+ *   bg #f6f8f9 · card #fff · border #e3e8ec · text #1f2937 · muted #6b7280
+ *   primary #0d9488 · primary-dark #0f766e · tints #e6f4f2 / #99d5cf · danger #dc2626
+ * All values are HSL triplets so the existing shadcn tokens keep working.
+ */
+:root {
+  --background: 200 20% 97%; /* #f6f8f9 */
+  --foreground: 215 28% 17%; /* #1f2937 */
+  --card: 0 0% 100%; /* #ffffff */
+  --card-foreground: 215 28% 17%;
+  --surface: 210 25% 98%; /* #fafbfc — table heads, transcript box */
+  --primary: 175 84% 32%; /* #0d9488 */
+  --primary-dark: 175 77% 26%; /* #0f766e */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 210 21% 95%; /* #eef1f4 — secondary buttons, tabs */
+  --secondary-foreground: 215 28% 17%;
+  --muted: 210 21% 95%; /* #eef1f4 */
+  --muted-foreground: 220 9% 46%; /* #6b7280 */
+  --accent: 171 39% 93%; /* #e6f4f2 — active nav pill, badges, soft tint */
+  --accent-foreground: 175 77% 26%; /* #0f766e */
+  --tint: 171 39% 93%; /* #e6f4f2 */
+  --tint-strong: 174 42% 72%; /* #99d5cf */
+  --destructive: 0 72% 51%; /* #dc2626 */
+  --destructive-foreground: 0 0% 100%;
+  --border: 207 19% 91%; /* #e3e8ec */
+  --input: 207 19% 91%;
+  --ring: 174 42% 72%; /* #99d5cf focus ring */
+  --radius: 10px;
+}
+
+/* Dark counterpart: the same teal accents on a teal-tinted charcoal. */
+.dark {
+  --background: 190 24% 9%;
+  --foreground: 190 15% 94%;
+  --card: 190 20% 12%;
+  --card-foreground: 190 15% 94%;
+  --surface: 190 18% 14%;
+  --primary: 174 70% 41%;
+  --primary-dark: 172 66% 62%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 190 14% 18%;
+  --secondary-foreground: 190 15% 94%;
+  --muted: 190 14% 16%;
+  --muted-foreground: 190 10% 68%;
+  --accent: 175 32% 18%;
+  --accent-foreground: 172 66% 62%;
+  --tint: 175 32% 18%;
+  --tint-strong: 174 40% 36%;
+  --destructive: 0 72% 55%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 190 14% 22%;
+  --input: 190 14% 24%;
+  --ring: 174 45% 45%;
+}
+
+* {
+  border-color: hsl(var(--border));
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-size: 15px;
+  font-feature-settings: "rlig" 1, "calt" 1;
+}
+
+/* Transcript box (order detail, call logs, admin calls). */
+.transcript {
+  white-space: pre-wrap;
+  background: hsl(var(--surface));
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+/* Pulsing ring used by the "calling" status badge. */
+.status-dot {
+  position: relative;
+}
+
+.status-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 9999px;
+  border: 1px solid currentColor;
+  opacity: 0.35;
+  animation: pulse 1.7s ease-out infinite;
+}
+
+@keyframes pulse {
+  from {
+    transform: scale(0.85);
+    opacity: 0.45;
+  }
+  to {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot::after {
+    animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Landing page (ported from the original Vite app's styles.css)       */
+/* ------------------------------------------------------------------ */
+.landing {
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  min-height: 100vh;
+}
+.landing a {
+  color: hsl(var(--primary-dark));
+  text-decoration: none;
+}
+.landing .brand {
+  font-weight: 700;
+  color: hsl(var(--primary-dark));
+  font-size: 18px;
+}
+.landing .spacer {
+  flex: 1;
+}
+.landing .muted {
+  color: hsl(var(--muted-foreground));
+}
+.landing .card {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+/* Buttons */
+.landing .btn {
+  display: inline-block;
+  font: inherit;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  cursor: pointer;
+  background: hsl(var(--primary));
+  color: #fff;
+  text-align: center;
+  transition: background-color 0.15s ease;
+}
+.landing .btn:hover {
+  background: hsl(var(--primary-dark));
+  color: #fff;
+}
+.landing .btn.secondary {
+  background: hsl(var(--secondary));
+  color: hsl(var(--foreground));
+}
+.landing .btn.secondary:hover {
+  background: hsl(var(--border));
+  color: hsl(var(--foreground));
+}
+.landing .btn.big {
+  padding: 12px 24px;
+  font-size: 16px;
+  border-radius: 10px;
+}
+.landing .btn.cta-invert {
+  background: #fff;
+  color: #0f766e;
+}
+.landing .btn.cta-invert:hover {
+  background: #e6f4f2;
+  color: #0f766e;
+}
+
+/* Language toggle */
+.lang-toggle {
+  font: inherit;
+  font-weight: 700;
+  font-size: 12.5px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  color: hsl(var(--primary-dark));
+  border-radius: 999px;
+  padding: 5px 12px;
+  cursor: pointer;
+}
+.lang-toggle:hover {
+  border-color: hsl(var(--primary));
+  background: hsl(var(--tint));
+}
+
+/* Nav */
+.landing-nav {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: hsl(var(--card));
+  border-bottom: 1px solid hsl(var(--border));
+}
+.landing-nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 12px 20px;
+}
+
+/* Hero */
+.landing-hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 36px;
+  align-items: center;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 40px 20px 20px;
+}
+.hero-badge {
+  display: inline-block;
+  background: hsl(var(--tint));
+  color: hsl(var(--primary-dark));
+  font-weight: 600;
+  font-size: 13px;
+  border-radius: 999px;
+  padding: 5px 14px;
+  margin-bottom: 14px;
+}
+.hero-title {
+  font-size: 38px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-bottom: 14px;
+}
+.hero-sub {
+  font-size: 16.5px;
+  line-height: 1.8;
+  color: hsl(var(--muted-foreground));
+  max-width: 520px;
+}
+.hero-ctas {
+  display: flex;
+  gap: 12px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+.hero-note {
+  color: hsl(var(--muted-foreground));
+  font-size: 13.5px;
+  margin-top: 12px;
+}
+.hero-art {
+  min-width: 0;
+}
+
+/* Stat pills */
+.landing-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 1100px;
+  margin: 10px auto 0;
+  padding: 0 20px;
+}
+.stat-pill {
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-weight: 600;
+  color: hsl(var(--primary-dark));
+}
+
+/* Sections */
+.l-section {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 48px 20px 8px;
+}
+.l-section-title {
+  font-size: 26px;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 8px;
+}
+.l-section-sub {
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+}
+
+/* How it works */
+.steps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 24px;
+}
+.step-card {
+  position: relative;
+  padding-top: 26px;
+}
+.step-card h3 {
+  margin: 10px 0 8px;
+  font-size: 17px;
+  font-weight: 700;
+}
+.step-num {
+  position: absolute;
+  top: -16px;
+  left: 20px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: hsl(var(--primary));
+  color: #fff;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 6px rgb(13 148 136 / 0.35);
+}
+
+/* Features */
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  margin-top: 24px;
+}
+.feature-card h3 {
+  margin: 10px 0 6px;
+  font-size: 16.5px;
+  font-weight: 700;
+}
+.f-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  background: hsl(var(--tint));
+  color: hsl(var(--primary-dark));
+}
+
+/* FAQ */
+.faq-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 22px;
+  max-width: 720px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.faq-item summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.faq-item p {
+  margin-top: 10px;
+  line-height: 1.8;
+}
+
+/* CTA band */
+.cta-band {
+  background: linear-gradient(135deg, #0f766e, #0d9488);
+  color: #fff;
+  text-align: center;
+  padding: 44px 20px;
+  margin-top: 48px;
+}
+.cta-band h2 {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 18px;
+}
+.cta-band a.cta-link {
+  color: #e6f4f2;
+  text-decoration: underline;
+}
+
+/* Footer */
+.landing-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+@media (max-width: 860px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+    padding-top: 24px;
+  }
+  .hero-title {
+    font-size: 29px;
+  }
+}

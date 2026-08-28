@@ -1,183 +1,199 @@
-"""TTS: ElevenLabs only (Bengali via eleven_v3 / multilingual models).
+"""Azure Speech text-to-speech for the phone line, with the LRU cache in front.
 
-A cached startup probe warns loudly if the key/plan can't synthesize —
-on ElevenLabs' free plan the API returns 402 and calls would be silent.
+Azure returns ``raw-8khz-8bit-mono-mulaw`` directly, which is exactly what a
+Twilio Media Stream plays, so no resampling happens on the call path. The
+voice is chosen per *persona* (female / male) and per language, so a bilingual
+merchant keeps one consistent "person" whether the customer speaks Bangla or
+English.
 """
 
-import time
+from __future__ import annotations
 
-import aiohttp
+import asyncio
+import time
+from typing import Any, Iterable
+from xml.sax.saxutils import escape
+
 import httpx
-from loguru import logger
-from pipecat.services.elevenlabs.tts import ElevenLabsHttpTTSService
-from pipecat.transcriptions.language import Language
+import structlog
 
 from app.core.config import get_settings
-from app.voice.tts_caching import cached_class
+from app.voice.languages import BANGLA, ENGLISH, normalize_language
+from app.voice.tts_cache import TTSCache
 
-# Cached ElevenLabs health probe: (checked_at, usable)
-_el_probe: tuple[float, bool] | None = None
-_EL_PROBE_TTL = 300  # re-check every 5 minutes
+logger = structlog.get_logger(__name__)
+
+PROVIDER = "azure"
+OUTPUT_FORMAT = "raw-8khz-8bit-mono-mulaw"
+
+#: One "person" per persona, spoken through the right neural voice per language.
+VOICE_PERSONAS: dict[str, dict[str, str]] = {
+    "female": {ENGLISH: "en-US-AvaNeural", BANGLA: "bn-BD-NabanitaNeural"},
+    "male": {ENGLISH: "en-US-AndrewNeural", BANGLA: "bn-BD-PradeepNeural"},
+}
+DEFAULT_PERSONA = "female"
 
 
-def elevenlabs_usable() -> bool:
-    """Probe a tiny synthesis so a broken key/plan is visible in the logs."""
-    global _el_probe
-    if _el_probe and time.time() - _el_probe[0] < _EL_PROBE_TTL:
-        return _el_probe[1]
-    settings = get_settings()
-    try:
-        response = httpx.post(
-            f"https://api.elevenlabs.io/v1/text-to-speech/{settings.elevenlabs_voice_id}",
-            params={"output_format": "pcm_16000"},
-            headers={"xi-api-key": settings.elevenlabs_api_key},
-            json={"text": "ঠিক আছে।", "model_id": settings.elevenlabs_model},
-            timeout=10,
+def normalize_persona(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    return text if text in VOICE_PERSONAS else DEFAULT_PERSONA
+
+
+def voice_for(persona: str, language: str | None) -> str:
+    voices = VOICE_PERSONAS.get(normalize_persona(persona), VOICE_PERSONAS[DEFAULT_PERSONA])
+    return voices.get(normalize_language(language), voices[BANGLA])
+
+
+def _locale_for_voice(voice: str) -> str:
+    parts = voice.split("-")
+    return "-".join(parts[:2]) if len(parts) >= 2 else "en-US"
+
+
+class TTSError(RuntimeError):
+    pass
+
+
+class AzureSpeechTTS:
+    def __init__(
+        self,
+        *,
+        key: str,
+        region: str,
+        cache: TTSCache,
+        speaking_rate: str = "0%",
+        timeout_seconds: float = 12.0,
+    ) -> None:
+        self.key = key
+        self.region = region
+        self.cache = cache
+        self.speaking_rate = speaking_rate
+        self.endpoint = f"https://{region}.tts.speech.microsoft.com/cognitiveservices/v1"
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout_seconds, connect=5.0),
+            headers={
+                "Ocp-Apim-Subscription-Key": key,
+                "Content-Type": "application/ssml+xml",
+                "X-Microsoft-OutputFormat": OUTPUT_FORMAT,
+                "User-Agent": "banglabot-confirmation-agent",
+            },
         )
-        usable = response.status_code == 200
-        if not usable:
-            logger.error(
-                f"ElevenLabs TTS NOT usable (HTTP {response.status_code}): "
-                f"{response.text[:200]} — calls will have no voice!"
-            )
-    except Exception as e:
-        usable = False
-        logger.error(f"ElevenLabs probe failed: {e}")
-    _el_probe = (time.time(), usable)
-    return usable
+        self.synth_count = 0
+        self.synth_chars = 0
+        self.synth_seconds = 0.0
 
-
-def _credentials_missing(provider: str) -> bool:
-    """True when the provider a tier points at has no key/credentials configured."""
-    settings = get_settings()
-    return (
-        (provider == "azure" and not settings.azure_speech_key)
-        or (provider == "elevenlabs" and not settings.elevenlabs_api_key)
-        or (provider == "gemini" and not settings.gemini_api_key)
-        or (provider == "google" and not settings.google_credentials_path)
-    )
-
-
-def _build(service_cls, identity: dict, **kwargs):
-    """Construct a TTS service, wrapped with the audio cache when enabled.
-
-    identity is the cache key scope {provider, voice_id, model}; kwargs go to
-    the service constructor unchanged. The wrapper replays lines it has seen
-    before (same voice, model, sample rate) from disk — the vendor is only
-    paid for new text. TTS_CACHE_ENABLED=false builds the plain class.
-    """
-    if not get_settings().tts_cache_enabled:
-        return service_cls(**kwargs)
-    service = cached_class(service_cls)(**kwargs)
-    service.configure_tts_cache(**identity)
-    return service
-
-
-def create_tts_service(tier_key: str | None = None):
-    """Build the TTS service for a call.
-
-    With a tier key (the merchant's chosen voice rank) the tier catalog picks
-    provider + model; without one the TTS_PROVIDER env decides (legacy/admin
-    override). A tier pointing at an unconfigured provider falls back to the
-    standard tier so calls never go silent.
-    """
-    from app.services import voice_tiers
-
-    settings = get_settings()
-
-    provider = settings.tts_provider.lower()
-    model_override: str | None = None
-    if tier_key:
-        tier = voice_tiers.get_tier(tier_key)
-        if tier.mode == "static":
-            # Static calls never open a media stream; if we get here anyway,
-            # run the default AI voice rather than failing the call.
-            tier = voice_tiers.get_tier(voice_tiers.DEFAULT_TIER_KEY)
-        if _credentials_missing(tier.provider):
-            fallback = voice_tiers.get_tier(voice_tiers.DEFAULT_TIER_KEY)
-            logger.warning(
-                f"Voice tier '{tier.key}' needs {tier.provider} but no key is set — "
-                f"falling back to '{fallback.key}'"
-            )
-            tier = fallback
-        if _credentials_missing(tier.provider):
-            # The default tier is unconfigured too — let TTS_PROVIDER decide
-            # rather than handing a service an empty API key.
-            logger.error(
-                f"Default voice tier '{tier.key}' also has no {tier.provider} key — "
-                f"falling back to TTS_PROVIDER={provider}"
-            )
-        else:
-            provider = tier.provider
-            model_override = tier.model
-
-    if provider == "gemini":
-        from pipecat.services.google.tts import GeminiTTSService
-
-        model = model_override or settings.gemini_tts_model
-        return _build(
-            GeminiTTSService,
-            {"provider": "gemini", "voice_id": settings.gemini_tts_voice, "model": model},
-            api_key=settings.gemini_api_key,
-            model=model,
-            voice_id=settings.gemini_tts_voice,
-            sample_rate=24000,  # Gemini always outputs 24kHz; serializer resamples to 8k
-            # Without this the 24kHz audio is tagged with the pipeline's 8kHz rate and
-            # plays ~3x slow/deep on the phone.
-            params=GeminiTTSService.InputParams(
-                language=Language.BN,
-                prompt=(
-                    "Speak in natural, fluent Bangladeshi Bengali (bn-BD) like a native "
-                    "speaker from Dhaka — warm, polite female customer-care tone."
-                ),
-            ),
+    def cache_key(self, text: str, *, voice: str) -> str:
+        return TTSCache.make_key(
+            provider=PROVIDER,
+            voice=voice,
+            language=_locale_for_voice(voice),
+            output_format=OUTPUT_FORMAT,
+            text=text,
+            extra=self.speaking_rate,
         )
 
-    if provider == "azure":
-        from pipecat.services.azure.tts import AzureTTSService
+    def _ssml(self, text: str, *, voice: str) -> str:
+        locale = _locale_for_voice(voice)
+        body = escape(" ".join(str(text or "").split()))
+        if self.speaking_rate and self.speaking_rate not in {"0%", "+0%", "default", "medium"}:
+            body = f'<prosody rate="{escape(self.speaking_rate)}">{body}</prosody>'
+        return (
+            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="{locale}">'
+            f'<voice name="{voice}">{body}</voice></speak>'
+        )
 
-        # Either a plain neural voice ("bn-BD-PradeepNeural") or a Dragon HD
-        # Omni one ("bn-IN-Tanishaa:DragonHDOmniLatestNeural"). HD voices reject
-        # some SSML, so never set style/prosody params here.
-        voice = model_override or settings.azure_tts_voice
-        # bn-IN-* is Indian Bengali; bn-BD-* (and the default) is Bangladeshi.
-        language = Language.BN_IN if voice.startswith("bn-IN") else Language.BN_BD
-        return _build(
-            AzureTTSService,
-            {"provider": "azure", "voice_id": voice, "model": ""},
-            api_key=settings.azure_speech_key,
+    async def _request(self, ssml: str) -> bytes:
+        last_error: Exception | None = None
+        for attempt in (1, 2):
+            try:
+                response = await self._client.post(self.endpoint, content=ssml.encode("utf-8"))
+                if response.status_code == 200 and response.content:
+                    return response.content
+                last_error = TTSError(f"azure_tts_http_{response.status_code}: {response.text[:200]}")
+                if response.status_code < 500 and response.status_code != 429:
+                    break
+            except httpx.HTTPError as exc:
+                last_error = exc
+            await asyncio.sleep(0.2 * attempt)
+        raise TTSError(str(last_error or "azure_tts_failed"))
+
+    async def synthesize(
+        self,
+        text: str,
+        *,
+        language: str | None = None,
+        persona: str | None = None,
+        voice: str | None = None,
+    ) -> bytes:
+        """Return μ-law 8 kHz audio for ``text``; cached lines never hit Azure."""
+        text = " ".join(str(text or "").split())
+        if not text:
+            return b""
+        voice = voice or voice_for(persona or DEFAULT_PERSONA, language)
+        key = self.cache_key(text, voice=voice)
+        cached = await self.cache.aget(key)
+        if cached is not None:
+            return cached
+        started = time.monotonic()
+        audio = await self._request(self._ssml(text, voice=voice))
+        elapsed = time.monotonic() - started
+        self.synth_count += 1
+        self.synth_chars += len(text)
+        self.synth_seconds += elapsed
+        await self.cache.aput(key, audio)
+        await logger.adebug("azure_tts_synthesized", voice=voice, chars=len(text), ms=int(elapsed * 1000), bytes=len(audio))
+        return audio
+
+    async def warm(self, lines: Iterable[str], *, language: str | None, persona: str | None) -> int:
+        """Pre-synthesize fixed lines (greeting, still-there, goodbye…) before they are needed."""
+        count = 0
+        for line in lines:
+            if not line:
+                continue
+            try:
+                voice = voice_for(persona or DEFAULT_PERSONA, language)
+                if self.cache.contains(self.cache_key(line, voice=voice)):
+                    continue
+                await self.synthesize(line, language=language, persona=persona)
+                count += 1
+            except TTSError as exc:
+                await logger.awarning("azure_tts_warm_failed", error=str(exc), preview=str(line)[:60])
+        return count
+
+    def stats(self) -> dict[str, Any]:
+        return {
+            "synth_count": self.synth_count,
+            "synth_chars": self.synth_chars,
+            "synth_seconds": round(self.synth_seconds, 3),
+            "cache": self.cache.stats(),
+        }
+
+    async def aclose(self) -> None:
+        await self._client.aclose()
+
+
+_tts: AzureSpeechTTS | None = None
+
+
+def get_tts() -> AzureSpeechTTS:
+    """Process-wide TTS client + cache (one keepalive pool, one LRU index)."""
+    global _tts
+    if _tts is None:
+        settings = get_settings()
+        if not settings.azure_speech_key:
+            raise TTSError("AZURE_SPEECH_KEY is not configured")
+        cache = TTSCache(
+            settings.tts_cache_dir,
+            max_entries=settings.tts_cache_max_entries,
+            max_bytes=int(settings.tts_cache_max_mb) * 1024 * 1024,
+        )
+        _tts = AzureSpeechTTS(
+            key=settings.azure_speech_key,
             region=settings.azure_speech_region,
-            # Azure honours the rate we ask for, so pick 16k for a cleaner
-            # signal and let the Twilio serializer resample down to 8k.
-            sample_rate=16000,
-            settings=AzureTTSService.Settings(voice=voice, language=language),
+            cache=cache,
+            speaking_rate=settings.tts_speaking_rate,
         )
+    return _tts
 
-    if provider == "google":
-        from pipecat.services.google.tts import GoogleTTSService
 
-        # Chirp 3 HD voices (bn-IN only — Google has no bn-BD locale).
-        voice = model_override or settings.google_tts_voice
-        return _build(
-            GoogleTTSService,
-            {"provider": "google", "voice_id": voice, "model": ""},
-            credentials_path=settings.google_credentials_path,
-            voice_id=voice,
-            params=GoogleTTSService.InputParams(language=Language.BN_IN),
-        )
-
-    elevenlabs_usable()  # log a clear error early if the key/plan is broken
-    model = model_override or settings.elevenlabs_model
-    # HTTP streaming, not the websocket service: eleven_v3 rejects the
-    # stream-input websocket with HTTP 403 (verified 2026-08-16).
-    # Cache identity matches the lab exactly, so clips bought there serve
-    # live calls too (and vice versa).
-    return _build(
-        ElevenLabsHttpTTSService,
-        {"provider": "elevenlabs", "voice_id": settings.elevenlabs_voice_id, "model": model},
-        api_key=settings.elevenlabs_api_key,
-        voice_id=settings.elevenlabs_voice_id,
-        model=model,
-        aiohttp_session=aiohttp.ClientSession(),
-        params=ElevenLabsHttpTTSService.InputParams(language=Language.BN),
-    )
+def tts_configured() -> bool:
+    return bool(get_settings().azure_speech_key)

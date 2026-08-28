@@ -1,167 +1,185 @@
-"""Node-based conversation flow engine (pattern ported from SloancodeAI).
+"""Slot-derived conversation flow: the contract every call flow implements.
 
-The central idea: the current node is DERIVED from the collected answers on
-every tool call — it is never stored as an authoritative pointer. An ordered
-slot cascade (`next_missing_stage`) returns the next thing the caller still
-owes; a coarser mapper (`node_for_stage`) groups stages into instruction
-bundles ("nodes"). Skipping a question the caller already answered — whether
-volunteered early or pre-filled from the order — is simply the absence of a
-return in the cascade. Backward jumps and corrections need no special
-handling because there is no pointer that can go stale.
+The idea in one paragraph: the *current node* is never stored. On every tool
+call the backend looks at the slots collected so far and asks "what is the
+next thing the customer still owes us?" — that stage is the node. Skipping a
+question the caller already answered (volunteered early, or pre-filled from
+the order) is simply the absence of a return further down the cascade, and a
+correction can never leave a stale pointer behind.
 
-Prompt discipline (also from SloancodeAI): the system prompt is written once
-per call and never rewritten; when the node changes, a short Bengali
-"ধাপ পরিবর্তন" directive is appended to the TAIL of the conversation, and the
-slot-saving tool's result carries the backend-owned wording of the next
-question so the model never invents its own checklist.
+The backend also owns the *wording* of the next question: every tool result
+carries an ``instruction`` the model must follow, and a node change appends a
+short directive to the tail of the conversation instead of rewriting the
+system prompt (which keeps the prompt head cacheable).
 
-Each service vertical (ecommerce, courier) subclasses `Flow`. Keep this
-package free of pipecat imports — it is pure conversation logic, imported by
-schemas and API routes too.
+Everything here is plain Python over duck-typed ``order`` / ``merchant``
+objects (ORM rows in production, small dataclasses in tests).
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass, field
+from typing import Any
 
-if TYPE_CHECKING:  # pragma: no cover — only for type hints
-    from app.models import Merchant, Order, OrderStatus
+from app.voice.languages import normalize_language, phrase
 
-# Stage keys shared across flows (a flow may use a subset).
+# --- Stages: the finest-grained "what is still missing" answers ------------
 STAGE_IDENTITY = "identity"
 STAGE_KNOWS_PERSON = "knows_person"
 STAGE_RELAY = "relay"
-STAGE_ADDRESS = "address"
-STAGE_SCHEDULE = "schedule"
-STAGE_DECISION = "decision"
 STAGE_WRONG_NUMBER = "wrong_number"
+STAGE_ADDRESS = "address"
+STAGE_NEW_ADDRESS = "new_address"
+STAGE_DECISION = "decision"
+STAGE_DONE = "done"
 
-# Node keys (instruction bundles). Several stages may map to one node.
+# --- Nodes: instruction bundles; several stages may share one node ---------
 NODE_IDENTITY = "identity"
 NODE_KNOWS_PERSON = "knows_person"
 NODE_ADDRESS = "address"
-NODE_SCHEDULE = "schedule"
 NODE_DECISION = "decision"
 NODE_WRAP_UP = "wrap_up"
 
-# The one Bengali rulebook shared by every service — every rule appears exactly
-# once, and it leads the system prompt so all tenants share a cacheable head.
-CORE_RULES_BN = """
-কথা বলার মূল নিয়ম (সব সময় মানবে):
-- সবসময় সহজ, প্রমিত বাংলায় কথা বলবে। ছোট ছোট বাক্য — উত্তরগুলো ফোনে শোনানো হবে। কাস্টমার ইংরেজিতে বললেও বাংলায় উত্তর দেবে।
-- সংখ্যা বাংলায় উচ্চারণ করবে (যেমন: এক হাজার দুইশ টাকা)। ইমোজি, তালিকা বা বিশেষ চিহ্ন ব্যবহার করবে না।
-- প্রতি বার্তায় সর্বোচ্চ একটি প্রশ্ন করবে। টুলের ফলাফলে "instruction" থাকলে সেটাই তোমার পরবর্তী কথা/প্রশ্ন — নিজের মতো নতুন প্রশ্ন বানাবে না। "হুবহু বলো:" থাকলে সেই বাক্যটিই বলবে, শব্দ বদলাবে না।
-- কোনো বার্তা প্রশ্ন ছাড়া শেষ করবে না — প্রতিটি বার্তার শেষে পরের প্রয়োজনীয় প্রশ্নটি থাকবে, যাতে কাস্টমার বুঝতে পারেন এখন তার বলার পালা। একমাত্র ব্যতিক্রম: instruction যখন বলে কিছু বলো না / end_call করো।
-- এক টার্নে সব ধরে ফেলবে: কাস্টমার একসাথে একাধিক তথ্য দিলে (যেমন পরিচয় + চেনেন কি না) সবগুলো একবারে save_details টুলে পাঠাবে — কথা বলার আগে।
-- সেভ করা তথ্য আবার জিজ্ঞেস করবে না। কাস্টমার আগে থেকেই কিছু বলে দিলে save_details দিয়ে সেভ করবে, তারপর শুধু যা বাকি সেটাই জিজ্ঞেস করবে।
-- কাস্টমার প্রশ্ন করলে আগে ছোট করে উত্তর দেবে, তারপর ফ্লো-র বর্তমান প্রশ্নে ফিরে আসবে।
-- দাম, ডিসকাউন্ট বা ডেলিভারি চার্জ নিয়ে দর কষাকষি করবে না — এসব প্রশ্নে transfer_to_human ব্যবহার করবে।
-- কাস্টমার মানুষ/প্রতিনিধির সাথে কথা বলতে চাইলে, বা এমন কিছু জিজ্ঞেস করলে যার উত্তর তোমার জানা নেই — transfer_to_human কল করবে।
-- পরিচয়: তিনি নিজেই নামের ব্যক্তি হলে identity_confirmed=true; অন্য কেউ হলে identity_confirmed=false। অন্য কেউ অর্ডার কনফার্ম করতে পারবে না।
-- identity_confirmed=false হলে instruction অনুযায়ী জিজ্ঞেস করবে তিনি সেই ব্যক্তিকে চেনেন কি না (knows_customer)। না চিনলে / ভুল নম্বর হলে knows_customer=false (বা wrong_person=true)।
-- চূড়ান্ত ফলাফলের টুল (কনফার্ম/বাতিল/রিশিডিউল) কল করার পরে কিছু না বলে end_call টুল কল করবে — বিদায়বাক্য end_call নিজে বলে দেবে।
-""".strip()
+# --- Call outcomes (CallLog.outcome) --------------------------------------
+OUTCOME_CONFIRMED = "confirmed"
+OUTCOME_CANCELLED = "cancelled"
+OUTCOME_TRANSFER = "transfer"
+OUTCOME_WRONG_NUMBER = "wrong_number"
+OUTCOME_RELAY = "relay"
+OUTCOME_UNCLEAR = "unclear"
+OUTCOME_AUTO_DROPPED = "auto_dropped"
+#: The callee rejected / was busy and the carrier forwarded the call (voicemail,
+#: divert service). Nobody we should talk to answered.
+OUTCOME_DIVERTED = "diverted"
+#: Twilio's answering-machine detection heard a machine.
+OUTCOME_VOICEMAIL = "voicemail"
+
+#: Order status each outcome settles the order to.
+OUTCOME_STATUS: dict[str, str] = {
+    OUTCOME_CONFIRMED: "confirmed",
+    OUTCOME_CANCELLED: "cancelled",
+    OUTCOME_TRANSFER: "needs_review",
+    OUTCOME_WRONG_NUMBER: "needs_review",
+    OUTCOME_RELAY: "needs_review",
+    OUTCOME_UNCLEAR: "needs_review",
+    OUTCOME_AUTO_DROPPED: "no_answer",
+    OUTCOME_DIVERTED: "no_answer",
+    OUTCOME_VOICEMAIL: "no_answer",
+}
+
+#: Outcomes that mean the customer never actually took the call — the order
+#: goes back to ``no_answer`` and stays callable.
+UNANSWERED_OUTCOMES = frozenset({OUTCOME_AUTO_DROPPED, OUTCOME_DIVERTED, OUTCOME_VOICEMAIL})
+
+#: Phrase key of the closing line spoken for each outcome.
+OUTCOME_CLOSING_KEY: dict[str, str] = {
+    OUTCOME_CONFIRMED: "closing_confirmed",
+    OUTCOME_CANCELLED: "closing_cancelled",
+    OUTCOME_TRANSFER: "closing_transfer",
+    OUTCOME_WRONG_NUMBER: "wrong_number_line",
+    OUTCOME_RELAY: "relay_line",
+    OUTCOME_UNCLEAR: "closing_unclear",
+    OUTCOME_AUTO_DROPPED: "closing_dropped",
+}
+
+# How many times an unclear yes/no is re-asked before the call is handed to a human.
+MAX_REASKS = 2
 
 
 @dataclass(frozen=True)
 class Terminal:
-    """One call-ending outcome tool: schema + what it writes to the DB."""
+    """A call-ending outcome tool: its schema and what it writes."""
 
     name: str
-    description_bn: str
-    status: "OrderStatus"
     outcome: str
-    # JSON-schema properties for the tool's arguments (may be empty).
-    properties: dict[str, Any]
-    # Bengali note template; {arg} placeholders filled from tool arguments.
-    note_bn: str = ""
+    description: str
+    properties: dict[str, Any] = field(default_factory=dict)
+    #: Note appended to the order, ``{arg}`` placeholders filled from arguments.
+    note_template: dict[str, str] = field(default_factory=dict)
+
+    @property
+    def status(self) -> str:
+        return OUTCOME_STATUS[self.outcome]
+
+
+@dataclass(frozen=True)
+class Instruction:
+    """What the model should do next, as decided by the backend."""
+
+    stage: str
+    text: str
+    #: ``True`` — say ``text`` word for word; ``False`` — ``text`` is guidance.
+    verbatim: bool = False
+    #: After saying it, call ``end_call`` (relay / wrong number).
+    end_call: bool = False
+
+    def for_model(self, language: str) -> str:
+        lang = normalize_language(language)
+        if self.verbatim:
+            lead = "হুবহু বলুন:" if lang == "bn" else "Say exactly:"
+            text = f"{lead} {self.text}"
+            if self.end_call:
+                tail = (
+                    "এরপর অন্য কিছু না বলে end_call টুল কল করুন।"
+                    if lang == "bn"
+                    else "Then call the end_call tool without saying anything else."
+                )
+                text = f"{text} {tail}"
+            return text
+        return self.text
+
+
+def _get(obj: Any, name: str, default: Any = None) -> Any:
+    value = getattr(obj, name, None) if obj is not None else None
+    return default if value in (None, "") else value
 
 
 class Flow:
-    """One service vertical's conversation flow. Subclasses fill the class vars."""
+    """One vertical's conversation. Subclasses fill in the stage cascade."""
 
     key: str = ""
-    name_bn: str = ""
-    description_bn: str = ""
-    icon: str = ""
-    # What the "thing being called about" is named in UI and speech.
-    order_noun_bn: str = "অর্ডার"
-    call_label_bn: str = "কনফার্মেশন কল"
-    # Per-merchant toggles: key -> (default, label_bn, hint_bn).
-    settings_spec: dict[str, tuple[bool, str, str]] = {}
-    node_order: tuple[str, ...] = ()
 
-    # ---- settings -------------------------------------------------------
-
-    def merged_settings(self, merchant: "Merchant") -> dict[str, bool]:
-        """Merchant's toggles over the service defaults; unknown keys ignored."""
-        stored = merchant.flow_settings if isinstance(merchant.flow_settings, dict) else {}
-        return {
-            key: bool(stored.get(key, default))
-            for key, (default, _label, _hint) in self.settings_spec.items()
-        }
-
-    # ---- slots ----------------------------------------------------------
-
+    # ---- slots ---------------------------------------------------------
     def slot_properties(self) -> dict[str, Any]:
-        """JSON-schema properties of the save_details tool. Override to extend."""
+        """JSON-schema properties of the ``save_details`` tool."""
         return {
             "identity_confirmed": {
                 "type": "boolean",
                 "description": (
-                    "ফোন ধরা ব্যক্তি নিজেই অর্ডার/পার্সেলের নামের কাস্টমার হলে true; "
-                    "অন্য কেউ (পরিবার/বন্ধু) হলে false।"
+                    "true when the person on the line says they ARE the named customer; "
+                    "false when they say they are someone else (family, colleague, friend)."
                 ),
             },
             "knows_customer": {
                 "type": "boolean",
                 "description": (
-                    "identity_confirmed=false হলে: তিনি নামের ব্যক্তিকে চেনেন কি না। "
-                    "চেনেন true, চেনেন না / ভুল নম্বর false।"
+                    "Only when identity_confirmed is false: true if they know the named customer "
+                    "(relative, roommate, colleague), false if they do not know them at all."
                 ),
             },
             "wrong_person": {
                 "type": "boolean",
-                "description": "ভুল নম্বর — ইনি কাস্টমার নন এবং কাস্টমারকেও চেনেন না।",
-            },
-            "address_correct": {
-                "type": "boolean",
-                "description": "ঠিকানা সঠিক কি না — কাস্টমারের উত্তর অনুযায়ী।",
-            },
-            "new_address": {
-                "type": "string",
-                "description": "কাস্টমার নতুন বা সংশোধিত ঠিকানা বললে হুবহু বাংলায় লিখবে।",
+                "description": (
+                    "true only when the caller clearly says this is the wrong number / nobody by "
+                    "that name is reachable here. Never infer it from a short or unclear answer."
+                ),
             },
             "note": {
                 "type": "string",
-                "description": "গুরুত্বপূর্ণ অতিরিক্ত তথ্য (বাংলায়, ছোট করে)।",
+                "description": "Anything important the customer asked us to pass on (short, in their words).",
             },
         }
 
-    def initial_slots(
-        self, order: "Order", merchant: "Merchant", settings: dict[str, bool]
-    ) -> dict[str, Any]:
-        """Pre-filled answers — anything already known is never asked."""
+    def initial_slots(self, order: Any, merchant: Any) -> dict[str, Any]:
         return {}
 
-    # ---- scripted identity gate (shared by every service) ----------------
+    # ---- the cascade ----------------------------------------------------
+    def identity_stage(self, slots: dict[str, Any]) -> str | None:
+        """Next identity-gate stage, or ``None`` once the named person is on the line.
 
-    def order_details_bn(self, order: "Order") -> str:
-        """Short spoken summary of the thing being confirmed."""
-        parts = []
-        if (order.items_summary or "").strip():
-            parts.append(order.items_summary.strip())
-        parts.append(f"মোট {taka_bn(order.total_amount)} টাকা ক্যাশ অন ডেলিভারি")
-        return ", ".join(parts)
-
-    def identity_gate_stage(self, slots: dict[str, Any]) -> str | None:
-        """Return the next identity-gate stage, or None if the named person is on the line.
-
-        Named person → continue the service flow.
-        Someone else → ask if they know the named person.
-        Know them → leave a relay message and hang up (they cannot confirm).
-        Don't know them → apologize and reject as a wrong number.
+        Named person → carry on. Someone else → ask whether they know the
+        customer. They do → leave a relay message. They don't / wrong number →
+        apologise and hang up. Nobody but the named customer may confirm.
         """
         knows = slots.get("knows_customer")
         if slots.get("wrong_person") is True and knows is not True:
@@ -176,134 +194,73 @@ class Flow:
             return STAGE_KNOWS_PERSON
         return STAGE_IDENTITY
 
-    def knows_person_question_bn(self, order: "Order") -> str:
-        return (
-            f"এই নম্বর থেকে আমাদের কাছে একটা {self.order_noun_bn} আছে — "
-            f"{self.order_details_bn(order)}। আপনি কি {order.customer_name}-কে চিনেন?"
-        )
-
-    def relay_line_bn(self, order: "Order") -> str:
-        action = "কনফার্ম" if self.key != "courier" else "রিসিভ"
-        return (
-            f"অনুগ্রহ করে {order.customer_name}-কে {self.order_noun_bn}টি {action} করতে বলবেন।"
-        )
-
-    def spoken_identity_instruction_bn(self, stage: str, order: "Order") -> str | None:
-        """Exact next line for identity-gate stages, or None if this isn't one."""
-        if stage == STAGE_IDENTITY:
-            return f"হুবহু বলো: {self.opening_question_bn(order, None)}"
-        if stage == STAGE_KNOWS_PERSON:
-            return (
-                f"হুবহু বলো: {self.knows_person_question_bn(order)} "
-                "হ্যাঁ হলে knows_customer=true, না হলে knows_customer=false সেভ করো।"
-            )
-        if stage in (STAGE_RELAY, STAGE_WRONG_NUMBER):
-            return "কিছু বলো না। এখনই end_call টুল কল করো।"
-        return None
-
-    def closing_line_bn(
-        self,
-        merchant: "Merchant",
-        order: "Order",
-        outcome: str,
-        slots: dict[str, Any] | None = None,
-    ) -> str:
-        """Deterministic hang-up line. Spoken by end_call, not the LLM."""
-        slots = slots or {}
-        shop = merchant.business_name
-        if outcome == "confirmed":
-            return f"{shop}-এর সাথে থাকার জন্য ধন্যবাদ। ভালো থাকবেন।"
-        if outcome == "cancelled":
-            return f"ঠিক আছে। {shop}-এর সাথে থাকার জন্য ধন্যবাদ।"
-        if outcome == "rescheduled":
-            return "ঠিক আছে, ডেলিভারি পরে আবার শিডিউল করা হবে। ধন্যবাদ।"
-        if outcome == "relay" or slots.get("knows_customer") is True:
-            return self.relay_line_bn(order)
-        if (
-            outcome == "wrong_number"
-            or slots.get("knows_customer") is False
-            or slots.get("wrong_person")
-        ):
-            return "দুঃখিত, ভুল নম্বরে কল হয়ে গেছে। আপনার সময়ের জন্য ধন্যবাদ।"
-        return "ধন্যবাদ, ভালো থাকবেন।"
-
-    # ---- the derived state machine --------------------------------------
-
-    def next_missing_stage(
-        self, slots: dict[str, Any], settings: dict[str, bool], order: "Order"
-    ) -> str:
-        """Ordered cascade: the next thing the caller still owes.
-
-        Skipping IS this function falling through a filled slot.
-        """
+    def next_stage(self, slots: dict[str, Any], order: Any, merchant: Any) -> str:
         raise NotImplementedError
 
     def node_for_stage(self, stage: str) -> str:
+        return {
+            STAGE_IDENTITY: NODE_IDENTITY,
+            STAGE_KNOWS_PERSON: NODE_KNOWS_PERSON,
+            STAGE_RELAY: NODE_WRAP_UP,
+            STAGE_WRONG_NUMBER: NODE_WRAP_UP,
+            STAGE_ADDRESS: NODE_ADDRESS,
+            STAGE_NEW_ADDRESS: NODE_ADDRESS,
+            STAGE_DECISION: NODE_DECISION,
+            STAGE_DONE: NODE_WRAP_UP,
+        }.get(stage, NODE_WRAP_UP)
+
+    # ---- scripted lines --------------------------------------------------
+    def greeting(self, merchant: Any, language: str) -> str:
+        custom = str(_get(merchant, "custom_greeting", "") or "").strip()
+        if custom:
+            return custom
+        return phrase("greeting", language, business_name=_get(merchant, "business_name", ""))
+
+    def opening_question(self, order: Any, language: str) -> str:
+        return phrase("opening_question", language, customer_name=_get(order, "customer_name", ""))
+
+    def closing_line(self, outcome: str, order: Any, merchant: Any, language: str) -> str:
+        key = OUTCOME_CLOSING_KEY.get(outcome, "closing_unclear")
+        return phrase(
+            key,
+            language,
+            customer_name=_get(order, "customer_name", ""),
+            business_name=_get(merchant, "business_name", ""),
+        )
+
+    def reask_line(self, attempt: int, language: str) -> str:
+        return phrase("decision_reask_2" if attempt >= 2 else "decision_reask_1", language)
+
+    def identity_instruction(self, stage: str, order: Any, merchant: Any, language: str) -> Instruction | None:
+        name = _get(order, "customer_name", "")
+        business = _get(merchant, "business_name", "")
+        if stage == STAGE_IDENTITY:
+            return Instruction(stage, phrase("identity_reask", language, customer_name=name), verbatim=True)
+        if stage == STAGE_KNOWS_PERSON:
+            return Instruction(stage, phrase("knows_person_question", language, customer_name=name), verbatim=True)
+        if stage == STAGE_RELAY:
+            return Instruction(
+                stage,
+                phrase("relay_line", language, customer_name=name, business_name=business),
+                verbatim=True,
+                end_call=True,
+            )
+        if stage == STAGE_WRONG_NUMBER:
+            return Instruction(stage, phrase("wrong_number_line", language), verbatim=True, end_call=True)
+        return None
+
+    def instruction(self, stage: str, slots: dict[str, Any], order: Any, merchant: Any, language: str) -> Instruction:
         raise NotImplementedError
 
-    def node_task_bn(self, node: str, order: "Order", merchant: "Merchant") -> str:
-        """The node's instruction block (Bengali), appended on node change."""
-        raise NotImplementedError
-
-    def spoken_instruction_bn(
-        self,
-        stage: str,
-        slots: dict[str, Any],
-        settings: dict[str, bool],
-        order: "Order",
-        merchant: "Merchant",
-    ) -> str:
-        """Backend-owned wording of what the agent must say/ask next."""
-        raise NotImplementedError
-
-    def opening_question_bn(self, order: "Order", merchant: "Merchant | None" = None) -> str:
-        """Speakable first question, played right after the TwiML greeting.
-
-        Spoken deterministically (TTSSpeakFrame, no LLM round-trip) so the
-        caller is engaged within seconds. Both flows start at the identity
-        stage; a flow that starts elsewhere must override this.
-        """
-        return f"আমি কি {order.customer_name}-এর সাথে কথা বলছি?"
-
-    # ---- prompt assembly -------------------------------------------------
-
-    def system_facts_bn(
-        self, order: "Order", merchant: "Merchant", settings: dict[str, bool]
-    ) -> str:
-        """The per-call facts block (who is being called and about what)."""
+    def node_directive(self, node: str, order: Any, merchant: Any, language: str) -> str:
         raise NotImplementedError
 
     def terminals(self) -> list[Terminal]:
         raise NotImplementedError
 
-    # ---- static (DTMF) variant ------------------------------------------
-
-    def static_prompt_bn(self, order: "Order", merchant: "Merchant") -> list[str]:
-        """Lines the static tier speaks before gathering a keypad digit."""
+    def prefetch_lines(self, order: Any, merchant: Any, language: str) -> list[str]:
+        """Every deterministic line a call may speak, for cache warming."""
         raise NotImplementedError
 
-    def static_digits(self, merchant: "Merchant") -> dict[str, tuple[str, str]]:
-        """digit -> (spoken reply, outcome). Outcome '' = unrecognized."""
+    def preview_steps(self, merchant: Any, language: str) -> list[str]:
         raise NotImplementedError
-
-    # ---- UI preview ------------------------------------------------------
-
-    def preview_steps_bn(self, settings: dict[str, bool]) -> list[str]:
-        """Ordered question list shown in Settings so merchants see the flow."""
-        raise NotImplementedError
-
-
-def build_node_directive_bn(flow: Flow, node: str, order: "Order", merchant: "Merchant") -> str:
-    """The tail-appended step directive. Supersedes earlier step directives."""
-    return (
-        "ধাপ পরিবর্তন — এটি আগের সব ধাপ-নির্দেশনা বাতিল করে।\n"
-        f"{flow.node_task_bn(node, order, merchant)}"
-    ).strip()
-
-
-def taka_bn(amount: Any) -> str:
-    """Format an order amount for speech/prompt text."""
-    try:
-        return f"{float(amount):g}"
-    except (TypeError, ValueError):
-        return str(amount)

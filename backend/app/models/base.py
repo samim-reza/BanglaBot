@@ -1,11 +1,5 @@
-import uuid
+"""Re-export so ``app.models.base`` keeps working as an import path."""
 
-from sqlalchemy.orm import DeclarativeBase
+from app.db.base import Base, new_id
 
-
-class Base(DeclarativeBase):
-    pass
-
-
-def new_id() -> str:
-    return uuid.uuid4().hex
+__all__ = ["Base", "new_id"]
