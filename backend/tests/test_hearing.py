@@ -67,3 +67,21 @@ def test_echo_and_prompt_echo_filters():
     prompt = "অর্ডার কনফার্মেশনের ফোন কল। হ্যাঁ, না, জি, ঠিক আছে, বাতিল, পরে, রং নাম্বার।"
     assert hearing.is_prompt_echo("অর্ডার কনফার্মেশনের ফোন কল হ্যাঁ না জি", prompt)
     assert not hearing.is_prompt_echo("হ্যাঁ", prompt)
+
+
+def test_echo_guard_needs_the_agent_words_in_order():
+    from app.flows.hearing import echoes_agent_line
+
+    agent = ["Hello, this is Demo Shop calling. Am I speaking with Nusrat Jahan?"]
+    assert echoes_agent_line("Am I speaking with Nusrat Jahan", agent)  # our own question coming back
+    assert not echoes_agent_line("Yes, this is Nusrat speaking", agent)  # a real answer reusing the words
+    agent_bn = ["আসসালামু আলাইকুম। আমি কেনা শপ থেকে বলছি। আমি কি শামীম রেজা-এর সাথে কথা বলছি?"]
+    assert echoes_agent_line("আমি কি শামীম রেজা-এর সাথে কথা বলছি", agent_bn)
+    assert not echoes_agent_line("হ্যাঁ আমি শামীম রেজা বলছি ভাই", agent_bn)
+
+
+def test_everyday_english_affirmatives_and_their_negations():
+    for text in ("Perfect", "Great", "Sounds great", "That works", "Yes please"):
+        assert hearing.supports(text, "confirm"), text
+    for text in ("not great", "not really", "not that day"):
+        assert not hearing.supports(text, "confirm"), text

@@ -1,4 +1,4 @@
-"""Pure-Python drive of ``ConfirmationCallBridge``: no database, no network.
+"""Pure-Python drive of ``CallBridge``: no database, no network.
 
 Every external edge is a fake — the Twilio websocket, the transcription
 stream, the chat model, the TTS engine and the call store — so the tests
@@ -21,7 +21,7 @@ import pytest
 from app.flows.base import OUTCOME_AUTO_DROPPED, OUTCOME_CONFIRMED, OUTCOME_UNCLEAR
 from app.voice import bridge as bridge_module
 from app.voice.audio import speech_units
-from app.voice.bridge import ConfirmationCallBridge
+from app.voice.bridge import CallBridge
 from app.voice.languages import phrase
 from app.voice.llm import LLMReply, LLMToolCall
 from app.voice.stt import STTEvent
@@ -116,6 +116,7 @@ class FakeLLM:
         self.calls: list[list[dict[str, Any]]] = []
         self.prompt_tokens = 0
         self.completion_tokens = 0
+        self.cached_prompt_tokens = 0
         self.closed = False
 
     async def complete(self, messages, *, tools=None, tool_choice="auto", temperature=None) -> LLMReply:
@@ -144,7 +145,7 @@ class FakeTTS:
         self.synthesized.append((text, language, persona))
         return self.audio
 
-    async def warm(self, lines, *, language, persona) -> int:
+    async def warm(self, lines, *, language, persona, voice=None) -> int:
         self.warmed.extend(line for line in lines if line)
         return 0
 
@@ -162,7 +163,7 @@ def _tool(call_id: str, name: str, arguments: str = "{}") -> LLMToolCall:
 
 @dataclass
 class Harness:
-    bridge: ConfirmationCallBridge
+    bridge: CallBridge
     ws: FakeWebSocket
     tts: FakeTTS
     store: NullCallStore
@@ -211,7 +212,7 @@ def _build(monkeypatch: pytest.MonkeyPatch, order, merchant, *, replies: list[LL
     monkeypatch.setattr(bridge_module, "TranscriptionStream", FakeSTT)
     monkeypatch.setattr(bridge_module, "ChatLLM", fake_llm_factory)
     monkeypatch.setattr(bridge_module, "get_tts", lambda: tts)
-    bridge = ConfirmationCallBridge(
+    bridge = CallBridge(
         ws,  # type: ignore[arg-type]
         order=order,
         merchant=merchant,
@@ -231,7 +232,6 @@ async def test_happy_path_identity_then_confirmation(monkeypatch, order, merchan
     replies = [
         _reply(tool_calls=[_tool("c1", "save_details", '{"identity_confirmed": true}')]),
         _reply(content=narration),
-        _reply(tool_calls=[_tool("c2", "confirm_order")]),
     ]
     h = _build(monkeypatch, order, merchant, replies=replies)
     opening = f"{phrase('greeting', 'bn', business_name='Demo Shop')} {phrase('opening_question', 'bn', customer_name=order.customer_name)}"
@@ -242,12 +242,14 @@ async def test_happy_path_identity_then_confirmation(monkeypatch, order, merchan
         frames = h.ws.media_payloads()
         assert frames and all(len(base64.b64decode(f)) == 160 for f in frames)
         assert h.ws.marks() == ["agent-1"]
-        assert h.stt.connected and h.stt.kwargs["language"] is None  # two supported languages → auto-detect
+        assert h.stt.connected and h.stt.kwargs["language"] == "bn"  # pinned to the merchant language
         # Warmed at the same per-sentence granularity the speaker synthesizes, in both languages.
         assert all(unit in h.tts.warmed for unit in speech_units(opening))
         assert [t for t, _, _ in h.tts.synthesized[: len(speech_units(opening))]] == speech_units(opening)
-        assert all(s in h.tts.warmed for s in speech_units(phrase("closing_confirmed", "en")))
-        assert h.bridge.messages[0]["role"] == "system" and "[ধাপ পরিবর্তন]" in h.bridge.messages[0]["content"]
+        assert all(s in h.tts.warmed for s in speech_units(phrase("closing_confirmed", "bn")))
+        # Three system messages, most stable first (prompt caching); the first step's directive is in the call part.
+        assert [m["role"] for m in h.bridge.messages[:3]] == ["system", "system", "system"]
+        assert "[ধাপ পরিবর্তন]" in h.bridge.messages[2]["content"] and "[ধাপ পরিবর্তন]" not in h.bridge.messages[0]["content"]
 
         # --- caller: "yes speaking" → save_details → node directive → narration ---
         await h.ws.push_frames(SILENT_FRAME, 3)
@@ -257,13 +259,14 @@ async def test_happy_path_identity_then_confirmation(monkeypatch, order, merchan
         assert h.stt.audio[:3] == [SILENT_FRAME] * 3
         second = h.llm.calls[1]
         roles = [m["role"] for m in second]
-        assert roles == ["system", "assistant", "user", "assistant", "tool", "system"]
-        assert second[4]["tool_call_id"] == "c1" and '"instruction"' in second[4]["content"]
+        assert roles == ["system", "system", "system", "assistant", "user", "assistant", "tool", "system"]
+        assert second[6]["tool_call_id"] == "c1" and '"instruction"' in second[6]["content"]
         assert h.bridge.runtime.current_node == "decision"
 
-        # --- caller: "yes" → confirm_order → scripted closing → hangup ---
+        # --- caller: a clean "yes" → confirm_order straight from the fast path (no model) → closing → hangup ---
         await h.stt.caller_says("হ্যাঁ, ঠিক আছে", item_id="i2")
         await asyncio.wait_for(run_task, timeout=8.0)
+        assert len(h.llm.calls) == 2
         assert h.bridge.outcome == OUTCOME_CONFIRMED
         assert h.agent_lines()[-1] == phrase("closing_confirmed", "bn")
         assert h.bridge.closed and h.bridge._closed_by_agent and h.ws.closed
@@ -273,7 +276,7 @@ async def test_happy_path_identity_then_confirmation(monkeypatch, order, merchan
         # Persistence: outcome, transcript, usage.
         assert h.store.outcomes[-1]["status"] == "confirmed" and h.store.outcomes[-1]["final_node"] == "wrap_up"
         assert h.store.transcripts[-1]["transcript"].startswith(f"Agent: {opening}\nCustomer: জি, আমি বলছি")
-        assert h.store.usage[-1]["llm_prompt_tokens"] == 300 and h.store.usage[-1]["tts_chars"] > 0
+        assert h.store.usage[-1]["llm_prompt_tokens"] == 200 and h.store.usage[-1]["tts_chars"] > 0
 
 
 @pytest.mark.asyncio
@@ -305,8 +308,9 @@ async def test_unclear_answer_ladder_ends_in_needs_review(monkeypatch, order, me
 
 
 @pytest.mark.asyncio
-async def test_english_caller_is_answered_in_english(monkeypatch, order, merchant):
+async def test_english_merchant_runs_the_call_in_english(monkeypatch, order, merchant):
     order.customer_name = "Nusrat Jahan"
+    merchant.language = "en"
     replies = [
         _reply(tool_calls=[_tool("c1", "save_details", '{"identity_confirmed": true}')]),
         _reply(content="Great. You ordered one panjabi for 1850 taka, cash on delivery. Shall I confirm the order?"),
@@ -318,7 +322,8 @@ async def test_english_caller_is_answered_in_english(monkeypatch, order, merchan
         await h.stt.caller_says("Yes, this is Nusrat speaking", item_id="i1")
         await wait_until(lambda: len(h.agent_lines()) == 2, what="narration")
         assert h.bridge.active_language == "en" and h.bridge.runtime.language == "en"
-        # The save_details instruction came back in English once the caller switched.
+        assert h.stt.kwargs["language"] == "en"
+        # The save_details instruction is in the merchant's language.
         tool_msg = [m for m in h.bridge.messages if m["role"] == "tool"][-1]
         assert "cash on delivery" in tool_msg["content"]
         assert h.tts.synthesized[-1][1] == "en"
@@ -356,7 +361,7 @@ async def test_sustained_loud_caller_audio_interrupts_playback(monkeypatch, orde
 async def test_two_strike_silence_drops_the_call(monkeypatch, order, merchant):
     merchant.silence_hangup_secs = 5  # clamped to the 3 s floor below
     h = _build(monkeypatch, order, merchant, replies=[])
-    monkeypatch.setattr(ConfirmationCallBridge, "silence_seconds", property(lambda self: 1))
+    monkeypatch.setattr(CallBridge, "silence_seconds", property(lambda self: 1))
     async with h.running() as run_task:
         await wait_until(lambda: len(h.agent_lines()) == 1, what="opening")
         await wait_until(lambda: phrase("still_there", "bn") in h.agent_lines(), timeout=6.0, what="still-there re-ask")
@@ -395,7 +400,7 @@ async def test_transfer_dials_support_after_transfer_line(monkeypatch, order, me
         dialed.append(number)
         return True
 
-    monkeypatch.setattr(ConfirmationCallBridge, "_dial_support", fake_dial)
+    monkeypatch.setattr(CallBridge, "_dial_support", fake_dial)
     async with h.running() as run_task:
         await wait_until(lambda: len(h.agent_lines()) == 1, what="opening")
         await h.stt.caller_says("জি বলছি", item_id="i1")
@@ -529,8 +534,7 @@ async def test_confirmation_then_address_check_then_goodbye(monkeypatch, order, 
     merchant.verify_address = True
     decision_line = "আপনি একটি পাঞ্জাবি অর্ডার করেছেন, মোট এক হাজার আটশো পঞ্চাশ টাকা। অর্ডারটি কি কনফার্ম করব?"
     prepared.put_decision_line(order.id, "bn", decision_line)
-    replies = [_reply(tool_calls=[_tool("c1", "confirm_order")])]
-    h = _build(monkeypatch, order, merchant, replies=replies)
+    h = _build(monkeypatch, order, merchant, replies=[])
     async with h.running() as run_task:
         await wait_until(lambda: len(h.agent_lines()) == 1, what="opening")
         await h.stt.caller_says("জি বলছি", item_id="i1")
@@ -539,13 +543,13 @@ async def test_confirmation_then_address_check_then_goodbye(monkeypatch, order, 
         address_q = phrase("address_question", "bn", address=order.address)
         await wait_until(lambda: address_q in h.agent_lines(), what="address question after the yes")
         assert h.bridge.outcome == OUTCOME_CONFIRMED and h.bridge.runtime.stage == "address"
-        assert len(h.llm.calls) == 1
+        assert len(h.llm.calls) == 0  # the clean "yes" went straight to confirm_order
         await h.stt.caller_says("হ্যাঁ ঠিক আছে", item_id="i3")
         closing = phrase("closing_confirmed", "bn")
         await wait_until(lambda: closing in h.agent_lines(), what="closing")
         await asyncio.wait_for(run_task, timeout=6.0)
         assert h.bridge.closed and h.bridge._closed_by_agent
-        assert len(h.llm.calls) == 1  # the address yes never went to the model
+        assert len(h.llm.calls) == 0  # no turn of this call needed the model
         assert h.store.outcomes[-1]["status"] == "confirmed"
         assert h.store.outcomes[-1]["flow_data"].get("address_correct") is True
     prepared.clear()
@@ -589,3 +593,66 @@ async def test_knows_the_customer_relays_and_hangs_up(monkeypatch, order, mercha
         await asyncio.wait_for(run_task, timeout=6.0)
         assert h.bridge.closed and h.bridge._closed_by_agent
         assert h.llm.calls == []
+
+
+# --- language stability -------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_one_garbled_english_transcript_does_not_switch_the_call_to_english(monkeypatch, order, merchant):
+    """STT once heard "জ্বি বলছিলেন" as "Do you bulletin?": the call must stay in Bangla."""
+    replies = [_reply(content="দুঃখিত, আবার বলবেন?")]
+    h = _build(monkeypatch, order, merchant, replies=replies)
+    async with h.running():
+        await wait_until(lambda: len(h.agent_lines()) == 1, what="opening")
+        assert h.stt.kwargs["language"] == "bn"  # transcriber pinned to the primary language
+        await h.stt.caller_says("Do you bulletin?", item_id="i1")
+        await wait_until(lambda: len(h.agent_lines()) == 2, what="reply")
+        assert h.bridge.active_language == "bn" and h.bridge.runtime.language == "bn"
+        assert h.tts.synthesized[-1][1] == "bn"
+
+
+@pytest.mark.asyncio
+async def test_english_turns_never_switch_a_bangla_merchant(monkeypatch, order, merchant):
+    """The merchant chose Bangla: the call stays Bangla whatever the transcripts look like."""
+    replies = [_reply(content="দুঃখিত, আবার বলবেন?"), _reply(content="দুঃখিত, বাংলায় বলবেন?")]
+    h = _build(monkeypatch, order, merchant, replies=replies)
+    async with h.running():
+        await wait_until(lambda: len(h.agent_lines()) == 1, what="opening")
+        await h.stt.caller_says("Yes, this is Nusrat speaking", item_id="i1")
+        await wait_until(lambda: len(h.agent_lines()) == 2, what="first reply")
+        await h.stt.caller_says("speak english please", item_id="i2")
+        await wait_until(lambda: len(h.agent_lines()) == 3, what="second reply")
+        assert h.bridge.active_language == "bn" and h.bridge.runtime.language == "bn"
+        assert all(lang == "bn" for _, lang, _ in h.tts.synthesized)
+
+
+@pytest.mark.asyncio
+async def test_transcriber_gets_the_call_vocabulary_but_echo_guard_uses_the_generic_prompt(monkeypatch, order, merchant):
+    order.items_summary = "কটন শাড়ি x2"
+    h = _build(monkeypatch, order, merchant, replies=[])
+    async with h.running():
+        await wait_until(lambda: len(h.agent_lines()) == 1, what="opening")
+        prompt = h.stt.kwargs["prompt"]
+        assert order.customer_name in prompt and merchant.business_name in prompt and "কটন শাড়ি" in prompt
+        assert prompt.startswith(phrase("transcription_prompt", "bn"))
+        # A caller saying the customer's own name is a real answer, not a prompt echo.
+        assert h.bridge._phantom_transcript_reason(f"হ্যাঁ আমি {order.customer_name} বলছি") is None
+
+
+@pytest.mark.asyncio
+async def test_greeting_plays_before_the_transcriber_is_connected(monkeypatch, order, merchant):
+    """Answer → voice within a second: the opening must not wait for the STT socket."""
+    gate = asyncio.Event()
+
+    async def slow_connect(self):
+        await gate.wait()
+        self.connected = True
+
+    monkeypatch.setattr(FakeSTT, "connect", slow_connect)
+    h = _build(monkeypatch, order, merchant, replies=[], tts=FakeTTS(audio=b"\x10" * 8000))
+    async with h.running():
+        await wait_until(lambda: len(h.ws.media_payloads()) > 5, what="greeting audio")
+        assert not h.stt.connected  # audio already flowing while the STT is still connecting
+        gate.set()
+        await wait_until(lambda: h.stt.connected, what="stt connected")

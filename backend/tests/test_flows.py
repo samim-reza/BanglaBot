@@ -14,16 +14,25 @@ from app.flows.base import (
     STAGE_RELAY,
     STAGE_WRONG_NUMBER,
 )
-from app.flows.ecommerce import DEFAULT_FLOW, flow_preview_steps
+from app.flows.context import CallContext
 from app.flows.runtime import FlowRuntime
+from app.verticals.ecommerce import DEFAULT_FLOW
 from app.voice.languages import phrase
 from app.voice.prompts import build_system_prompt, transcription_prompt
 
 
+def _ctx(order, merchant):
+    return CallContext(merchant=merchant, record=order)
+
+
 def _runtime(order, merchant, language="bn"):
     directives = []
-    rt = FlowRuntime(DEFAULT_FLOW, order, merchant, language=language, on_directive=directives.append)
+    rt = FlowRuntime(DEFAULT_FLOW, _ctx(order, merchant), language=language, on_directive=directives.append)
     return rt, directives
+
+
+def flow_preview_steps(merchant):
+    return DEFAULT_FLOW.preview_steps(CallContext(merchant=merchant), merchant.language)
 
 
 def test_identity_gate_named_person_goes_to_decision(order, merchant):
@@ -132,12 +141,13 @@ def test_language_switch_changes_instruction_language(order, merchant):
 
 
 def test_closing_lines_and_greeting(order, merchant):
-    assert DEFAULT_FLOW.closing_line("confirmed", order, merchant, "bn") == phrase("closing_confirmed", "bn")
-    assert DEFAULT_FLOW.closing_line("relay", order, merchant, "en").startswith("Alright. Please let")
-    assert DEFAULT_FLOW.greeting(merchant, "en") == "Hello, this is Demo Shop calling."
+    ctx = _ctx(order, merchant)
+    assert DEFAULT_FLOW.closing_line("confirmed", {}, ctx, "bn") == phrase("closing_confirmed", "bn")
+    assert DEFAULT_FLOW.closing_line("relay", {}, ctx, "en").startswith("Alright. Please let")
+    assert DEFAULT_FLOW.greeting(ctx, "en") == "Hello, this is Demo Shop calling."
     merchant.custom_greeting = "আসসালামু আলাইকুম, আমি ডেমো শপ থেকে বলছি।"
-    assert DEFAULT_FLOW.greeting(merchant, "bn") == merchant.custom_greeting
-    lines = DEFAULT_FLOW.prefetch_lines(order, merchant, "bn")
+    assert DEFAULT_FLOW.greeting(ctx, "bn") == merchant.custom_greeting
+    lines = DEFAULT_FLOW.prefetch_lines(ctx, "bn")
     assert merchant.custom_greeting in lines and phrase("closing_dropped", "bn") in lines
 
 
@@ -151,9 +161,23 @@ def test_flow_preview_steps_follow_settings(merchant):
 
 
 def test_system_prompt_in_both_languages(order, merchant):
-    bn = build_system_prompt(order, merchant, DEFAULT_FLOW, language="bn", initial_directive="[ধাপ পরিবর্তন] x")
+    ctx = _ctx(order, merchant)
+    opening = DEFAULT_FLOW.opening(ctx, "bn")
+    bn = build_system_prompt(DEFAULT_FLOW, ctx, language="bn", opening=opening, initial_directive="[ধাপ পরিবর্তন] x")
     assert "Demo Shop" in bn and "এক হাজার আটশো পঞ্চাশ টাকা" in bn and bn.endswith("[ধাপ পরিবর্তন] x")
     assert "আসসালামু আলাইকুম" in bn  # greeting already spoken
-    en = build_system_prompt(order, merchant, DEFAULT_FLOW, language="en")
-    assert "1850 taka" in en and "Am I speaking with" in en and "Supported languages" in en
-    assert transcription_prompt(["bn", "en"]).startswith("অর্ডার কনফার্মেশনের")
+    assert "Speak only Bangla" in bn
+    en = build_system_prompt(DEFAULT_FLOW, ctx, language="en", opening=DEFAULT_FLOW.opening(ctx, "en"))
+    assert "1850 taka" in en and "Am I speaking with" in en and "Speak only English" in en
+    assert transcription_prompt(["bn", "en"]).startswith("ফোন কল।")
+
+
+def test_system_prompt_keeps_the_stable_part_first(order, merchant):
+    """Prompt caching needs an identical prefix: the rules must not depend on the call."""
+    from app.voice.prompts import build_messages
+
+    first = build_messages(DEFAULT_FLOW, _ctx(order, merchant), language="en", opening="Hi")
+    order.customer_name = "Someone Else"
+    second = build_messages(DEFAULT_FLOW, _ctx(order, merchant), language="en", opening="Hello")
+    assert first[0] == second[0] and first[1] == second[1]
+    assert first[2] != second[2]

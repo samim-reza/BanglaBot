@@ -31,6 +31,19 @@ VOICE_PERSONAS: dict[str, dict[str, str]] = {
     "female": {ENGLISH: "en-US-AvaNeural", BANGLA: "bn-BD-NabanitaNeural"},
     "male": {ENGLISH: "en-US-AndrewNeural", BANGLA: "bn-BD-PradeepNeural"},
 }
+#: English accents by locale (the account's region picks one): (female, male).
+ENGLISH_ACCENTS: dict[str, tuple[str, str]] = {
+    "en-US": ("en-US-AvaNeural", "en-US-AndrewNeural"),
+    "en-GB": ("en-GB-SoniaNeural", "en-GB-RyanNeural"),
+    "en-CA": ("en-CA-ClaraNeural", "en-CA-LiamNeural"),
+    "en-AU": ("en-AU-NatashaNeural", "en-AU-WilliamNeural"),
+    "en-NZ": ("en-NZ-MollyNeural", "en-NZ-MitchellNeural"),
+    "en-IE": ("en-IE-EmilyNeural", "en-IE-ConnorNeural"),
+    "en-IN": ("en-IN-NeerjaNeural", "en-IN-PrabhatNeural"),
+    "en-SG": ("en-SG-LunaNeural", "en-SG-WayneNeural"),
+    "en-ZA": ("en-ZA-LeahNeural", "en-ZA-LukeNeural"),
+    "en-NG": ("en-NG-EzinneNeural", "en-NG-AbeoNeural"),
+}
 DEFAULT_PERSONA = "female"
 
 
@@ -39,9 +52,15 @@ def normalize_persona(value: Any) -> str:
     return text if text in VOICE_PERSONAS else DEFAULT_PERSONA
 
 
-def voice_for(persona: str, language: str | None) -> str:
-    voices = VOICE_PERSONAS.get(normalize_persona(persona), VOICE_PERSONAS[DEFAULT_PERSONA])
-    return voices.get(normalize_language(language), voices[BANGLA])
+def voice_for(persona: str, language: str | None, accent: str | None = None) -> str:
+    """Neural voice for a persona in a language; English follows the account's accent."""
+    persona = normalize_persona(persona)
+    lang = normalize_language(language)
+    if lang == ENGLISH and accent in ENGLISH_ACCENTS:
+        female, male = ENGLISH_ACCENTS[accent]  # type: ignore[index]
+        return female if persona == "female" else male
+    voices = VOICE_PERSONAS.get(persona, VOICE_PERSONAS[DEFAULT_PERSONA])
+    return voices.get(lang, voices[BANGLA])
 
 
 def _locale_for_voice(voice: str) -> str:
@@ -143,17 +162,17 @@ class AzureSpeechTTS:
         await logger.adebug("azure_tts_synthesized", voice=voice, chars=len(text), ms=int(elapsed * 1000), bytes=len(audio))
         return audio
 
-    async def warm(self, lines: Iterable[str], *, language: str | None, persona: str | None) -> int:
+    async def warm(self, lines: Iterable[str], *, language: str | None, persona: str | None, voice: str | None = None) -> int:
         """Pre-synthesize fixed lines (greeting, still-there, goodbye…) before they are needed."""
         count = 0
+        voice = voice or voice_for(persona or DEFAULT_PERSONA, language)
         for line in lines:
             if not line:
                 continue
             try:
-                voice = voice_for(persona or DEFAULT_PERSONA, language)
                 if self.cache.contains(self.cache_key(line, voice=voice)):
                     continue
-                await self.synthesize(line, language=language, persona=persona)
+                await self.synthesize(line, language=language, persona=persona, voice=voice)
                 count += 1
             except TTSError as exc:
                 await logger.awarning("azure_tts_warm_failed", error=str(exc), preview=str(line)[:60])

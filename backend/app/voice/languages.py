@@ -152,16 +152,81 @@ _PHRASES: dict[str, dict[str, str]] = {
         "en": "Hello, can you hear me?",
     },
     "recovery": {
-        "bn": "দুঃখিত, শুনতে [আই নি। আবার একটু বলবেন?",
+        "bn": "দুঃখিত, ঠিক শুনতে পাইনি। আবার একটু বলবেন?",
         "en": "Sorry, something went wrong on my end. Could you say that again?",
     },
     "transcription_prompt": {
-        "bn": "অর্ডার কনফার্মেশনের ফোন কল। হ্যাঁ, না, জি, ঠিক আছে, বাতিল, পরে, রং নাম্বার।",
-        "en": "Order confirmation phone call. Yes, no, okay, cancel, later, wrong number.",
+        "bn": "ফোন কল। হ্যাঁ, না, জি, ঠিক আছে, বাতিল, পরে, রং নাম্বার।",
+        "en": "Phone call. Yes, no, okay, sure, cancel, later, wrong number.",
     },
     "cash_on_delivery": {
         "bn": "ক্যাশ অন ডেলিভারি",
         "en": "cash on delivery",
+    },
+    # --- inbound / business engines -------------------------------------
+    "greeting_inbound": {
+        "bn": "আসসালামু আলাইকুম, {business_name} এ ফোন করার জন্য ধন্যবাদ।",
+        "en": "Hello, thank you for calling {business_name}.",
+    },
+    "greeting_chat": {
+        "bn": "আসসালামু আলাইকুম, {business_name} এ স্বাগতম।",
+        "en": "Hi, welcome to {business_name}!",
+    },
+    "how_can_i_help": {
+        "bn": "আমি কীভাবে সাহায্য করতে পারি?",
+        "en": "How can I help you today?",
+    },
+    "ask_caller_name": {
+        "bn": "আপনার নামটা একটু বলবেন?",
+        "en": "May I have your name, please?",
+    },
+    "ask_phone": {
+        "bn": "আপনার মোবাইল নম্বরটা বলবেন?",
+        "en": "What's the best mobile number to reach you?",
+    },
+    "phone_invalid": {
+        "bn": "দুঃখিত, নম্বরটা ঠিক বুঝতে পারিনি। এগারো সংখ্যার মোবাইল নম্বরটা একটু ধীরে বলবেন?",
+        "en": "Sorry, I didn't get the number. Could you say the eleven-digit mobile number slowly?",
+    },
+    "amend_question": {
+        "bn": "ঠিক আছে। কোন তথ্যটা বদলাতে হবে, একটু বলবেন?",
+        "en": "Alright. What should I change?",
+    },
+    "closing_inquiry": {
+        "bn": "ফোন করার জন্য ধন্যবাদ। ভালো থাকবেন।",
+        "en": "Thank you for calling. Goodbye.",
+    },
+    "closing_lead": {
+        "bn": "ধন্যবাদ। আমাদের একজন প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন। ভালো থাকবেন।",
+        "en": "Thank you. One of our team will get in touch with you shortly. Goodbye.",
+    },
+    "closing_not_interested": {
+        "bn": "ঠিক আছে, সময় দেওয়ার জন্য ধন্যবাদ। ভালো থাকবেন।",
+        "en": "Alright, thank you for your time. Goodbye.",
+    },
+    "emergency_line": {
+        "bn": "এটা জরুরি অবস্থা মনে হচ্ছে। দয়া করে এখনই নাইন নাইন নাইন নম্বরে ফোন করুন।",
+        "en": "This sounds like an emergency. Please call nine nine nine right now.",
+    },
+    "sms_follows": {
+        "bn": "বিস্তারিত তথ্য এসএমএস করে পাঠিয়ে দিচ্ছি।",
+        "en": "We'll text you the details.",
+    },
+    "confirm_reprompt": {
+        "bn": "তাহলে কি কনফার্ম করব?",
+        "en": "So, shall I go ahead and confirm it?",
+    },
+    "yes_no_reask_1": {
+        "bn": "দুঃখিত, ঠিক বুঝতে পারিনি। হ্যাঁ অথবা না বলবেন?",
+        "en": "Sorry, I didn't quite catch that. Could you say yes or no?",
+    },
+    "yes_no_reask_2": {
+        "bn": "একটু পরিষ্কার করে বলবেন — হ্যাঁ, নাকি না?",
+        "en": "Just to be clear — yes, or no?",
+    },
+    "working": {
+        "bn": "একটু দেখে নিচ্ছি।",
+        "en": "Let me check that.",
     },
     # Settings page: what the agent will ask, in order.
     "preview_greeting": {
@@ -199,6 +264,16 @@ _PHRASES: dict[str, dict[str, str]] = {
 
 PHRASE_KEYS = tuple(_PHRASES)
 
+#: Instant acknowledgements, rotated so a long call never sounds like a loop.
+_ACKS: dict[str, tuple[str, ...]] = {
+    "bn": ("হ্যাঁ।", "জি।", "আচ্ছা।"),
+    "en": ("Okay.", "Sure.", "Alright.", "Got it."),
+}
+
+
+def ack_lines(language: str | None = None) -> tuple[str, ...]:
+    return _ACKS.get(normalize_language(language), _ACKS["en"])
+
 
 def phrase(key: str, language: str | None = None, **fields: Any) -> str:
     """Fixed spoken line ``key`` in ``language``; unknown keys return ''."""
@@ -222,6 +297,12 @@ def phrase(key: str, language: str | None = None, **fields: Any) -> str:
 
 def contains_bangla(text: str | None) -> bool:
     return bool(_BANGLA_CHAR_RE.search(str(text or "")))
+
+
+def english_word_count(text: str | None) -> int:
+    """Real (non-loanword) English words in a transcript — how strong the English evidence is."""
+    raw = str(text or "")
+    return sum(1 for w in _LATIN_WORD_RE.findall(raw) if w.lower() not in NEUTRAL_LATIN_WORDS)
 
 
 def detect_language(text: str | None, *, supported: list[str] | tuple[str, ...] | None = None) -> str | None:
@@ -308,6 +389,14 @@ _CURRENCY_WORDS: dict[str, dict[str, tuple[str, str]]] = {
     "INR": {"en": ("rupees", "paise"), "bn": ("রুপি", "পয়সা")},
     "EUR": {"en": ("euros", "cents"), "bn": ("ইউরো", "সেন্ট")},
     "GBP": {"en": ("pounds", "pence"), "bn": ("পাউন্ড", "পেন্স")},
+    "CAD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
+    "AUD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
+    "NZD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
+    "SGD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
+    "AED": {"en": ("dirhams", "fils"), "bn": ("দিরহাম", "ফিলস")},
+    "PKR": {"en": ("rupees", "paisa"), "bn": ("রুপি", "পয়সা")},
+    "ZAR": {"en": ("rand", "cents"), "bn": ("র‍্যান্ড", "সেন্ট")},
+    "NGN": {"en": ("naira", "kobo"), "bn": ("নাইরা", "কোবো")},
 }
 
 
@@ -333,7 +422,8 @@ def spoken_amount(value: Any, currency: str | None = "BDT", language: str | None
             text = f"{text} {bangla_number_words(fraction)} {minor}"
         return text
     if fraction:
-        return f"{amount:.2f} {major}".strip()
+        # "89 pounds and 50 pence" — a TTS voice reads "89.50 pounds" digit by digit.
+        return f"{whole} {major} and {fraction} {minor}".strip() if minor else f"{amount:.2f} {major}".strip()
     return f"{whole} {major}".strip()
 
 

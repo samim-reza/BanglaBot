@@ -1,10 +1,17 @@
 """The call brain: ``gpt-5.4-mini`` over Chat Completions with the flow tools.
 
-Plain text in, plain text or tool calls out. The bridge owns the conversation
+Plain text in, plain text or tool calls out. The agent owns the conversation
 history (system prompt + node directives + caller/agent turns + tool results),
-calls :meth:`ChatLLM.complete`, runs any tool calls through the call tools,
-appends their results, and loops until the model answers in words — which
-Azure TTS then speaks.
+calls :meth:`ChatLLM.complete`, runs any tool calls, and loops until the model
+answers in words or a tool result carries the line to speak.
+
+Cost / latency:
+
+- one process-wide keep-alive connection pool, so a call's first request does
+  not pay a fresh TLS handshake (warmed at startup);
+- ``prompt_cache_key`` (flow + account) routes calls that share a prompt prefix
+  to the same cache; cached input tokens are ~10x cheaper and faster;
+- the prompt is built most-stable-first (see ``voice/prompts.py``).
 """
 
 from __future__ import annotations
@@ -20,6 +27,37 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+MODELS_URL = "https://api.openai.com/v1/models"
+
+_shared_client: httpx.AsyncClient | None = None
+
+
+def shared_client() -> httpx.AsyncClient:
+    """One keep-alive pool for every call in this process."""
+    global _shared_client
+    if _shared_client is None or _shared_client.is_closed:
+        _shared_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=5.0),
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=50, keepalive_expiry=120.0),
+        )
+    return _shared_client
+
+
+async def warm_connection(api_key: str | None) -> None:
+    """Open (and keep) a TLS connection to OpenAI before the first call needs it."""
+    if not api_key:
+        return
+    try:
+        await shared_client().get(MODELS_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=5.0)
+    except Exception as exc:  # noqa: BLE001 — an optimization only
+        await logger.ainfo("openai_warm_failed", error=str(exc))
+
+
+async def close_shared_client() -> None:
+    global _shared_client
+    if _shared_client is not None:
+        await _shared_client.aclose()
+        _shared_client = None
 
 
 def chat_tools_from_realtime(tools: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
@@ -80,15 +118,17 @@ class ChatLLM:
         reasoning_effort: str | None = None,
         max_output_tokens: int = 400,
         timeout_seconds: float = 30.0,
+        prompt_cache_key: str | None = None,
+        prompt_cache_retention: str | None = None,
     ) -> None:
         self.api_key = api_key
         self.model = model
         self.reasoning_effort = reasoning_effort
         self.max_output_tokens = max_output_tokens
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout_seconds, connect=5.0),
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        )
+        self.timeout_seconds = timeout_seconds
+        self.prompt_cache_key = prompt_cache_key
+        self.prompt_cache_retention = prompt_cache_retention
+        self._headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         self.request_count = 0
         self.prompt_tokens = 0
         self.completion_tokens = 0
@@ -115,6 +155,10 @@ class ChatLLM:
             body["reasoning_effort"] = self.reasoning_effort
         if temperature is not None:
             body["temperature"] = temperature
+        if self.prompt_cache_key:
+            body["prompt_cache_key"] = self.prompt_cache_key
+        if self.prompt_cache_retention:
+            body["prompt_cache_retention"] = self.prompt_cache_retention
         data = await self._post(body)
         choice = (data.get("choices") or [{}])[0]
         message = choice.get("message") or {}
@@ -142,13 +186,21 @@ class ChatLLM:
 
     async def _post(self, body: dict[str, Any]) -> dict[str, Any]:
         last_error: Exception | None = None
+        client = shared_client()
         for attempt in (1, 2, 3):
             try:
-                response = await self._client.post(CHAT_COMPLETIONS_URL, content=json.dumps(body))
+                response = await client.post(
+                    CHAT_COMPLETIONS_URL, content=json.dumps(body), headers=self._headers, timeout=self.timeout_seconds
+                )
                 if response.status_code == 200:
                     return response.json()
                 detail = response.text[:300]
                 last_error = LLMError(f"openai_chat_http_{response.status_code}: {detail}")
+                if response.status_code == 400 and "prompt_cache_retention" in body and "prompt_cache_retention" in detail:
+                    # The model does not support extended retention: retry without it.
+                    body = {key: value for key, value in body.items() if key != "prompt_cache_retention"}
+                    self.prompt_cache_retention = None
+                    continue
                 if response.status_code not in {429, 500, 502, 503, 504}:
                     break
             except httpx.HTTPError as exc:
@@ -166,4 +218,5 @@ class ChatLLM:
         }
 
     async def aclose(self) -> None:
-        await self._client.aclose()
+        """Nothing to close per call: the connection pool is shared by the process."""
+        return None

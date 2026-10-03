@@ -1,7 +1,7 @@
-"""Create (or reset the password of) a merchant login.
+"""Create (or reset the password of) an account login.
 
-    python -m scripts.create_merchant --username shop1 --password secret \
-        --business "Shop One" [--owner "Owner"] [--phone +8801...] [--support +8801...] [--language bn]
+    python -m scripts.create_merchant --username clinic2 --password secret \
+        --business "Second Clinic" --vertical clinic --region US [--owner "Owner"] [--phone ...] [--support ...] [--language en]
 """
 
 from __future__ import annotations
@@ -11,10 +11,12 @@ import asyncio
 
 from sqlalchemy import select
 
+from app.core.regions import REGIONS, region_defaults
 from app.core.security import hash_password
 from app.db.bootstrap import create_schema
 from app.db.session import AsyncSessionLocal, engine
 from app.models import Merchant
+from app.verticals import VERTICALS
 
 
 async def upsert(args: argparse.Namespace) -> str:
@@ -32,6 +34,9 @@ async def upsert(args: argparse.Namespace) -> str:
                 email=args.email or "",
                 language=args.language,
                 supported_languages=[args.language] + [c for c in ("bn", "en") if c != args.language],
+                vertical=args.vertical,
+                vertical_config={},
+                **region_defaults(args.region),
             )
             session.add(merchant)
             action = "created"
@@ -56,7 +61,9 @@ def main() -> int:
     parser.add_argument("--phone", default="")
     parser.add_argument("--support", default="")
     parser.add_argument("--email", default="")
-    parser.add_argument("--language", default="bn", choices=("bn", "en"))
+    parser.add_argument("--language", default="en", choices=("bn", "en"))
+    parser.add_argument("--vertical", default="ecommerce", choices=sorted(VERTICALS))
+    parser.add_argument("--region", default="INTL", choices=sorted(REGIONS))
     print(asyncio.run(upsert(parser.parse_args())))
     return 0
 

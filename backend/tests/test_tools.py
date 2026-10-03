@@ -3,14 +3,20 @@
 import pytest
 
 from app.flows.base import OUTCOME_CONFIRMED, OUTCOME_UNCLEAR, STAGE_DECISION, STAGE_RELAY
-from app.flows.ecommerce import DEFAULT_FLOW
+from app.verticals.ecommerce import DEFAULT_FLOW
 from app.flows.runtime import FlowRuntime
 from app.voice.languages import phrase
 from app.voice.tools import CallTools, NullCallStore
 
 
+def _ctx(order, merchant):
+    from app.flows.context import CallContext
+
+    return CallContext(merchant=merchant, record=order)
+
+
 def _tools(order, merchant, language="bn", support_phone=""):
-    rt = FlowRuntime(DEFAULT_FLOW, order, merchant, language=language)
+    rt = FlowRuntime(DEFAULT_FLOW, _ctx(order, merchant), language=language)
     store = NullCallStore()
     return CallTools(rt, store, support_phone=support_phone), rt, store
 
@@ -127,10 +133,10 @@ async def test_bare_no_is_not_a_wrong_number(order, merchant):
     """The model may jump to wrong_person on a bare "না"; the backend keeps only identity_confirmed=False."""
     from app.flows.base import STAGE_KNOWS_PERSON
     from app.flows.runtime import FlowRuntime
-    from app.flows.ecommerce import DEFAULT_FLOW
+    from app.verticals.ecommerce import DEFAULT_FLOW
     from app.voice.tools import CallTools, NullCallStore
 
-    runtime = FlowRuntime(DEFAULT_FLOW, order, merchant, language="bn")
+    runtime = FlowRuntime(DEFAULT_FLOW, _ctx(order, merchant), language="bn")
     tools = CallTools(runtime, NullCallStore())
     result = await tools.execute("save_details", {"identity_confirmed": False, "wrong_person": True}, caller_text="না।")
     assert runtime.stage == STAGE_KNOWS_PERSON
@@ -142,10 +148,10 @@ async def test_bare_no_is_not_a_wrong_number(order, merchant):
 @pytest.mark.asyncio
 async def test_save_details_reaching_wrap_up_closes_the_call(order, merchant):
     from app.flows.runtime import FlowRuntime
-    from app.flows.ecommerce import DEFAULT_FLOW
+    from app.verticals.ecommerce import DEFAULT_FLOW
     from app.voice.tools import CallTools, NullCallStore
 
-    runtime = FlowRuntime(DEFAULT_FLOW, order, merchant, language="bn")
+    runtime = FlowRuntime(DEFAULT_FLOW, _ctx(order, merchant), language="bn")
     tools = CallTools(runtime, NullCallStore())
     await tools.execute("save_details", {"identity_confirmed": False}, caller_text="না")
     result = await tools.execute("save_details", {"knows_customer": False}, caller_text="না, চিনি না")

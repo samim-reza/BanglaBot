@@ -1,40 +1,45 @@
-"""Per-call orchestrator for one outbound confirmation call.
+"""Audio transport for one call: Twilio Media Streams (or the browser test console).
 
-One ``ConfirmationCallBridge`` owns one Twilio Media Stream:
+One ``CallBridge`` owns one media websocket and plugs it into a
+:class:`~app.voice.agent.CallAgent`:
 
-    Twilio μ-law ──▶ TranscriptionStream (server VAD, gpt-4o-mini-transcribe)
+    caller μ-law ──▶ TranscriptionStream (server VAD, gpt-4o-mini-transcribe)
                           │ completed caller turns
                           ▼
-                     ChatLLM (gpt-5.4-mini + flow tools) ──▶ CallTools
-                          │ text / verbatim lines
+                     CallAgent (flow + tools + gpt-5.4-mini)
+                          │ lines to speak
                           ▼
-                     AzureSpeechTTS (μ-law 8 kHz, LRU-cached) ──▶ Twilio
+                     AzureSpeechTTS (μ-law 8 kHz, LRU-cached) ──▶ caller
+
+The browser test console speaks the same wire protocol as Twilio (``start`` /
+``media`` / ``mark`` / ``clear`` / ``stop``), so a test call exercises exactly
+the production path; in that mode the bridge also sends ``transcript`` and
+``state`` events for the console to show.
 
 Turn design
 -----------
 * **Speaking** is serialized through one speaker task fed by a queue of
-  ``_Utterance`` objects. Text is split into sentences, each sentence is
-  synthesized (two in flight) and paced to Twilio in 20 ms frames ~0.6 s ahead
-  of real time, so a ``clear`` on barge-in cuts the line within half a second.
-  A Twilio ``mark`` after the last frame tells us when the caller actually
-  finished hearing the line — that drives the transcript, the silence watchdog
-  and the post-goodbye hangup.
+  ``_Utterance`` objects. Text is cut into TTS units, synthesized (two in
+  flight) and paced to the caller in 20 ms frames ~0.6 s ahead of real time, so
+  a ``clear`` on barge-in cuts the line within half a second. A ``mark`` after
+  the last frame tells us when the caller actually finished hearing the line —
+  that drives the transcript, the silence watchdog and the post-goodbye hangup.
 * **Hearing** is half-duplex while the agent speaks: only *sustained* loud
   caller audio (a real interruption) reaches the STT, and that same crossing
   interrupts playback. Scripted lines (greeting, closings) are protected.
 * **Caller turns** arrive as ``completed`` STT events, are merged over a short
-  window, filtered against echo / prompt echo / noise, and answered one at a
-  time through the model ↔ tools loop.
-* **Silence** is two-strike: after ``merchant.silence_hangup_secs`` of idle the
-  agent asks whether the caller can hear it; the same again and the call is
-  settled as ``auto_dropped`` (order → ``no_answer``, callable again).
+  window (longer on steps that expect a long answer — an address, a phone
+  number), filtered against echo / prompt echo / noise, and answered one at a
+  time by the agent.
+* **Silence** is two-strike: after ``silence_hangup_secs`` of idle the agent
+  asks whether the caller can hear it; the same again and the call is settled
+  as ``auto_dropped`` (record → ``no_answer``, callable again).
 """
 
 from __future__ import annotations
 
 import asyncio
 import base64
-import json
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -44,10 +49,12 @@ import structlog
 from fastapi import WebSocket, WebSocketDisconnect
 
 from app.core.config import get_settings
+from app.core.regions import region_of
 from app.flows import hearing
-from app.flows.base import OUTCOME_AUTO_DROPPED, OUTCOME_DIVERTED, OUTCOME_UNCLEAR, STAGE_ADDRESS, STAGE_DECISION, STAGE_DONE, STAGE_IDENTITY, STAGE_KNOWS_PERSON, STAGE_RELAY, STAGE_WRONG_NUMBER, Flow
-from app.flows.ecommerce import DEFAULT_FLOW
-from app.flows.runtime import FlowRuntime
+from app.flows.base import OUTCOME_AUTO_DROPPED, OUTCOME_DIVERTED, OUTCOME_UNCLEAR, Flow
+from app.flows.context import DIRECTION_INBOUND, DIRECTION_OUTBOUND, CallContext
+from app.voice import prepared
+from app.voice.agent import CallAgent
 from app.voice.audio import (
     FRAME_BYTES,
     FRAME_SECONDS,
@@ -59,13 +66,12 @@ from app.voice.audio import (
     speech_units,
     trim_ulaw_silence,
 )
-from app.voice.languages import detect_language, normalize_supported, phrase
-from app.voice.llm import ChatLLM, LLMReply
-from app.voice.prompts import build_system_prompt, transcription_prompt
-from app.voice import prepared
+from app.voice.languages import ack_lines, normalize_supported, phrase
+from app.voice.llm import ChatLLM
+from app.voice.prompts import transcription_prompt
 from app.voice.stt import STTEvent, TranscriptionStream
-from app.voice.tools import SAVE_DETAILS, CallStore, CallTools, ToolResult
-from app.voice.tts import TTSError, get_tts, normalize_persona
+from app.voice.tools import CallStore
+from app.voice.tts import TTSError, get_tts, normalize_persona, voice_for
 
 logger = structlog.get_logger(__name__)
 
@@ -73,8 +79,8 @@ logger = structlog.get_logger(__name__)
 PLAYOUT_LEAD_SECONDS = 0.6
 # Back-to-back ``completed`` STT events inside this window are one caller turn.
 TURN_MERGE_SECONDS = 0.4
-# Max model ↔ tool hops per caller turn.
-MAX_TOOL_HOPS = 6
+# ...and on steps that expect a long answer (address, phone number, problem).
+LONG_TURN_MERGE_SECONDS = 1.1
 # Persist the transcript every N caller turns (and always at the end).
 TRANSCRIPT_SAVE_EVERY = 3
 
@@ -91,18 +97,22 @@ class _Utterance:
     done: asyncio.Event = field(default_factory=asyncio.Event)
 
 
-class ConfirmationCallBridge:
+class CallBridge:
     def __init__(
         self,
         websocket: WebSocket,
         *,
-        order: Any,
         merchant: Any,
         call_log_id: str,
         stream_sid: str | None,
+        order: Any | None = None,
         call_sid: str | None = None,
         store: CallStore | None = None,
         flow: Flow | None = None,
+        ctx: CallContext | None = None,
+        direction: str = DIRECTION_OUTBOUND,
+        caller_number: str = "",
+        web: bool = False,
     ) -> None:
         self.websocket = websocket
         self.settings = get_settings()
@@ -111,34 +121,50 @@ class ConfirmationCallBridge:
         self.call_log_id = str(call_log_id)
         self.stream_sid = stream_sid
         self.call_sid = call_sid or ""
-        self.flow = flow or DEFAULT_FLOW
+        self.web = web
+        self.direction = direction
+        if ctx is None:
+            ctx = CallContext(merchant=merchant, record=order, direction=direction, caller_number=caller_number, test=web)
+        self.ctx = ctx
+        if flow is None:
+            from app.verticals import flow_for
+
+            flow = flow_for(merchant, ctx.direction)
+        self.flow = flow
         if store is None:
             from app.services.call_service import DbCallStore
 
-            store = DbCallStore(order_id=str(getattr(order, "id", "")), call_log_id=self.call_log_id)
+            store = DbCallStore(order_id=str(getattr(order, "id", "") or ""), call_log_id=self.call_log_id, merchant_id=str(getattr(merchant, "id", "") or ""))
         self.store = store
 
         # --- language / voice ---
         self.primary_language = normalize_supported(getattr(merchant, "language", None), [])[0]
-        self.supported_languages = normalize_supported(self.primary_language, getattr(merchant, "supported_languages", None))
+        # The account's language is THE call language: no per-turn auto-detect
+        # (one mis-transcribed line used to flip a Bangla call to English).
+        self.supported_languages = [self.primary_language]
         self.active_language = self.primary_language
         self.persona = normalize_persona(getattr(merchant, "voice_persona", None) or self.settings.tts_voice_persona)
+        self.voice = voice_for(self.persona, self.primary_language, region_of(merchant).accent)
         self._transcription_prompt = transcription_prompt(self.supported_languages)
-        self._transcription_language: str | None = self.supported_languages[0] if len(self.supported_languages) == 1 else None
+        self._transcription_language: str | None = self.primary_language
 
         # --- conversation ---
-        self.runtime = FlowRuntime(self.flow, order, merchant, language=self.primary_language, on_directive=self._on_directive)
-        self.tools = CallTools(self.runtime, self.store, support_phone=str(getattr(merchant, "support_phone", "") or ""))
-        self.messages: list[dict[str, Any]] = []
-        # Node directives raised while a tool runs; appended only AFTER the tool
-        # reply, because Chat Completions requires the tool message to directly
-        # follow the assistant message that called it.
-        self._pending_directives: list[str] = []
-        self.current_tools: list[dict[str, Any]] = self.tools.schemas()
+        # Transport state the agent reads/writes (Speaker protocol).
+        self.closed = False
+        self.closing = False
+        self.assistant_speaking = False
+        self.agent = CallAgent(
+            flow=self.flow,
+            ctx=self.ctx,
+            store=self.store,
+            speaker=self,
+            language=self.primary_language,
+            settings=self.settings,
+            call_log_id=self.call_log_id,
+            support_phone=str(getattr(merchant, "support_phone", "") or ""),
+        )
         self.transcript_lines: list[tuple[str, str]] = []
-        self._last_user_text = ""
         self._recent_agent_lines: deque[tuple[str, float]] = deque(maxlen=8)
-        self._turn_counter = 0
         self._transcript_saved_turns = 0
         self._turn_started_at = 0.0
         self._turn_first_audio_logged = True
@@ -154,7 +180,6 @@ class ConfirmationCallBridge:
         self._speech_queue: asyncio.Queue[_Utterance] = asyncio.Queue()
         self._speaker_task: asyncio.Task[None] | None = None
         self._current_utterance: _Utterance | None = None
-        self.assistant_speaking = False
         self._barge_in_allowed = True
         self._assistant_turn_started_at = 0.0
         self._playout_end = 0.0
@@ -178,11 +203,9 @@ class ConfirmationCallBridge:
         self.last_voice_activity_at = self.started_at
         self._silence_counting_paused_until = 0.0
         self._silence_strikes = 0
-        self._closing = False
         self._hangup_scheduled = False
         self._goodbye_hangup_delay_seconds = 8.0
         self._goodbye_playback_tail_seconds = 1.5
-        self.closed = False
         self._closed_by_agent = False
         self._finalized = False
 
@@ -190,19 +213,36 @@ class ConfirmationCallBridge:
         self._stt: TranscriptionStream | None = None
         self._llm: ChatLLM | None = None
 
+    # ------------------------------------------------------------------ agent views
+    @property
+    def runtime(self):
+        return self.agent.runtime
+
+    @property
+    def tools(self):
+        return self.agent.tools
+
+    @property
+    def messages(self) -> list[dict[str, Any]]:
+        return self.agent.messages
+
+    @property
+    def outcome(self) -> str:
+        return self.agent.outcome
+
     # ------------------------------------------------------------------ limits
     @property
     def max_call_seconds(self) -> int:
         configured = int(getattr(self.merchant, "max_call_seconds", 0) or 0)
-        return configured if configured > 0 else int(self.settings.voice_max_call_seconds)
+        if configured > 0:
+            return configured
+        if self.ctx.direction == DIRECTION_INBOUND:
+            return int(self.settings.voice_max_inbound_call_seconds)
+        return int(self.settings.voice_max_call_seconds)
 
     @property
     def silence_seconds(self) -> int:
         return max(3, int(getattr(self.merchant, "silence_hangup_secs", 0) or 10))
-
-    @property
-    def outcome(self) -> str:
-        return self.tools.outcome
 
     # ------------------------------------------------------------------ bootstrap
     async def run(self) -> None:
@@ -217,23 +257,36 @@ class ConfirmationCallBridge:
                 return
             tasks: list[asyncio.Task[None]] = []
             try:
-                self._configure()
+                self.agent.settings = self.settings
+                self._refresh_prepared()
+                opening = self.agent.configure()
                 self._llm = ChatLLM(
                     api_key=self.settings.openai_api_key,
                     model=self.settings.openai_llm_model,
                     reasoning_effort=self.settings.openai_llm_reasoning_effort,
                     max_output_tokens=self.settings.openai_llm_max_output_tokens,
+                    prompt_cache_key=f"{self.flow.key}:{getattr(self.merchant, 'id', '')}",
+                    prompt_cache_retention=self.settings.openai_prompt_cache_retention,
                 )
-                self._stt = self._new_stt()
-                await self._stt.connect()
-                asyncio.create_task(self._warm_tts_cache())
-                if self.settings.voice_hangup_on_forwarded and self.call_sid:
-                    asyncio.create_task(self._check_diverted())
+                self.agent.llm = self._llm
+                # Greet FIRST — the opening is already in the TTS cache — and open the
+                # transcription socket while it plays. The caller must hear a voice
+                # within a second of answering; nothing else is allowed in front of it.
+                self._turn_started_at = time.monotonic()
+                self._turn_first_audio_logged = False
                 self._speaker_task = asyncio.create_task(self._speaker_loop())
-                opening = f"{self.runtime.greeting()} {self.runtime.opening_question()}"
-                self.speak(opening, allow_barge_in=False, message_ref=self.messages[-1] if self.messages and self.messages[-1]["role"] == "assistant" else None)
+                self.speak(opening, allow_barge_in=False, message_ref=self.messages[-1])
+                twilio_task = asyncio.create_task(self._twilio_loop())
+                self._stt = self._new_stt()
+                stt_connect = asyncio.create_task(self._stt.connect())
+                asyncio.create_task(self._warm_tts_cache())
+                if self.settings.voice_hangup_on_forwarded and self.call_sid and self.ctx.direction == DIRECTION_OUTBOUND:
+                    asyncio.create_task(self._check_diverted())
+                await stt_connect
+                logger.info("bridge_stt_connected", call_log_id=self.call_log_id, ms=int((time.monotonic() - self._turn_started_at) * 1000))
+                await self._emit_state()
                 tasks = [
-                    asyncio.create_task(self._twilio_loop()),
+                    twilio_task,
                     asyncio.create_task(self._stt_loop()),
                     asyncio.create_task(self._watchdog()),
                 ]
@@ -252,42 +305,49 @@ class ConfirmationCallBridge:
         finally:
             await self._teardown()
 
-    def _configure(self) -> None:
-        directive = self.runtime.initial_directive()
-        system = build_system_prompt(
-            self.order, self.merchant, self.flow, language=self.primary_language, initial_directive=directive
-        )
-        self.messages = [{"role": "system", "content": system}]
-        # The greeting + first question are spoken by the bridge; the model sees them as its own words.
-        self.messages.append({"role": "assistant", "content": f"{self.runtime.greeting()} {self.runtime.opening_question()}"})
-
-    def _on_directive(self, directive: str) -> None:
-        if self.messages:
-            self._pending_directives.append(directive)
-
-    def _flush_directives(self) -> None:
-        for directive in self._pending_directives:
-            self.messages.append({"role": "system", "content": directive})
-        self._pending_directives.clear()
+    def _refresh_prepared(self) -> None:
+        """Lines composed while the phone rang (outbound) — picked up as soon as they exist."""
+        record_id = str(getattr(self.order, "id", "") or "")
+        if not record_id:
+            return
+        line = prepared.get_decision_line(record_id, self.primary_language)
+        if line:
+            self.ctx.prepared["decision"] = line
 
     def _new_stt(self) -> TranscriptionStream:
         return TranscriptionStream(
             api_key=str(self.settings.openai_api_key or ""),
             model=self.settings.openai_transcription_model,
             language=self._transcription_language,
-            prompt=self._transcription_prompt,
+            prompt=self._stt_prompt(),
             vad_threshold=self.settings.stt_vad_threshold,
             vad_prefix_padding_ms=self.settings.stt_vad_prefix_padding_ms,
             vad_silence_duration_ms=self.settings.stt_vad_silence_duration_ms,
             noise_reduction=self.settings.openai_noise_reduction,
         )
 
+    def _stt_prompt(self) -> str:
+        """The generic answer vocabulary plus THIS call's proper nouns.
+
+        Names the transcriber has seen in the prompt come back spelled the way
+        the business wrote them (doctor names, areas, products). The prompt-echo
+        guard keeps using the generic part only, so a caller who actually says a
+        name is never mistaken for the transcriber echoing its hint.
+        """
+        parts = [self._transcription_prompt]
+        stop = "।" if self.primary_language == "bn" else "."
+        for hint in self.flow.transcription_hints(self.ctx):
+            value = " ".join(str(hint or "").split())[:120]
+            if value and value not in parts:
+                parts.append(f"{value}{stop}")
+        return " ".join(parts)[:900].strip()
+
     async def _warm_tts_cache(self) -> None:
         try:
             tts = get_tts()
             for language in self.supported_languages:
-                lines = sentence_units(self.flow.prefetch_lines(self.order, self.merchant, language))
-                count = await tts.warm(lines, language=language, persona=self.persona)
+                lines = list(self.flow.prefetch_lines(self.ctx, language)) + list(ack_lines(language))
+                count = await tts.warm(sentence_units(lines), language=language, persona=self.persona, voice=self.voice)
                 if count:
                     await logger.ainfo("tts_cache_warmed", call_log_id=self.call_log_id, language=language, synthesized=count)
         except Exception as exc:  # noqa: BLE001 — warming is an optimization only
@@ -298,9 +358,8 @@ class ConfirmationCallBridge:
 
         A rejected or busy callee is often forwarded by the network to a voicemail
         or "call back" service that answers as if it were a person; Twilio marks
-        such calls with ``forwarded_from``. Talking to it wastes minutes and can
-        make the customer's phone ring again, so the call is dropped right away
-        and the order goes back to ``no_answer``.
+        such calls with ``forwarded_from``. Talking to it wastes minutes, so the
+        call is dropped right away and the record goes back to ``no_answer``.
         """
         from app.services.call_service import fetch_call_details
 
@@ -314,10 +373,11 @@ class ConfirmationCallBridge:
             return
         # Some carriers/Twilio stamp forwarded_from with the dialed number itself on
         # ordinary answered calls; only a forward to a DIFFERENT number is a divert.
-        from app.services.call_service import normalize_bd_phone
+        from app.core.regions import normalize_phone
 
-        dialed = normalize_bd_phone(str(getattr(self.order, "customer_phone", "") or ""))
-        if not dialed or normalize_bd_phone(forwarded) == dialed:
+        region = region_of(self.merchant)
+        dialed = normalize_phone(str(getattr(self.order, "customer_phone", "") or ""), region)
+        if not dialed or normalize_phone(forwarded, region) == dialed:
             return
         await logger.ainfo(
             "call_diverted_hangup",
@@ -325,9 +385,9 @@ class ConfirmationCallBridge:
             forwarded_from=forwarded,
             answered_by=details.get("answered_by"),
         )
-        self._closing = True
+        self.closing = True
         await self._interrupt_playback("diverted")
-        await self.tools.abandon(OUTCOME_DIVERTED)
+        await self.agent.abandon(OUTCOME_DIVERTED)
         await self._safe_close()
 
     async def _teardown(self) -> None:
@@ -346,32 +406,46 @@ class ConfirmationCallBridge:
             return
         self._finalized = True
         try:
+            if not self.outcome and self.ctx.direction == DIRECTION_INBOUND:
+                # The caller hung up first: keep what they told us when the flow can
+                # use it (a partial lead), otherwise it was an enquiry.
+                await self.agent.tools.finish_inbound()
             await self._persist_transcript(force=True)
-            counters = {"tts_chars": self.tts_chars, "tts_cache_hits": self.tts_cache_hits}
+            counters = {
+                "tts_chars": self.tts_chars,
+                "tts_cache_hits": self.tts_cache_hits,
+                "duration_secs": int(time.monotonic() - self.started_at),
+            }
             if self._llm is not None:
                 counters["llm_prompt_tokens"] = int(self._llm.prompt_tokens)
                 counters["llm_completion_tokens"] = int(self._llm.completion_tokens)
+                counters["llm_cached_tokens"] = int(self._llm.cached_prompt_tokens)
             await self.store.save_usage(**counters)
+            notify = getattr(self.store, "notify_finished", None)
+            if notify is not None:
+                await notify()
         except Exception as exc:  # noqa: BLE001
             await logger.awarning("bridge_finalize_failed", call_log_id=self.call_log_id, error=str(exc))
         await logger.ainfo(
-            "confirmation_call_finished",
+            "call_finished",
             call_log_id=self.call_log_id,
+            flow=self.flow.key,
             outcome=self.outcome,
             final_node=self.runtime.current_node,
             duration_seconds=int(time.monotonic() - self.started_at),
-            turns=self._turn_counter,
+            turns=self.agent.turns,
+            fast_turns=self.agent.fast_turns,
             llm=self._llm.stats() if self._llm is not None else {},
         )
 
-    # ------------------------------------------------------------------ Twilio in
+    # ------------------------------------------------------------------ media in
     async def _twilio_loop(self) -> None:
         while not self.closed:
             try:
                 message = await self.websocket.receive_json()
             except (WebSocketDisconnect, RuntimeError) as exc:
                 if not self.closed:
-                    await logger.ainfo("twilio_media_disconnected", call_log_id=self.call_log_id, detail=str(exc)[:120])
+                    await logger.ainfo("media_disconnected", call_log_id=self.call_log_id, detail=str(exc)[:120])
                 self.closed = True
                 if self._stt is not None:
                     await self._stt.close()
@@ -491,7 +565,7 @@ class ConfirmationCallBridge:
         if reason:
             await logger.ainfo(reason, call_log_id=self.call_log_id, transcript_preview=text[:160])
             return
-        if self._closing:
+        if self.closing:
             await logger.ainfo("ignored_post_closing_transcript", call_log_id=self.call_log_id, transcript_preview=text[:160])
             return
         self._queue_user_turn(text)
@@ -508,6 +582,10 @@ class ConfirmationCallBridge:
         return None
 
     # ------------------------------------------------------------------ caller turns
+    def _merge_window(self) -> float:
+        hint = self.flow.stage_hint(self.runtime.stage) or {}
+        return LONG_TURN_MERGE_SECONDS if hint.get("long_answer") else TURN_MERGE_SECONDS
+
     def _queue_user_turn(self, text: str) -> None:
         self._pending_user_turn_text = " ".join(f"{self._pending_user_turn_text} {text}".split())
         self._pending_user_turn_seq += 1
@@ -518,7 +596,7 @@ class ConfirmationCallBridge:
 
     async def _flush_user_turn_after_delay(self, seq: int) -> None:
         try:
-            await asyncio.sleep(TURN_MERGE_SECONDS)
+            await asyncio.sleep(self._merge_window())
         except asyncio.CancelledError:
             return
         if seq != self._pending_user_turn_seq or self.closed:
@@ -535,24 +613,12 @@ class ConfirmationCallBridge:
         self._submit_turn(text)
 
     async def _record_user_transcript(self, text: str) -> None:
-        self._last_user_text = text
-        self._update_active_language(text)
         self._silence_strikes = 0
         now = time.monotonic()
         self.last_customer_audio_at = now
         self.last_voice_activity_at = now
         self.transcript_lines.append(("Customer", text))
-
-    def _update_active_language(self, caller_text: str) -> None:
-        if len(self.supported_languages) < 2:
-            return
-        detected = detect_language(caller_text, supported=self.supported_languages)
-        if not detected or detected == self.active_language:
-            return
-        previous = self.active_language
-        self.active_language = detected
-        self.runtime.set_language(detected)
-        logger.info("caller_language_switched", call_log_id=self.call_log_id, from_language=previous, to_language=detected)
+        await self._emit({"event": "transcript", "role": "caller", "text": text})
 
     def _submit_turn(self, text: str) -> None:
         self._turn_backlog = " ".join(f"{self._turn_backlog} {text}".split())
@@ -564,202 +630,22 @@ class ConfirmationCallBridge:
         return bool(self._agent_turn_task and not self._agent_turn_task.done())
 
     async def _drain_turns(self) -> None:
-        while not self.closed and self._turn_backlog and not self._closing:
+        while not self.closed and self._turn_backlog and not self.closing:
             text = self._turn_backlog
             self._turn_backlog = ""
+            self._turn_started_at = time.monotonic()
+            self._turn_first_audio_logged = False
+            self._refresh_prepared()
             try:
-                await self._agent_turn(text)
+                await self.agent.handle_turn(text)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001 — the line must never go dead
                 await logger.awarning("bridge_agent_turn_failed", call_log_id=self.call_log_id, error=str(exc), error_type=type(exc).__name__)
-                if not self.closed and not self._closing:
+                if not self.closed and not self.closing:
                     self.speak(phrase("recovery", self.active_language))
+            await self._emit_state()
             await self._persist_transcript()
-
-    # ------------------------------------------------------------------ agent turn
-    async def _agent_turn(self, text: str) -> None:
-        llm = self._llm
-        if llm is None or self.closed:
-            return
-        self._turn_counter += 1
-        self._turn_started_at = time.monotonic()
-        self._turn_first_audio_logged = False
-        if await self._fast_path(text):
-            return
-        self._flush_directives()
-        self.messages.append({"role": "user", "content": text})
-        if self.settings.voice_instant_ack and not self.assistant_speaking and not self._closing:
-            # One cached word right away; the real reply queues behind it — but not
-            # a "হ্যাঁ" on top of a caller who just said no.
-            labels = hearing.classify(text)
-            if not labels & {"no", "not_me", "wrong_number", "later", "repeat"}:
-                self.speak(phrase("ack", self.active_language))
-        for _hop in range(MAX_TOOL_HOPS):
-            if self.closed or self._closing:
-                return
-            llm_started = time.monotonic()
-            reply = await llm.complete(self.messages, tools=self.current_tools, temperature=self.settings.openai_llm_temperature)
-            logger.info(
-                "turn_llm_reply",
-                call_log_id=self.call_log_id,
-                hop=_hop,
-                ms=int((time.monotonic() - llm_started) * 1000),
-                tool_calls=[c.name for c in reply.tool_calls],
-            )
-            if reply.tool_calls:
-                self.messages.append(self._assistant_tool_message(reply))
-                stop = False
-                for call in reply.tool_calls:
-                    result = await self._run_tool_call(call.id, call.name, call.arguments)
-                    stop = stop or result.stop
-                if stop or self.closed or self._closing:
-                    return
-                continue
-            content = clean_spoken_text(reply.content)
-            if not content:
-                await logger.ainfo("bridge_empty_reply", call_log_id=self.call_log_id, finish_reason=reply.finish_reason)
-                line = phrase("recovery", self.active_language)
-                self.messages.append({"role": "assistant", "content": line})
-                self.speak(line)
-                return
-            message = reply.assistant_message or {"role": "assistant", "content": content}
-            message["content"] = content
-            self.messages.append(message)
-            self.speak(content, message_ref=message)
-            return
-        await logger.awarning("bridge_tool_hop_limit", call_log_id=self.call_log_id, hops=MAX_TOOL_HOPS)
-        self.speak(phrase("recovery", self.active_language))
-
-
-    async def _fast_path(self, text: str) -> bool:
-        """Answer scripted yes/no steps without the model.
-
-        The identity question and the address check have backend-owned next
-        lines, so when the caller's words are unambiguous the slot is saved and
-        the next line is spoken straight from the TTS cache — no tool round-trip,
-        no narration round-trip. Anything less than a clean answer, and any
-        stage the model has to phrase itself without a prepared line, goes the
-        normal way.
-        """
-        stage = self.runtime.stage
-        if stage not in (STAGE_IDENTITY, STAGE_KNOWS_PERSON, STAGE_ADDRESS) or self._closing:
-            return False
-        labels = hearing.classify(text)
-        if not labels or "repeat" in labels or "later" in labels or hearing.looks_like_question(text):
-            return False
-        identity_talk = bool(labels & {"not_me", "knows", "wrong_number"})
-        fields: dict[str, Any] | None = None
-        if stage == STAGE_IDENTITY:
-            if "is_me" in labels and not identity_talk:
-                fields = {"identity_confirmed": True}
-            elif "wrong_number" in labels:
-                fields = {"identity_confirmed": False, "wrong_person": True}
-            elif "no" in labels and "is_me" not in labels and hearing.is_pure_answer(text):
-                # "না" alone: not them — ask whether they know the customer.
-                fields = {"identity_confirmed": False}
-        elif stage == STAGE_KNOWS_PERSON:
-            if "wrong_number" in labels or ("no" in labels and "knows" not in labels):
-                fields = {"knows_customer": False}
-            elif "knows" in labels or ("yes" in labels and hearing.is_pure_answer(text)):
-                fields = {"knows_customer": True}
-        elif stage == STAGE_ADDRESS and hearing.is_pure_answer(text) and not identity_talk:
-            if "yes" in labels:
-                fields = {"address_correct": True}
-            elif "no" in labels:
-                fields = {"address_correct": False}
-        if not fields:
-            return False
-        # Decide what would be spoken BEFORE touching the runtime, so a missing
-        # prepared line leaves the flow untouched for the model path.
-        next_stage = self.flow.next_stage({**self.runtime.slots, **fields}, self.order, self.merchant)
-        instruction = self.flow.instruction(next_stage, {**self.runtime.slots, **fields}, self.order, self.merchant, self.active_language)
-        line: str | None = None
-        close_after = False
-        saved = False
-        if next_stage in (STAGE_RELAY, STAGE_WRONG_NUMBER):
-            # Relay / wrong number: save_details settles the outcome, speaks the
-            # closing line and hangs up (see CallTools._save_details).
-            result = await self.tools.execute(SAVE_DETAILS, fields, caller_text=text)
-            if not result.say:
-                return False
-            self.messages.append({"role": "user", "content": text})
-            self._flush_directives()
-            message = {"role": "assistant", "content": result.say}
-            self.messages.append(message)
-            logger.info("turn_fast_path", call_log_id=self.call_log_id, stage=stage, next_stage=self.runtime.stage, saved=sorted(fields), closing=True)
-            self._closing = True
-            self.speak(result.say, message_ref=message, allow_barge_in=False, close_after=bool(result.hang_up))
-            return True
-        if next_stage == STAGE_DECISION:
-            line = prepared.get_decision_line(str(getattr(self.order, "id", "")), self.active_language)
-        elif next_stage == STAGE_DONE and self.tools.outcome and not self.tools.closing_spoken:
-            # Address confirmed after the yes: save it, then nothing is left but the goodbye.
-            self.runtime.save(fields)
-            saved = True
-            line = (await self.tools.closing_result()).say
-            close_after = True
-        elif instruction.verbatim and not instruction.end_call:
-            line = instruction.text
-        if not line:
-            return False
-        if not saved:
-            self.runtime.save(fields)
-        self.messages.append({"role": "user", "content": text})
-        self._flush_directives()
-        message = {"role": "assistant", "content": line}
-        self.messages.append(message)
-        logger.info(
-            "turn_fast_path",
-            call_log_id=self.call_log_id,
-            stage=stage,
-            next_stage=self.runtime.stage,
-            saved=sorted(fields),
-        )
-        if close_after:
-            self._closing = True
-        self.speak(line, message_ref=message, allow_barge_in=not close_after, close_after=close_after)
-        return True
-
-    @staticmethod
-    def _assistant_tool_message(reply: LLMReply) -> dict[str, Any]:
-        if reply.assistant_message:
-            return reply.assistant_message
-        return {
-            "role": "assistant",
-            "content": reply.content or None,
-            "tool_calls": [
-                {"id": call.id, "type": "function", "function": {"name": call.name, "arguments": call.arguments}}
-                for call in reply.tool_calls
-            ],
-        }
-
-    async def _run_tool_call(self, call_id: str, name: str, raw_args: str) -> ToolResult:
-        try:
-            result = await self.tools.execute(name, raw_args, caller_text=self._last_user_text)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            await logger.awarning("tool_execution_failed", call_log_id=self.call_log_id, tool_name=name, error=str(exc))
-            result = ToolResult(
-                payload={"ok": False, "error": "tool_failed", "instruction": "Briefly apologise and ask the customer to repeat their last answer."}
-            )
-        self.messages.append({"role": "tool", "tool_call_id": call_id, "content": json.dumps(result.payload, ensure_ascii=False, default=str)})
-        self._flush_directives()
-        if result.say:
-            self.messages.append({"role": "assistant", "content": result.say})
-            if result.hang_up or result.transfer_to:
-                self._closing = True
-            self.speak(
-                result.say,
-                allow_barge_in=not (result.hang_up or result.transfer_to),
-                close_after=bool(result.hang_up),
-                transfer_to=result.transfer_to,
-            )
-        elif result.hang_up:
-            self._closing = True
-            self._schedule_hangup(None)
-        return result
 
     # ------------------------------------------------------------------ audio out
     def speak(
@@ -782,6 +668,9 @@ class ConfirmationCallBridge:
         self._pause_silence_counting(3.0)
         self._speech_queue.put_nowait(utterance)
         return utterance
+
+    def schedule_hangup(self) -> None:
+        self._schedule_hangup(None)
 
     async def _speaker_loop(self) -> None:
         while not self.closed:
@@ -806,23 +695,21 @@ class ConfirmationCallBridge:
             tts = get_tts()
             try:
                 cache = getattr(tts, "cache", None)
-                if cache is not None and hasattr(tts, "cache_key"):
-                    from app.voice.tts import voice_for
-
-                    if cache.contains(tts.cache_key(text, voice=voice_for(self.persona, language))):
-                        self.tts_cache_hits += 1
+                if cache is not None and hasattr(tts, "cache_key") and cache.contains(tts.cache_key(text, voice=self.voice)):
+                    self.tts_cache_hits += 1
+                else:
+                    self.tts_chars += len(text)
             except Exception:  # noqa: BLE001 — stats only
                 pass
-            self.tts_chars += len(text)
             try:
-                return await tts.synthesize(text, language=language, persona=self.persona)
+                return await tts.synthesize(text, language=language, persona=self.persona, voice=self.voice)
             except TTSError as exc:
                 await logger.awarning("bridge_tts_failed", call_log_id=self.call_log_id, error=str(exc), preview=text[:80])
                 return b""
 
     async def _play_utterance(self, utterance: _Utterance) -> None:
         sentences = speech_units(utterance.text)
-        language = detect_language(utterance.text, supported=self.supported_languages) or self.active_language
+        language = self.active_language
         synth_tasks = [asyncio.create_task(self._synthesize(sentence, language)) for sentence in sentences]
         self._current_utterance = utterance
         self.assistant_speaking = True
@@ -870,7 +757,7 @@ class ConfirmationCallBridge:
             utterance.done.set()
 
     async def _stream_audio(self, audio: bytes, utterance: _Utterance) -> float:
-        """Send μ-law to Twilio in paced 20 ms frames. Returns the fraction sent."""
+        """Send μ-law to the caller in paced 20 ms frames. Returns the fraction sent."""
         if not self.stream_sid:
             return 0.0
         frames = [audio[i : i + FRAME_BYTES] for i in range(0, len(audio), FRAME_BYTES)]
@@ -945,20 +832,35 @@ class ConfirmationCallBridge:
         if self.transcript_lines and self.transcript_lines[-1] == ("Agent", text):
             return
         self.transcript_lines.append(("Agent", text))
+        if self.web:
+            asyncio.create_task(self._emit({"event": "transcript", "role": "agent", "text": text}))
 
     def transcript_text(self) -> str:
         return "\n".join(f"{role}: {text}" for role, text in self.transcript_lines)
 
     async def _persist_transcript(self, *, force: bool = False) -> None:
-        if not force and self._turn_counter - self._transcript_saved_turns < TRANSCRIPT_SAVE_EVERY:
+        if not force and self.agent.turns - self._transcript_saved_turns < TRANSCRIPT_SAVE_EVERY:
             return
         if not self.transcript_lines:
             return
-        self._transcript_saved_turns = self._turn_counter
+        self._transcript_saved_turns = self.agent.turns
         try:
             await self.store.save_transcript(self.transcript_text(), language=self.active_language, final_node=self.runtime.current_node)
         except Exception as exc:  # noqa: BLE001
             await logger.awarning("transcript_persist_failed", call_log_id=self.call_log_id, error=str(exc))
+
+    # ------------------------------------------------------------------ test console events
+    async def _emit(self, message: dict[str, Any]) -> None:
+        """Extra events for the browser test console (never sent to Twilio)."""
+        if not self.web or self.closed:
+            return
+        try:
+            await self.websocket.send_json(message)
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def _emit_state(self) -> None:
+        await self._emit({"event": "state", **self.agent.state()})
 
     # ------------------------------------------------------------------ watchdog / lifecycle
     def _pause_silence_counting(self, seconds: float) -> None:
@@ -981,10 +883,10 @@ class ConfirmationCallBridge:
             if self.closed:
                 return
             now = time.monotonic()
-            if now - self.started_at >= self.max_call_seconds and not self._closing:
+            if now - self.started_at >= self.max_call_seconds and not self.closing:
                 await self._close_with_outcome(OUTCOME_UNCLEAR, timeout=True)
                 return
-            if self._closing:
+            if self.closing:
                 # Never re-prompt after a goodbye; close if the hangup was lost.
                 if self._idle(now) and now - self.last_voice_activity_at >= self._goodbye_hangup_delay_seconds + 5.0:
                     await self._safe_close()
@@ -1005,8 +907,9 @@ class ConfirmationCallBridge:
             return
 
     async def _close_with_outcome(self, outcome: str, *, timeout: bool = False) -> None:
-        self._closing = True
-        line = await self.tools.settle(outcome)
+        self.closing = True
+        line = await self.agent.settle(outcome)
+        await self._emit_state()
         utterance = self.speak(line, allow_barge_in=False, close_after=True)
         if utterance is None:
             await self._safe_close()
@@ -1025,10 +928,11 @@ class ConfirmationCallBridge:
                 pass
         await asyncio.sleep(self._goodbye_playback_tail_seconds)
         if not self.closed:
+            await self._emit({"event": "hangup", **self.agent.state()})
             await self._safe_close()
 
     async def _transfer_call(self, number: str) -> None:
-        """Dial the merchant's support line once the transfer line has played."""
+        """Dial the business's support line once the transfer line has played."""
         await asyncio.sleep(0.3)
         try:
             ok = await self._dial_support(number)
@@ -1048,12 +952,12 @@ class ConfirmationCallBridge:
     async def _dial_support(self, number: str) -> bool:
         from app.services.call_service import redirect_call_to_human
 
-        if not self.call_sid:
+        if not self.call_sid or self.web:
             return False
-        return await redirect_call_to_human(self.call_sid, number)
+        return await redirect_call_to_human(self.call_sid, number, region_of(self.merchant))
 
     async def _end_twilio_call(self) -> None:
-        if not self.call_sid:
+        if not self.call_sid or self.web:
             return
         from app.services.call_service import complete_call
 
@@ -1075,3 +979,6 @@ class ConfirmationCallBridge:
             pass
         if end_twilio_call and not already_closed:
             await self._end_twilio_call()
+
+
+__all__ = ["CallBridge"]

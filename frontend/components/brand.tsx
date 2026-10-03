@@ -1,5 +1,7 @@
 import { PhoneCall } from "lucide-react";
 
+import { BRAND } from "@/lib/brand";
+
 /** Square icon mark used in headers. */
 export function BanglaBotMark({ compact = false }: { compact?: boolean }) {
   return (
@@ -14,10 +16,10 @@ export function BanglaBotMark({ compact = false }: { compact?: boolean }) {
 }
 
 /** Header wordmark with a surface subtitle. */
-export function BanglaBotBrand({ subtitle = "Order confirmation calls" }: { subtitle?: string }) {
+export function BanglaBotBrand({ subtitle = BRAND.product }: { subtitle?: string }) {
   return (
     <span className="hidden min-w-0 sm:block">
-      <span className="block truncate text-base font-bold leading-tight text-primary-dark">BanglaBot</span>
+      <span className="block truncate text-base font-bold leading-tight text-primary-dark">{BRAND.name}</span>
       <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>
     </span>
   );
@@ -29,7 +31,7 @@ export function BanglaBotWordmark({ className = "", inverted = false }: { classN
     <div className={`inline-flex items-center gap-3 ${className}`}>
       <BanglaBotMark />
       <span className={`text-3xl font-bold tracking-tight sm:text-4xl ${inverted ? "text-white" : "text-primary-dark"}`}>
-        BanglaBot
+        {BRAND.name}
       </span>
     </div>
   );

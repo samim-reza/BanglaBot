@@ -15,12 +15,13 @@ entries expire after :data:`TTL_SECONDS`.
 from __future__ import annotations
 
 import time
+from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
 
 from app.core.config import get_settings
-from app.voice.languages import normalize_language, normalize_supported, phrase
+from app.voice.languages import normalize_language, phrase
 
 logger = structlog.get_logger(__name__)
 
@@ -28,6 +29,25 @@ TTL_SECONDS = 30 * 60
 MAX_LINE_CHARS = 320
 
 _decision_lines: dict[tuple[str, str], tuple[str, float]] = {}
+
+
+@dataclass
+class CallSnapshot:
+    """Everything the media websocket needs the instant the call connects —
+    stored when the call is placed (outbound), answered (inbound) or opened
+    (browser test), so the greeting never waits on a database round-trip."""
+
+    merchant: Any
+    order: Any | None
+    ctx: Any | None = None
+    call_sid: str = ""
+    direction: str = "outbound"
+    web: bool = False
+    stamp: float = field(default_factory=time.monotonic)
+
+
+#: call_log_id -> snapshot
+_call_snapshots: dict[str, CallSnapshot] = {}
 
 
 def _get(obj: Any, name: str, default: Any = "") -> Any:
@@ -58,12 +78,38 @@ def get_decision_line(order_id: str, language: str) -> str | None:
     return line
 
 
+def put_call_snapshot(call_log_id: str, snapshot: CallSnapshot) -> None:
+    now = time.monotonic()
+    for key, entry in list(_call_snapshots.items()):
+        if now - entry.stamp > TTL_SECONDS:
+            _call_snapshots.pop(key, None)
+    _call_snapshots[str(call_log_id)] = snapshot
+
+
+def get_call_snapshot(call_log_id: str) -> CallSnapshot | None:
+    entry = _call_snapshots.get(str(call_log_id))
+    if entry is None or time.monotonic() - entry.stamp > TTL_SECONDS:
+        return None
+    return entry
+
+
+def pop_call_snapshot(call_log_id: str) -> CallSnapshot | None:
+    return _call_snapshots.pop(str(call_log_id), None)
+
+
 def clear() -> None:
     _decision_lines.clear()
+    _call_snapshots.clear()
 
 
-def fallback_decision_line(flow: Any, order: Any, language: str) -> str:
-    facts = flow.order_facts(order, language)
+def _ctx(order: Any, merchant: Any) -> Any:
+    from app.flows.context import CallContext
+
+    return CallContext(merchant=merchant, record=order)
+
+
+def fallback_decision_line(flow: Any, order: Any, language: str, merchant: Any = None) -> str:
+    facts = flow.order_facts(_ctx(order, merchant), language)
     return phrase("decision_fallback", language, items=facts["items"], amount=facts["amount"], cod=facts["cod"])
 
 
@@ -81,7 +127,7 @@ def _acceptable(line: str, language: str) -> bool:
 async def compose_decision_line(llm: Any, flow: Any, order: Any, merchant: Any, language: str) -> str:
     """Ask the model to phrase the confirmation question naturally from the order facts."""
     lang = normalize_language(language)
-    facts = flow.order_facts(order, lang)
+    facts = flow.order_facts(_ctx(order, merchant), lang)
     business = str(_get(merchant, "business_name", ""))
     if lang == "bn":
         system = (
@@ -107,21 +153,24 @@ async def compose_decision_line(llm: Any, flow: Any, order: Any, merchant: Any, 
     line = " ".join(str(getattr(reply, "content", "") or "").split()).strip("\"'“” ")
     if not _acceptable(line, lang):
         await logger.awarning("decision_line_rejected", language=lang, preview=line[:120])
-        return fallback_decision_line(flow, order, lang)
+        return fallback_decision_line(flow, order, lang, merchant)
     return line
 
 
 async def prepare_call_lines(order: Any, merchant: Any, *, flow: Any | None = None, llm: Any | None = None, tts: Any | None = None) -> dict[str, str]:
-    """Compose + cache-warm the confirmation question in every supported language."""
-    from app.flows.ecommerce import DEFAULT_FLOW
+    """Compose + cache-warm the confirmation question (flows that have one: e-commerce)."""
+    from app.core.regions import region_of
+    from app.verticals.ecommerce import DEFAULT_FLOW
     from app.voice.audio import sentence_units
     from app.voice.llm import ChatLLM
-    from app.voice.tts import get_tts, normalize_persona, tts_configured
+    from app.voice.tts import get_tts, normalize_persona, tts_configured, voice_for
 
     settings = get_settings()
     flow = flow or DEFAULT_FLOW
+    if not hasattr(flow, "order_facts"):
+        return {}
     order_id = str(_get(order, "id", ""))
-    languages = normalize_supported(_get(merchant, "language", None), _get(merchant, "supported_languages", []))
+    languages = [normalize_language(_get(merchant, "language", None))]  # one call language
     persona = normalize_persona(_get(merchant, "voice_persona", None) or settings.tts_voice_persona)
     own_llm = llm is None
     if own_llm:
@@ -143,12 +192,13 @@ async def prepare_call_lines(order: Any, merchant: Any, *, flow: Any | None = No
                 line = await compose_decision_line(llm, flow, order, merchant, language)
             except Exception as exc:  # noqa: BLE001 — preparation is an optimization only
                 await logger.awarning("decision_line_compose_failed", order_id=order_id, language=language, error=str(exc))
-                line = fallback_decision_line(flow, order, language)
+                line = fallback_decision_line(flow, order, language, merchant)
             put_decision_line(order_id, language, line)
             prepared[language] = line
             if tts is not None:
                 try:
-                    await tts.warm(sentence_units([line]), language=language, persona=persona)
+                    voice = voice_for(persona, language, region_of(merchant).accent)
+                    await tts.warm(sentence_units([line]), language=language, persona=persona, voice=voice)
                 except Exception as exc:  # noqa: BLE001
                     await logger.awarning("decision_line_warm_failed", order_id=order_id, language=language, error=str(exc))
             await logger.ainfo(

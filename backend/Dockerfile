@@ -22,4 +22,6 @@ RUN groupadd -g 10001 app && useradd -r -u 10001 -g app app \
 USER app
 
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Hosts like Render pass the port in $PORT; behind their HTTPS proxy, trust its
+# X-Forwarded-* headers so generated URLs are https.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]

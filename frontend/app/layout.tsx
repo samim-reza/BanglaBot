@@ -3,6 +3,7 @@ import { Noto_Sans_Bengali } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 
 import { AppToastProvider } from "@/components/app-toast";
+import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 const notoSansBengali = Noto_Sans_Bengali({
@@ -13,9 +14,12 @@ const notoSansBengali = Noto_Sans_Bengali({
 });
 
 export const metadata: Metadata = {
-  title: "BanglaBot | Order confirmation calls",
+  title: {
+    default: `${BRAND.name} | AI receptionist for phone and website chat`,
+    template: `%s | ${BRAND.name}`,
+  },
   description:
-    "BanglaBot calls your e-commerce customers in Bangla or English, confirms every order, and records the outcome so you only ship what people actually want.",
+    "Ready-made AI voice and chat agents for clinics, real estate agencies, home services and e-commerce. They answer every call 24/7, book straight into your records and call customers back.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

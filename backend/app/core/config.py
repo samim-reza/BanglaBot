@@ -29,7 +29,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "BanglaBot Order Confirmation"
+    app_name: str = "BanglaBot Voice Agents"
     environment: str = "development"
     frontend_origin: str = "http://localhost:3000"
     log_level: str = "INFO"
@@ -54,13 +54,18 @@ class Settings(BaseSettings):
     # --- OpenAI: streaming STT + the call brain ------------------------------
     openai_api_key: str | None = None
     openai_transcription_model: str = "gpt-4o-mini-transcribe"
-    openai_noise_reduction: str | None = "far_field"
+    # Phone handsets are close-talking microphones: "near_field" suppresses line
+    # noise without eating consonants the way the far-field profile does.
+    openai_noise_reduction: str | None = "near_field"
     # Chat Completions + function tools need reasoning_effort "none" on
     # gpt-5.4-mini (also the lowest-latency setting for a phone line).
     openai_llm_model: str = "gpt-5.4-mini"
     openai_llm_reasoning_effort: str | None = "none"
     openai_llm_max_output_tokens: int = 300
     openai_llm_temperature: float | None = None
+    # Extended prompt-cache retention ("24h") where the model supports it; empty =
+    # the default in-memory retention (minutes). Unsupported values are dropped.
+    openai_prompt_cache_retention: str | None = None
     # Server VAD for the transcription session (ms of trailing silence = end of turn).
     stt_vad_threshold: float = 0.5
     stt_vad_prefix_padding_ms: int = 300
@@ -97,6 +102,23 @@ class Settings(BaseSettings):
     # detection already handles voicemail.
     voice_hangup_on_forwarded: bool = False
     voice_max_call_seconds: int = 240
+    # Inbound calls (booking a doctor, a technician, a viewing) run longer.
+    voice_max_inbound_call_seconds: int = 480
+    # Record inbound calls too (Twilio recording, started when the stream connects).
+    voice_record_inbound: bool = True
+
+    # --- Bulk dialer ("Call all" + scheduled auto-call) --------------------------
+    # Calls a merchant may have live at once during a batch; the next order is
+    # dialed as soon as one settles. Also bounded by what one server can run.
+    bulk_call_max_concurrent: int = 3
+    # Orders already dialed this many times are left out of batches (manual
+    # calls are never limited).
+    bulk_call_max_attempts: int = 3
+    # Pause between two originations in a batch (Twilio rate-limits bursts).
+    bulk_call_gap_seconds: float = 1.5
+    # A scheduled auto-call found this far past its time (e.g. the server was
+    # down) is skipped instead of dialing everyone at an unexpected hour.
+    auto_call_max_late_minutes: int = 120
 
     # --- Twilio ------------------------------------------------------------------
     twilio_account_sid: str | None = None
@@ -118,7 +140,43 @@ class Settings(BaseSettings):
     smtp_from_email: str | None = None
     smtp_from_name: str = "BanglaBot"
 
-    @field_validator("openai_api_key", "azure_speech_key", "public_base_url", "twilio_from_number", mode="before")
+    # --- Inbound calls --------------------------------------------------------------
+    # Account (username) that answers calls to a number no account has claimed —
+    # handy in development with a single Twilio number. Empty = reject such calls.
+    default_inbound_username: str | None = None
+    # On startup, point TWILIO_FROM_NUMBER's voice webhook at {PUBLIC_BASE_URL}/twilio/inbound
+    # (useful with ngrok, whose URL changes every run). Changes your Twilio number config.
+    twilio_auto_configure_inbound: bool = False
+    # Account whose website-chat widget the public website embeds as a live demo.
+    demo_widget_username: str | None = "clinic"
+
+    # --- SMS (Twilio Messaging) ------------------------------------------------------
+    # Global switch; each account also has its own SMS settings.
+    sms_enabled: bool = True
+    # A Messaging Service SID (MG…) is preferred (sender pools, US A2P 10DLC);
+    # otherwise SMS go out from TWILIO_SMS_FROM, falling back to TWILIO_FROM_NUMBER.
+    twilio_messaging_service_sid: str | None = None
+    twilio_sms_from: str | None = None
+    # How often the reminder sender looks for upcoming appointments / visits.
+    sms_reminder_interval_seconds: int = 300
+
+    # --- Calendar sync -----------------------------------------------------------------
+    # Google Calendar two-way sync (optional): an OAuth "Web application" client from
+    # Google Cloud Console with the redirect URI below registered.
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    # Default: {PUBLIC_BASE_URL or http://localhost:8000}/api/integrations/google/callback
+    google_redirect_uri: str | None = None
+    # How long imported busy times (iCal links / Google) are reused before refetching.
+    calendar_busy_cache_seconds: int = 300
+    # Secret used to encrypt integration credentials at rest (any long random string).
+    encryption_secret: str | None = None
+
+    @field_validator(
+        "openai_api_key", "azure_speech_key", "public_base_url", "twilio_from_number", "default_inbound_username",
+        "openai_prompt_cache_retention", "twilio_messaging_service_sid", "twilio_sms_from", "google_client_id",
+        "google_client_secret", "google_redirect_uri", "encryption_secret", mode="before",
+    )
     @classmethod
     def blank_string_as_none(cls, value):
         if isinstance(value, str):

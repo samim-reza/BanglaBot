@@ -1,6 +1,7 @@
 from app.core.config import get_settings
 from app.models import OrderStatus
-from app.services.call_service import _settle_from_call_status, is_machine_answer, normalize_bd_phone
+from app.core.regions import normalize_phone
+from app.services.call_service import _settle_from_call_status, is_machine_answer
 from app.voice import twiml
 
 
@@ -14,13 +15,17 @@ class _Log:
         self.outcome = outcome
 
 
-def test_normalize_bd_phone():
-    assert normalize_bd_phone("01712345678") == "+8801712345678"
-    assert normalize_bd_phone("017-1234 5678") == "+8801712345678"
-    assert normalize_bd_phone("8801712345678") == "+8801712345678"
-    assert normalize_bd_phone("+8801712345678") == "+8801712345678"
-    assert normalize_bd_phone("+1 (415) 555-0100") == "+14155550100"
-    assert normalize_bd_phone("0044 20 7946 0958") == "+442079460958"
+def test_normalize_phone_per_region():
+    assert normalize_phone("01712345678", "BD") == "+8801712345678"
+    assert normalize_phone("017-1234 5678", "BD") == "+8801712345678"
+    assert normalize_phone("8801712345678", "BD") == "+8801712345678"
+    assert normalize_phone("+8801712345678", "BD") == "+8801712345678"
+    assert normalize_phone("+1 (415) 555-0100", "BD") == "+14155550100"
+    assert normalize_phone("0044 20 7946 0958", "BD") == "+442079460958"
+    assert normalize_phone("(415) 555-0100", "US") == "+14155550100"
+    assert normalize_phone("07700 900123", "GB") == "+447700900123"
+    assert normalize_phone("0412 345 678", "AU") == "+61412345678"
+    assert normalize_phone("14155550100", "INTL") == "+14155550100"
 
 
 def test_settle_from_call_status():
@@ -48,7 +53,7 @@ def test_settle_from_call_status():
 def test_stream_twiml_carries_signed_parameters(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "public_base_url", "https://example.ngrok-free.app")
-    body = twiml.stream_twiml(order_id="o1", call_log_id="c1")
+    body = twiml.stream_twiml(call_log_id="c1", order_id="o1")
     assert 'url="wss://example.ngrok-free.app/twilio/media"' in body
     assert '<Parameter name="order_id" value="o1"/>' in body
     assert '<Parameter name="media_token" value="' in body

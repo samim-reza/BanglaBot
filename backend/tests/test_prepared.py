@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.flows.ecommerce import DEFAULT_FLOW
+from app.verticals.ecommerce import DEFAULT_FLOW
 from app.voice import prepared
 
 
@@ -28,7 +28,7 @@ class FakeTTS:
     def __init__(self) -> None:
         self.warmed: list[tuple[str, str]] = []
 
-    async def warm(self, lines, *, language, persona) -> int:
+    async def warm(self, lines, *, language, persona, voice=None) -> int:
         self.warmed.extend((line, language) for line in lines)
         return len(self.warmed)
 
@@ -70,10 +70,10 @@ async def test_prepare_call_lines_stores_and_warms_every_language(order, merchan
     llm = FakeLLM("You ordered two shirts for 1,250 taka, cash on delivery. Shall I confirm the order?")
     tts = FakeTTS()
     result = await prepared.prepare_call_lines(order, merchant, llm=llm, tts=tts)
-    assert set(result) == {"bn", "en"}
+    assert set(result) == {"bn"}  # only the merchant's call language is prepared
     assert prepared.get_decision_line("o-1", "bn") == result["bn"]
-    assert prepared.get_decision_line("o-1", "en") == result["en"]
-    assert {lang for _, lang in tts.warmed} == {"bn", "en"}
+    assert prepared.get_decision_line("o-1", "en") is None
+    assert {lang for _, lang in tts.warmed} == {"bn"}
     assert not llm.closed  # a caller-supplied LLM is not closed by the helper
 
 
@@ -83,3 +83,12 @@ def test_store_expires_and_is_keyed_per_language():
     assert prepared.get_decision_line("o-2", "en") is None
     prepared._decision_lines[("o-2", "bn")] = ("প্রশ্ন?", -10**9)
     assert prepared.get_decision_line("o-2", "bn") is None
+
+
+def test_call_snapshot_round_trip(order, merchant):
+    prepared.put_call_snapshot("log-9", prepared.CallSnapshot(merchant=merchant, order=order, call_sid="CA9"))
+    snapshot = prepared.get_call_snapshot("log-9")
+    assert snapshot is not None and snapshot.order is order and snapshot.merchant is merchant and snapshot.call_sid == "CA9"
+    assert snapshot.direction == "outbound" and not snapshot.web
+    assert prepared.get_call_snapshot("other") is None
+    assert prepared.pop_call_snapshot("log-9") is snapshot and prepared.get_call_snapshot("log-9") is None

@@ -1,0 +1,14 @@
+# Automatic HTTPS (Let's Encrypt) for $DOMAIN.
+{$DOMAIN} {
+	encode gzip
+
+	# Twilio webhooks + the media-stream websocket, and the API, go straight to the backend.
+	@backend path /twilio/* /api/* /uploads/* /health /docs /openapi.json
+	handle @backend {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

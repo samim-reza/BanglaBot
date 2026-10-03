@@ -1,4 +1,4 @@
-"""TwiML builders for the outbound confirmation call."""
+"""TwiML builders: the media stream (inbound + outbound), transfers, hang-ups."""
 
 from __future__ import annotations
 
@@ -45,7 +45,11 @@ def _param(name: str, value: Any) -> str:
     return f'<Parameter name="{escape(name)}" value="{escape(str(value if value is not None else ""))}"/>'
 
 
-def stream_twiml(*, order_id: str, call_log_id: str) -> str:
+def log_recording_callback_url(call_log_id: str) -> str:
+    return f"{public_base_url()}/twilio/recording-log/{call_log_id}"
+
+
+def stream_twiml(*, call_log_id: str, order_id: str = "") -> str:
     """``<Connect><Stream>`` with the signed media token; the bridge speaks the greeting."""
     params = {
         "order_id": order_id,

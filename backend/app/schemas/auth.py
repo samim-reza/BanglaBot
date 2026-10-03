@@ -20,3 +20,5 @@ class ChangePasswordRequest(BaseModel):
 
 class FlowPreview(BaseModel):
     steps: list[str]
+    #: direction ("inbound" / "outbound") → steps
+    sections: dict[str, list[str]] = {}

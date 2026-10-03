@@ -1,0 +1,63 @@
+# Production stack for one server: Caddy (HTTPS) → frontend (Next.js) + backend (FastAPI).
+# The database is external (Supabase, DATABASE_URL in ../.env).
+#
+#   cd deploy && DOMAIN=agent.example.com docker compose up -d --build
+#
+# DOMAIN must point at this server (an <ip>.sslip.io name works with no DNS setup).
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  backend:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      TTS_CACHE_DIR: /app/.tts-cache
+      PUBLIC_BASE_URL: https://${DOMAIN}
+      FRONTEND_ORIGIN: https://${DOMAIN}
+      ENVIRONMENT: production
+    volumes:
+      - tts_cache:/app/.tts-cache
+    depends_on:
+      - redis
+
+  frontend:
+    build:
+      context: ..
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ""
+        NEXT_BACKEND_URL: http://backend:8000
+    restart: unless-stopped
+    environment:
+      NEXT_BACKEND_URL: http://backend:8000
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - backend
+      - frontend
+
+volumes:
+  tts_cache:
+  caddy_data:
+  caddy_config:

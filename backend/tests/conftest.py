@@ -25,6 +25,14 @@ class FakeMerchant:
     max_call_seconds: int = 0
     silence_hangup_secs: int = 10
     active: bool = True
+    vertical: str = "ecommerce"
+    vertical_config: dict = field(default_factory=dict)
+    knowledge: str = ""
+    inbound_number: str = ""
+    region: str = "BD"
+    timezone: str = "Asia/Dhaka"
+    currency: str = "BDT"
+    emergency_number: str = "999"
 
 
 @dataclass
@@ -40,6 +48,10 @@ class FakeOrder:
     currency: str = "BDT"
     status: str = "pending"
     notes: str = ""
+    kind: str = "order"
+    catalog_item_id: str | None = None
+    scheduled_at: object = None
+    details: dict = field(default_factory=dict)
 
 
 @pytest.fixture

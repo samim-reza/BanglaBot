@@ -25,10 +25,24 @@ if [ ! -f "$ROOT/.env" ]; then
 fi
 
 # --- Stop leftovers from a previous run so a plain re-run always works ------------------------
+# Wait for a TCP port to be released; anything still bound after the grace period is SIGKILLed.
+# (A uvicorn worker hung in startup ignores SIGTERM, and its --reload supervisor then keeps the
+#  port forever — the "[Errno 98] Address already in use" on re-run.)
+free_port() {
+  local port="$1"
+  for _ in $(seq 1 20); do
+    fuser -s "$port/tcp" 2>/dev/null || return 0
+    sleep 0.5
+  done
+  echo "▶ Port $port still busy — force-killing the old process."
+  fuser -k -KILL "$port/tcp" >/dev/null 2>&1 || true
+  sleep 1
+}
 pkill -f "$VENV/bin/uvicorn app.main" 2>/dev/null || true
 pkill -f "ngrok http 8000" 2>/dev/null || true
 pkill -f "$FRONTEND/node_modules/.bin/next" 2>/dev/null || true
-sleep 1
+free_port 8000
+free_port 3000
 
 # --- Backend virtualenv (system python has no venv module; uv is the supported way) ------------
 if [ ! -x "$VENV/bin/python" ]; then
@@ -39,7 +53,7 @@ if [ ! -x "$VENV/bin/python" ]; then
     python3 -m venv "$VENV"
   fi
 fi
-if ! "$VENV/bin/python" -c "import fastapi, sqlalchemy, httpx, websockets" >/dev/null 2>&1; then
+if ! "$VENV/bin/python" -c "import fastapi, sqlalchemy, httpx, websockets, cryptography" >/dev/null 2>&1; then
   echo "▶ Installing backend requirements..."
   if [ -x "$UV" ]; then
     "$UV" pip install -q --python "$VENV/bin/python" -r "$BACKEND/requirements-dev.txt"
@@ -113,7 +127,9 @@ echo "▶ Starting frontend on :3000..."
 (cd "$FRONTEND" && NEXT_BACKEND_URL="http://127.0.0.1:8000" npm run dev) &
 
 echo ""
-echo "  UI:      http://localhost:3000"
+echo "  UI:      http://localhost:3000            (website; portal sign-in at /login)"
+echo "  Admin:   http://localhost:3000/admin      (ADMIN_USERNAME / ADMIN_PASSWORD from .env)"
+echo "  Test:    clinic/clinic123 · realestate/realestate123 · homeservice/homeservice123 · shop/shop123"
 echo "  API:     http://localhost:8000/docs"
 if [ -n "$PUBLIC_BASE_URL" ]; then
   echo "  Public:  $PUBLIC_BASE_URL  (Twilio webhooks + media stream)"

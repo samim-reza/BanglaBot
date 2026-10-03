@@ -5,8 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, new_id
 
-#: Values ``CallLog.outcome`` may hold ("" while the call is still running).
-OUTCOMES = ("confirmed", "cancelled", "transfer", "wrong_number", "relay", "unclear", "auto_dropped")
 
 
 class CallLog(Base):
@@ -18,6 +16,12 @@ class CallLog(Base):
         ForeignKey("orders.id", ondelete="SET NULL"), nullable=True, index=True
     )
     merchant_id: Mapped[str] = mapped_column(ForeignKey("merchants.id"), index=True)
+    # outbound | inbound | web (browser test) | chat (text test)
+    direction: Mapped[str] = mapped_column(String(10), default="outbound")
+    # The flow that ran (e.g. "clinic.inbound").
+    flow: Mapped[str] = mapped_column(String(40), default="")
+    # Caller ID of an inbound call.
+    caller_number: Mapped[str] = mapped_column(String(32), default="")
     twilio_call_sid: Mapped[str] = mapped_column(String(64), index=True, default="")
     recording_sid: Mapped[str] = mapped_column(String(64), default="")
     call_status: Mapped[str] = mapped_column(String(32), default="initiated")
@@ -28,6 +32,7 @@ class CallLog(Base):
     final_node: Mapped[str] = mapped_column(String(32), default="")
     llm_prompt_tokens: Mapped[int] = mapped_column(Integer, default=0)
     llm_completion_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    llm_cached_tokens: Mapped[int] = mapped_column(Integer, default=0)
     tts_chars: Mapped[int] = mapped_column(Integer, default=0)
     tts_cache_hits: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

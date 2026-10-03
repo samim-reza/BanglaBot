@@ -3,8 +3,8 @@ import { MerchantShell } from "@/components/merchant-shell";
 
 export default function MerchantLayout({ children }: { children: React.ReactNode }) {
   return (
-    <MerchantShell>
-      <MerchantGate>{children}</MerchantGate>
-    </MerchantShell>
+    <MerchantGate>
+      <MerchantShell>{children}</MerchantShell>
+    </MerchantGate>
   );
 }

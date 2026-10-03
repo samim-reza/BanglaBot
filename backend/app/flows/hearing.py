@@ -43,13 +43,20 @@ YES_PHRASES: tuple[str, ...] = (
     "থিক আছে", "thik ase", "thik ache", "thik acche", "thik ase", "no problem", "no worries", "go ahead",
     "send it", "keep it", "that's right", "that is right", "i'll take it", "i will take it", "i want it",
     "i ordered", "i did order", "please send", "all good", "sounds good", "of course",
+    # bookings / reminders / follow-ups
+    "বুক করেন", "বুক করুন", "বুক করে দেন", "বুক করে দিন", "হ্যাঁ চলবে", "সুবিধা হবে", "আসতে পারব", "আসতে পারবো",
+    "দেখতে চাই", "ভিজিট করতে চাই", "অবশ্যই আসব", "ইনশাআল্লাহ আসব", "book it", "that works", "works for me",
+    "i'll come", "i will come", "i'll be there", "still interested", "i am interested", "i'm interested",
+    "sounds great", "sounds perfect", "that's perfect", "that's great", "please do", "go for it", "do it",
+    "yes please", "yeah sure", "sure thing", "that's fine", "that is fine", "works for me", "let's do it",
 )
 YES_WORDS: tuple[str, ...] = (
     "হ্যাঁ", "হ্যা", "হা", "হুঁ", "জি", "জ্বি", "জী", "জ্বী", "অবশ্যই", "কনফার্ম", "নিশ্চিত", "ওকে",
     "রাখেন", "রাখুন", "রাখব", "রাখবো", "নিব", "নেব", "নিবো", "নেবো", "লাগবে", "পাঠান", "পাঠাবেন", "চাই",
-    "সঠিক", "একদম", "অবশ্যই", "হবে",
+    "সঠিক", "একদম", "অবশ্যই", "হবে", "চলবে", "আসব", "আসবো", "আসছি", "আগ্রহী", "বুক", "interested",
     "yes", "yeah", "yep", "yup", "ya", "sure", "ok", "okay", "correct", "right", "confirm", "confirmed",
     "fine", "absolutely", "definitely", "alright", "exactly", "yes'", "confirmed",
+    "perfect", "great", "awesome", "excellent", "lovely", "brilliant", "wonderful", "cool", "certainly",
     "ji", "jee", "jii", "hya", "hyan", "hae", "ha", "thik",
 )
 
@@ -62,6 +69,12 @@ NO_PHRASES: tuple[str, ...] = (
     "don't want", "do not want", "dont want", "don't need", "do not need", "dont need", "not needed",
     "didn't order", "did not order", "never ordered", "cancel it", "not interested", "don't send",
     "do not send", "cancel the order", "cancel this", "cancel my order", "i don't", "i do not",
+    # bookings / reminders / follow-ups
+    "আসব না", "আসবো না", "আসতে পারব না", "আসতে পারবো না", "পারব না", "পারবো না", "যেতে পারব না", "হবে না",
+    "চলবে না", "সুবিধা হবে না", "আগ্রহী না", "আগ্রহী নই", "আগ্রহ নেই", "আগ্রহ নাই", "ইন্টারেস্টেড না",
+    "can't come", "cannot come", "won't come", "not coming", "can't make it", "doesn't work", "does not work",
+    "no longer interested", "not great", "not good", "not really", "not fine", "not perfect", "not ok", "not okay",
+    "doesn't suit", "does not suit", "not that time", "not that day",
 )
 NO_WORDS: tuple[str, ...] = (
     "না", "নাহ", "নাহ্", "বাতিল", "ক্যান্সেল", "ক্যানসেল", "ক্যান্সেল",
@@ -256,6 +269,33 @@ def supports(text: Any, outcome: str) -> bool:
     return label in labels
 
 
+_CANCEL_WORDS = ("cancel", "cancelled", "canceled", "বাতিল", "ক্যান্সেল", "ক্যানসেল")
+_KEEP_PHRASES = (
+    "don't cancel", "do not cancel", "dont cancel", "no don't", "keep it", "keep the appointment", "keep my",
+    "বাতিল করবেন না", "বাতিল করো না", "বাতিল কইরেন না", "রেখে দিন", "রেখে দেন", "থাক",
+)
+
+
+def declines_cancel(text: Any) -> bool:
+    """The caller does NOT want the thing cancelled ("no, keep it")."""
+    norm = f" {normalize(text)} "
+    if any(f" {normalize(p)} " in norm for p in _KEEP_PHRASES):
+        return True
+    labels = classify(text)
+    return "no" in labels and not any(word in norm.split() for word in _CANCEL_WORDS)
+
+
+def affirms_cancel(text: Any) -> bool:
+    """A yes to "shall I cancel it?" — including "yes, cancel it" / "বাতিল করে দিন"."""
+    if is_unusable(text) or declines_cancel(text) or looks_like_question(text):
+        return False
+    norm = normalize(text)
+    if any(word in norm.split() for word in _CANCEL_WORDS):
+        return True
+    labels = classify(text)
+    return "yes" in labels and "no" not in labels
+
+
 def denies_identity(text: Any) -> bool:
     """The caller said they are not the named customer (or nobody here is)."""
     labels = classify(text)
@@ -320,15 +360,31 @@ def echoes_agent_line(text: Any, agent_lines: Iterable[str], *, min_tokens: int 
     toks = tokens(text)
     if len(toks) < min_tokens or is_pure_answer(text):
         return False
-    text_set = set(toks)
     for line in agent_lines:
-        line_toks = set(tokens(line))
+        line_toks = tokens(line)
         if not line_toks:
             continue
-        overlap = len(text_set & line_toks) / len(text_set)
-        if overlap >= threshold:
+        # A real echo repeats the agent's words IN ORDER ("am I speaking with
+        # Nusrat Jahan"); a genuine answer that reuses the same words ("yes,
+        # this is Nusrat speaking") shares vocabulary but not the sequence.
+        if _longest_common_run(toks, line_toks) / len(toks) >= threshold:
             return True
     return False
+
+
+def _longest_common_run(a: list[str], b: list[str]) -> int:
+    """Length of the longest contiguous token run present in both sequences."""
+    best = 0
+    prev = [0] * (len(b) + 1)
+    for i in range(1, len(a) + 1):
+        cur = [0] * (len(b) + 1)
+        for j in range(1, len(b) + 1):
+            if a[i - 1] == b[j - 1]:
+                cur[j] = prev[j - 1] + 1
+                if cur[j] > best:
+                    best = cur[j]
+        prev = cur
+    return best
 
 
 def is_prompt_echo(text: Any, prompt: Any, *, min_tokens: int = 3) -> bool:

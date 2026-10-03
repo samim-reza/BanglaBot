@@ -18,12 +18,12 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import AsyncSessionLocal, engine
-from app.models import CallLog, Merchant, Order
+from app.models import CallLog, CatalogItem, Merchant, Message, Order, SalesInquiry
 
 logger = structlog.get_logger(__name__)
 
 #: Importing the models registers their tables on ``Base.metadata`` for create_all.
-REGISTERED_MODELS = (Merchant, Order, CallLog)
+REGISTERED_MODELS = (Merchant, Order, CallLog, CatalogItem, SalesInquiry, Message)
 
 SCHEMA_PATCHES: tuple[str, ...] = (
     # merchants
@@ -40,6 +40,8 @@ SCHEMA_PATCHES: tuple[str, ...] = (
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS max_call_seconds INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS silence_hangup_secs INTEGER NOT NULL DEFAULT 10",
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS active BOOLEAN NOT NULL DEFAULT true",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS auto_call_at TIMESTAMPTZ",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS auto_call_repeat_daily BOOLEAN NOT NULL DEFAULT false",
     "ALTER TABLE merchants ALTER COLUMN password_hash TYPE VARCHAR(160)",
     # A previous deployment kept verify_address inside a flow_settings JSON blob.
     """DO $$ BEGIN
@@ -78,6 +80,51 @@ SCHEMA_PATCHES: tuple[str, ...] = (
     "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS tts_chars INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS tts_cache_hits INTEGER NOT NULL DEFAULT 0",
     "CREATE INDEX IF NOT EXISTS ix_call_logs_merchant_created ON call_logs (merchant_id, created_at DESC)",
+    # --- multi-vertical platform (2026-10) ---------------------------------------
+    # Accounts that existed before regions were Bangladeshi: the first ADD fills
+    # them with BD values, then the default moves to the international preset.
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS vertical VARCHAR(32) NOT NULL DEFAULT 'ecommerce'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS vertical_config JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS knowledge TEXT NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS inbound_number VARCHAR(32) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS region VARCHAR(8) NOT NULL DEFAULT 'BD'",
+    "ALTER TABLE merchants ALTER COLUMN region SET DEFAULT 'INTL'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Dhaka'",
+    "ALTER TABLE merchants ALTER COLUMN timezone SET DEFAULT 'UTC'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS currency VARCHAR(8) NOT NULL DEFAULT 'BDT'",
+    "ALTER TABLE merchants ALTER COLUMN currency SET DEFAULT 'USD'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS emergency_number VARCHAR(16) NOT NULL DEFAULT '999'",
+    "ALTER TABLE merchants ALTER COLUMN emergency_number SET DEFAULT '112'",
+    "ALTER TABLE merchants ALTER COLUMN language SET DEFAULT 'en'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS plan VARCHAR(24) NOT NULL DEFAULT 'trial'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS widget_enabled BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS widget_key VARCHAR(40) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS widget_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS webhook_url VARCHAR(500) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(64) NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS ix_merchants_vertical ON merchants (vertical)",
+    "CREATE INDEX IF NOT EXISTS ix_merchants_inbound_number ON merchants (inbound_number)",
+    "CREATE INDEX IF NOT EXISTS ix_merchants_widget_key ON merchants (widget_key)",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS kind VARCHAR(24) NOT NULL DEFAULT 'order'",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS source VARCHAR(16) NOT NULL DEFAULT 'manual'",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS catalog_item_id VARCHAR REFERENCES catalog_items(id) ON DELETE SET NULL",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMPTZ",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS details JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE orders ALTER COLUMN currency SET DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS ix_orders_merchant_scheduled ON orders (merchant_id, scheduled_at)",
+    "CREATE INDEX IF NOT EXISTS ix_orders_catalog_item_id ON orders (catalog_item_id)",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS direction VARCHAR(10) NOT NULL DEFAULT 'outbound'",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS flow VARCHAR(40) NOT NULL DEFAULT ''",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS caller_number VARCHAR(32) NOT NULL DEFAULT ''",
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS llm_cached_tokens INTEGER NOT NULL DEFAULT 0",
+    "CREATE INDEX IF NOT EXISTS ix_call_logs_merchant_direction ON call_logs (merchant_id, direction, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS ix_catalog_items_merchant_kind ON catalog_items (merchant_id, kind, sort_order)",
+    # --- SMS + calendar sync (2026-10) ------------------------------------------------
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS sms_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS calendar_token VARCHAR(48) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS calendar_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "CREATE INDEX IF NOT EXISTS ix_merchants_calendar_token ON merchants (calendar_token)",
+    "CREATE INDEX IF NOT EXISTS ix_messages_merchant_created ON messages (merchant_id, created_at DESC)",
 )
 
 
@@ -110,6 +157,11 @@ async def seed_demo_merchant(session: AsyncSession) -> Merchant:
             support_phone="",
             language="bn",
             supported_languages=["bn", "en"],
+            vertical="ecommerce",
+            region="BD",
+            timezone="Asia/Dhaka",
+            currency="BDT",
+            emergency_number="999",
         )
         session.add(merchant)
         await session.flush()
@@ -125,6 +177,7 @@ async def seed_demo_merchant(session: AsyncSession) -> Merchant:
                     address="বাড়ি ১২, রোড ৫, ধানমন্ডি, ঢাকা",
                     items_summary="পাঞ্জাবি (L) x1, পায়জামা x1",
                     total_amount=Decimal("1850.00"),
+                    currency="BDT",
                     notes="",
                 ),
                 Order(
@@ -135,6 +188,7 @@ async def seed_demo_merchant(session: AsyncSession) -> Merchant:
                     address="Flat 4B, House 7, Sector 11, Uttara, Dhaka",
                     items_summary="Cotton saree x2",
                     total_amount=Decimal("3200.00"),
+                    currency="BDT",
                     notes="Deliver after 5pm",
                 ),
             ]
@@ -148,6 +202,10 @@ async def bootstrap() -> None:
     settings = get_settings()
     await create_schema()
     if settings.auto_seed_demo_data:
+        from app.db.demo_accounts import seed_demo_accounts
+
         async with AsyncSessionLocal() as session:
             await seed_demo_merchant(session)
-        await logger.ainfo("demo_data_seeded", username=DEMO_USERNAME)
+        async with AsyncSessionLocal() as session:
+            created = await seed_demo_accounts(session)
+        await logger.ainfo("demo_data_seeded", usernames=[DEMO_USERNAME, *created])

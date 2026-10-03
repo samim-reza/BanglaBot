@@ -1,94 +1,177 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
+import { CircleAlert } from "lucide-react";
 
-import { Field } from "@/components/page-header";
+import { ApiError } from "@/components/api-error";
+import { SchemaFields, validateValues, type FormValues } from "@/components/schema-form";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import type { Order, OrderInput } from "@/services/api";
+import { t } from "@/lib/vertical";
+import { useWorkspace } from "@/lib/workspace";
+import { catalogApi, formatApiError, type CatalogItem, type FieldSpec, type Order, type OrderUpdate } from "@/services/api";
 
-export type OrderFormValues = {
-  order_ref: string;
-  customer_name: string;
-  customer_phone: string;
-  address: string;
-  items_summary: string;
-  total_amount: string;
-  notes: string;
-};
-
-export function orderToFormValues(order?: Order | null): OrderFormValues {
-  return {
-    order_ref: order?.order_ref ?? "",
-    customer_name: order?.customer_name ?? "",
-    customer_phone: order?.customer_phone ?? "",
-    address: order?.address ?? "",
-    items_summary: order?.items_summary ?? "",
-    total_amount: order?.total_amount ?? "",
-    notes: order?.notes ?? "",
-  };
+/** A record field's current value: from its column, or from `details` for vertical-only fields. */
+export function recordFieldValue(order: Order, spec: FieldSpec): unknown {
+  if (spec.column) {
+    const raw = (order as unknown as Record<string, unknown>)[spec.column];
+    if (spec.type === "money" || spec.type === "number") {
+      if (raw === null || raw === undefined || raw === "") return raw;
+      const numeric = Number(raw);
+      return Number.isNaN(numeric) ? raw : numeric;
+    }
+    return raw;
+  }
+  return order.details?.[spec.key];
 }
 
-export function formValuesToInput(values: OrderFormValues): OrderInput {
-  return {
-    order_ref: values.order_ref.trim(),
-    customer_name: values.customer_name.trim(),
-    customer_phone: values.customer_phone.trim(),
-    address: values.address.trim(),
-    items_summary: values.items_summary.trim(),
-    total_amount: values.total_amount.trim(),
-    notes: values.notes.trim(),
-  };
+/** Prefill values for the record form from a saved record. */
+export function recordToFormValues(order: Order, specs: FieldSpec[]): FormValues {
+  const out: FormValues = {};
+  for (const spec of specs) {
+    const value = recordFieldValue(order, spec);
+    if (value !== null && value !== undefined) out[spec.key] = value;
+  }
+  return out;
 }
 
-/** The order fields, shared by "New order" and the editable detail view. */
-export function OrderForm({
+/** `{catalog_item_id: name}` from records the API already resolved. */
+export function catalogNamesOf(orders: Order[]): Record<string, string> {
+  const names: Record<string, string> = {};
+  for (const order of orders) {
+    if (order.catalog_item_id && order.catalog_item_name) names[order.catalog_item_id] = order.catalog_item_name;
+  }
+  return names;
+}
+
+function isEmpty(value: unknown): boolean {
+  return value === null || value === undefined || value === "" || (Array.isArray(value) && value.length === 0);
+}
+
+function sameValue(a: unknown, b: unknown): boolean {
+  if (isEmpty(a) && isEmpty(b)) return true;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** Record columns the API stores as non-null text: they can be changed but not emptied. */
+const NOT_NULL_TEXT_COLUMNS = new Set(["customer_name", "customer_phone", "order_ref", "address", "items_summary", "notes"]);
+
+/**
+ * PATCH body with only the fields that changed. Cleared optional fields are sent
+ * as `null` (the API drops them); text columns that cannot be emptied are left
+ * out and reported in `kept` so the caller can tell the user.
+ */
+export function recordUpdatePayload(specs: FieldSpec[], initial: FormValues, values: FormValues): { payload: OrderUpdate; kept: string[] } {
+  const payload: OrderUpdate = {};
+  const kept: string[] = [];
+  for (const spec of specs) {
+    const before = initial[spec.key];
+    const after = values[spec.key];
+    if (sameValue(before, after)) continue;
+    if (isEmpty(after)) {
+      if (spec.column && NOT_NULL_TEXT_COLUMNS.has(spec.column)) {
+        kept.push(t(spec.label));
+        continue;
+      }
+      payload[spec.key] = null;
+    } else {
+      payload[spec.key] = after;
+    }
+  }
+  return { payload, kept };
+}
+
+/**
+ * The record form ("New appointment", editing a lead, …), rendered from the
+ * account's vertical field specs. Catalog fields (doctor, listing, service) are
+ * filled from the account's catalog; date-times use the account's time zone.
+ */
+export function RecordForm({
   initial,
   submitLabel,
   busy,
   onSubmit,
   onCancel,
 }: {
-  initial: OrderFormValues;
+  initial: FormValues;
   submitLabel: string;
   busy: boolean;
-  onSubmit: (values: OrderFormValues) => void;
+  onSubmit: (values: FormValues) => void;
   onCancel?: () => void;
 }) {
-  const [values, setValues] = useState<OrderFormValues>(initial);
-  const set = (key: keyof OrderFormValues) => (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-    setValues((current) => ({ ...current, [key]: event.target.value }));
+  const { vertical, merchant } = useWorkspace();
+  const specs = vertical.record_fields;
+  const needsCatalog = Boolean(vertical.catalog_kind) && specs.some((spec) => spec.type === "catalog");
+  const catalogRequired = specs.some((spec) => spec.type === "catalog" && spec.required);
+  const hasDateTime = specs.some((spec) => spec.type === "datetime");
+  const [values, setValues] = useState<FormValues>(initial);
+  const [error, setError] = useState<string | null>(null);
+  const [catalog, setCatalog] = useState<CatalogItem[] | null>(needsCatalog ? null : []);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!needsCatalog) return;
+    let cancelled = false;
+    catalogApi
+      .list()
+      .then((items) => {
+        if (!cancelled) setCatalog(items);
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setCatalog([]);
+          setCatalogError(formatApiError(err, `Could not load your ${t(vertical.catalog_label_plural, "catalog").toLowerCase()}.`));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsCatalog, vertical.catalog_label_plural]);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
+    const problem = validateValues(specs, values);
+    setError(problem);
+    if (problem) return;
     onSubmit(values);
   };
 
+  const catalogPlural = t(vertical.catalog_label_plural, "catalog items").toLowerCase();
+
   return (
-    <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit}>
-      <Field label="Customer name" className="sm:col-span-1">
-        <Input value={values.customer_name} onChange={set("customer_name")} placeholder="e.g. Rahim Uddin" required />
-      </Field>
-      <Field label="Customer phone" hint="Bangladeshi mobile number, e.g. 017XXXXXXXX or +8801XXXXXXXXX">
-        <Input value={values.customer_phone} onChange={set("customer_phone")} placeholder="017XXXXXXXX" inputMode="tel" required />
-      </Field>
-      <Field label="Order reference" hint="Your store's order number (optional)">
-        <Input value={values.order_ref} onChange={set("order_ref")} placeholder="#1042" />
-      </Field>
-      <Field label="Total amount (BDT)">
-        <Input value={values.total_amount} onChange={set("total_amount")} placeholder="2400" inputMode="decimal" />
-      </Field>
-      <Field label="Delivery address" className="sm:col-span-2">
-        <Textarea value={values.address} onChange={set("address")} placeholder="House, road, area, city" rows={2} />
-      </Field>
-      <Field label="Items summary" hint="What the agent reads back to the customer" className="sm:col-span-2">
-        <Textarea value={values.items_summary} onChange={set("items_summary")} placeholder="2x Cotton panjabi (L), 1x Payjama" rows={3} />
-      </Field>
-      <Field label="Notes" hint="Internal notes, not read out on the call" className="sm:col-span-2">
-        <Textarea value={values.notes} onChange={set("notes")} rows={2} />
-      </Field>
-      <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+    <form className="space-y-5" onSubmit={submit} noValidate>
+      <ApiError message={catalogError} />
+      {needsCatalog && catalog !== null && catalog.length === 0 && !catalogError && (
+        <div className="flex items-start gap-2.5 rounded-md border border-border bg-surface p-3 text-sm">
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+          <p className="text-muted-foreground">
+            You have no {catalogPlural} yet{catalogRequired ? ", and this form needs one" : ""}.{" "}
+            <Link href="/catalog" className="font-medium text-primary-dark underline-offset-2 hover:underline">
+              Add your {catalogPlural}
+            </Link>{" "}
+            first.
+          </p>
+        </div>
+      )}
+      <SchemaFields
+        specs={specs}
+        values={values}
+        onChange={(next) => {
+          setValues(next);
+          if (error) setError(null);
+        }}
+        catalog={catalog ?? []}
+        timezone={merchant.timezone}
+        disabled={busy}
+      />
+      {needsCatalog && catalog === null && <p className="text-xs text-muted-foreground">Loading {catalogPlural}…</p>}
+      {error && (
+        <p role="alert" className="flex items-center gap-2 text-sm font-medium text-destructive">
+          <CircleAlert className="h-4 w-4 shrink-0" aria-hidden="true" />
+          {error}
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
         <Button type="submit" disabled={busy}>
           {busy ? "Saving…" : submitLabel}
         </Button>
@@ -97,6 +180,9 @@ export function OrderForm({
             Cancel
           </Button>
         )}
+        <span className="text-xs text-muted-foreground sm:ml-auto">
+          * required{hasDateTime ? ` · times in ${merchant.timezone}` : ""}
+        </span>
       </div>
     </form>
   );

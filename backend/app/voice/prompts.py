@@ -1,9 +1,16 @@
-"""System prompt for the confirmation-call agent.
+"""System prompt for the call agent, layered for OpenAI prompt caching.
 
-Written once per call: the shared rulebook (in the merchant's primary
-language) → the facts of this call → the flow rules → "the greeting and the
-first question have already been spoken". Node directives are appended to
-the conversation tail by the runtime, never spliced into this text.
+Prompt caching only reuses an *exact prefix* (≥ 1024 tokens, tools included),
+so the prompt is built from the most stable part to the least stable one:
+
+1. core voice-agent rules (per language) + the flow's rules  — identical for every
+   call of that flow on the platform;
+2. the business: name, catalog, knowledge, transfer availability — identical for
+   every call of that account until the owner edits something;
+3. this call: calendar, caller / record, what was already said, the first step.
+
+Node directives are appended to the conversation tail by the runtime, never
+spliced into this text, so the head stays cacheable for the whole call.
 """
 
 from __future__ import annotations
@@ -11,7 +18,37 @@ from __future__ import annotations
 from typing import Any
 
 from app.flows.base import Flow
-from app.voice.languages import language_name, normalize_language, normalize_supported, phrase, spoken_amount
+from app.flows.context import CallContext
+from app.voice.languages import language_name, normalize_language, phrase
+
+_STYLE = {
+    "bn": "Use natural, polite, colloquial Bangladeshi Bangla with the respectful \"আপনি\".",
+    "en": "Use warm, friendly, professional English.",
+}
+_NUMBERS = {
+    "bn": "Say numbers, prices, dates and times in words, the way a person would on the phone.",
+    "en": "Write times, prices and numbers the normal way (9 AM, $140, 2:30 PM) — the voice reads them naturally.",
+}
+
+_CORE_RULES = """You are the voice agent on a live phone call for the business described below. Everything you write is spoken aloud by a text-to-speech voice.
+
+How to speak:
+- Speak only {language}, even if the caller uses another language. {style}
+- Short, natural spoken sentences — one or two per turn. No lists, bullet points, emoji, markdown, links or symbols.
+- At most one question per turn.
+- {numbers}
+
+How to work:
+- Whenever the caller gives you any detail, call save_details BEFORE you speak, with every detail from that turn in one call. If they also asked something, put a one-sentence answer in `reply`; the system then speaks your reply and asks the next question itself — do not write the next question yourself.
+- Save what the caller MEANT in the format the field asks for: a day such as "tomorrow", "Wednesday" or "next Monday" becomes its YYYY-MM-DD date from the calendar in the facts (a bare weekday is the NEAREST coming one — on a Friday, "Saturday" is tomorrow); times become HH:MM (24 h). Never say you noted something you did not save in that same call.
+- A tool result's "instruction" says what happens next. "(Already said to the caller …)" means it was spoken for you — just wait for the caller's answer.
+- Never ask again for something already saved.
+- Refs such as D1, P2, S3 or A1 are only for tool calls — never say them to the caller; use the name.
+- Use only the facts below and tool results. Never invent prices, availability, times, policies or promises. If you do not know, say a team member will follow up, or call transfer_to_human.
+- Never say something is booked, confirmed, cancelled or changed unless a tool result says so.
+- If the caller asks something unrelated to the business, answer briefly and politely, then steer back.
+- The caller wants a human → transfer_to_human. The conversation is finished or the caller wants to stop → end_call (the system says goodbye). After any call-ending tool, say nothing more.
+- If you could not understand the caller, briefly ask them to repeat."""
 
 
 def _get(obj: Any, name: str, default: Any = "") -> Any:
@@ -19,96 +56,83 @@ def _get(obj: Any, name: str, default: Any = "") -> Any:
     return default if value in (None, "") else value
 
 
-_CORE_RULES_BN = """তুমি {business_name}-এর পক্ষ থেকে ফোন করা একজন ভদ্র, সংক্ষিপ্তভাষী সহকারী। তুমি কাস্টমারকে ফোন করেছ শুধু তাঁর একটি অর্ডার কনফার্ম করার জন্য।
+_CHAT_HEAD = """You are the assistant in the website chat of the business described below. The customer types; you reply with short chat messages.
 
-কথা বলার নিয়ম:
-- সহজ, স্বাভাবিক কথ্য বাংলায় কথা বলো, সম্মানসূচক "আপনি" ব্যবহার করো। ছোট ছোট বাক্য — তোমার কথা ফোনে শোনানো হবে। ইমোজি, তালিকা, বুলেট বা বিশেষ চিহ্ন লিখো না।
-- প্রতি উত্তরে সর্বোচ্চ একটি প্রশ্ন করো, আর প্রতিটি উত্তর একটি প্রশ্ন দিয়ে শেষ করো — একমাত্র ব্যতিক্রম যখন instruction বলে কিছু বলবে না বা end_call করবে।
-- ডাটাবেসের কাঁচা লেখা হুবহু পড়ো না; পণ্য ও টাকার কথা মানুষ যেভাবে বলে সেভাবে বলো। টাকার অংক পুরোটা কথায় বলো, যেমন "{amount_example}"।
-- কাস্টমার তথ্য দিলে কথা বলার আগে save_details টুল দিয়ে সেভ করো; এক টার্নে একাধিক তথ্য পেলে সবগুলো একসাথে পাঠাও। টুলের ফলাফলের "instruction" অংশটিই তোমার পরের কথা। "হুবহু বলুন:" থাকলে সেই বাক্যটি শব্দে শব্দে বলো।
-- যা সেভ করা হয়ে গেছে তা আবার জিজ্ঞেস করো না।
-- কাস্টমার প্রশ্ন করলে এক বাক্যে উত্তর দাও, তারপর ফ্লো-র বর্তমান প্রশ্নে ফিরে যাও। যা জানো না তা বানিয়ে বলো না — ডেলিভারির তারিখ, ডিসকাউন্ট বা রিটার্ন নীতি নিয়ে প্রতিশ্রুতি দিও না; বলো প্রতিনিধি জানাবেন, প্রয়োজনে transfer_to_human।
-- দাম, ডিসকাউন্ট বা ডেলিভারি চার্জ নিয়ে দর কষাকষি করো না; মানুষের সাথে কথা বলতে চাইলে transfer_to_human কল করো।
-- পরিচয়: ফোন ধরা ব্যক্তি নিজেই নামের কাস্টমার হলে identity_confirmed=true; অন্য কেউ হলে identity_confirmed=false এবং জিজ্ঞেস করো তিনি কাস্টমারকে চেনেন কি না (knows_customer)। কাস্টমার ছাড়া অন্য কেউ অর্ডার কনফার্ম বা বাতিল করতে পারবেন না, এবং অন্য কাউকে অর্ডারের পণ্য বা দাম বলো না।
-- confirm_order বা cancel_order শুধু তখনই কল করো যখন কাস্টমার নিজের মুখে স্পষ্ট "হ্যাঁ" বা "না" বলেছেন। অস্পষ্ট, অসম্পূর্ণ বা এক-শব্দের ধোঁয়াশা উত্তর হলে অনুমান করো না — ছোট করে আবার জিজ্ঞেস করো। কাস্টমার পরে কথা বলতে চাইলে end_call কল করো।
-- confirm_order, cancel_order, transfer_to_human বা end_call কল করার পরে আর কিছু বলো না — বিদায়বাক্য সিস্টেম নিজেই বলে দেবে।
-- কাস্টমার যে ভাষায় কথা বলেন সেই ভাষায় উত্তর দাও, যদি সেটি সমর্থিত ভাষার তালিকায় থাকে; নইলে {primary_language}-এ।"""
-
-_CORE_RULES_EN = """You are a polite, concise assistant calling on behalf of {business_name}. You called the customer for one reason only: to confirm one of their orders.
-
-How to speak:
-- Use simple, natural spoken language in short sentences — everything you write is read aloud on a phone line. No emoji, lists, bullets or special symbols.
-- Ask at most one question per reply, and end every reply with a question — the only exception is when the instruction tells you to say nothing or to call end_call.
-- Never read raw database text; describe the items and the amount the way a person would. Say the amount in full, e.g. "{amount_example}".
-- When the customer gives you information, call save_details BEFORE you speak; if one turn carries several facts, send them all at once. The "instruction" in the tool result is what you say next. When it starts with "Say exactly:", repeat that sentence word for word.
-- Never re-ask something that has already been saved.
-- If the customer asks a question, answer in one sentence and return to the current question of the flow. Do not invent what you do not know — never promise delivery dates, discounts or return policies; say a team member will follow up, or call transfer_to_human.
-- Do not negotiate price, discounts or delivery charges; when the customer wants a human, call transfer_to_human.
-- Identity: if the person on the line is the named customer, identity_confirmed=true; if it is someone else, identity_confirmed=false and ask whether they know the customer (knows_customer). Nobody but the customer may confirm or cancel, and never tell anyone else what was ordered or for how much.
-- Call confirm_order or cancel_order only when the customer has said a clear "yes" or "no" in their own words. If the answer is vague, incomplete or a one-word mumble, do not guess — ask again briefly. If they want to talk later, call end_call.
-- After confirm_order, cancel_order, transfer_to_human or end_call, say nothing more — the system speaks the closing line itself.
-- Reply in the language the customer is speaking when it is in the supported list; otherwise use {primary_language}."""
+How to write:
+- Write only {language}, even if the customer uses another language. {style}
+- One or two short sentences per message, plain text. No lists, markdown or emoji.
+- At most one question per message.
+- Numbers, prices, dates and times may be written normally.
+"""
 
 
-def build_system_prompt(order: Any, merchant: Any, flow: Flow, *, language: str | None = None, initial_directive: str = "") -> str:
-    primary = normalize_language(language or _get(merchant, "language", "bn"))
-    supported = normalize_supported(primary, _get(merchant, "supported_languages", []))
-    business = str(_get(merchant, "business_name", ""))
-    amount = spoken_amount(_get(order, "total_amount", 0), _get(order, "currency", "BDT"), primary)
-    rules = (_CORE_RULES_BN if primary == "bn" else _CORE_RULES_EN).format(
-        business_name=business,
-        amount_example=spoken_amount(1250, "BDT", primary),
-        primary_language=language_name(primary),
+def core_rules(language: str, channel: str = "voice") -> str:
+    lang = normalize_language(language)
+    text = _CORE_RULES
+    if channel == "chat":
+        # Same working rules; only the medium differs ("caller" reads as "customer").
+        text = _CHAT_HEAD + text[text.index("\nHow to work:"):]
+    return text.format(
+        language=language_name(lang).split(" (")[0],
+        style=_STYLE.get(lang, _STYLE["en"]),
+        numbers=_NUMBERS.get(lang, _NUMBERS["en"]),
     )
-    items = " ".join(str(_get(order, "items_summary", "") or "").split())
-    address = " ".join(str(_get(order, "address", "") or "").split())
-    notes = " ".join(str(_get(order, "notes", "") or "").split())
+
+
+def business_block(flow: Flow, ctx: CallContext, language: str) -> str:
+    merchant = ctx.merchant
+    business = str(_get(merchant, "business_name", ""))
+    lines = [f"Business: {business}."]
+    lines += flow.business_facts(ctx, language)
+    knowledge = str(_get(merchant, "knowledge", "") or "").strip()
+    if knowledge:
+        lines.append("Business information you may answer from (address, hours, policies, FAQs):")
+        lines.append(knowledge[:8000])
     support = str(_get(merchant, "support_phone", "") or "").strip()
-    cod = phrase("cash_on_delivery", primary)
-    if primary == "bn":
-        facts = [
-            "এই কলের তথ্য:",
-            f"- ব্যবসার নাম: {business}",
-            f"- কাস্টমারের নাম: {_get(order, 'customer_name', '')}",
-            f"- অর্ডারের পণ্য: {items or '(দেওয়া নেই)'}",
-            f"- মোট মূল্য: {amount} ({cod})",
-        ]
-        if address:
-            facts.append(f"- ডেলিভারি ঠিকানা: {address}")
-        if notes:
-            facts.append(f"- বিক্রেতার নোট: {notes}")
-        facts.append("- প্রতিনিধির সাথে সংযোগ: " + ("সম্ভব (transfer_to_human)" if support else "এখন সম্ভব নয় — বলো প্রতিনিধি পরে ফোন করবেন"))
-        facts.append("- সমর্থিত ভাষা: " + ", ".join(language_name(code) for code in supported))
-        already = (
-            "শুভেচ্ছা ও প্রথম প্রশ্নটি ইতিমধ্যে বলা হয়ে গেছে: "
-            f"\"{flow.greeting(merchant, primary)} {flow.opening_question(order, primary)}\" — "
-            "আবার শুভেচ্ছা দিও না; কাস্টমারের উত্তর থেকেই শুরু করো।"
-        )
+    lines.append(
+        "Transfer to a human: available (transfer_to_human)."
+        if support
+        else "Transfer to a human: not available right now — say a team member will call back (transfer_to_human records that)."
+    )
+    lines.append(f"Currency: {ctx.currency}. Time zone: {ctx.timezone}.")
+    return "\n".join(line for line in lines if line)
+
+
+def call_block(flow: Flow, ctx: CallContext, language: str, *, opening: str, initial_directive: str = "") -> str:
+    lines = ["This call:"]
+    if ctx.chat:
+        lines.append("- Channel: website chat (the customer is typing).")
     else:
-        facts = [
-            "Facts for this call:",
-            f"- Business: {business}",
-            f"- Customer name: {_get(order, 'customer_name', '')}",
-            f"- Items ordered: {items or '(not given)'}",
-            f"- Total: {amount} ({cod})",
-        ]
-        if address:
-            facts.append(f"- Delivery address: {address}")
-        if notes:
-            facts.append(f"- Merchant note: {notes}")
-        facts.append("- Transfer to a human: " + ("available (transfer_to_human)" if support else "not available right now — say a team member will call back"))
-        facts.append("- Supported languages: " + ", ".join(language_name(code) for code in supported))
-        already = (
-            "The greeting and the first question have ALREADY been spoken: "
-            f"\"{flow.greeting(merchant, primary)} {flow.opening_question(order, primary)}\" — "
-            "do not greet again; start from the customer's answer."
-        )
-    parts = [rules, "\n".join(facts), already]
+        lines.append(f"- Direction: {'the caller phoned the business' if ctx.inbound else 'the business is calling this person'}.")
+    lines += flow.call_facts(ctx, language)
+    lines.append(f"You have ALREADY said: \"{opening}\" — do not greet again; continue from the caller's answer.")
     if initial_directive:
-        parts.append(initial_directive)
-    return "\n\n".join(parts)
+        lines.append(initial_directive)
+    return "\n".join(line for line in lines if line)
+
+
+def build_messages(flow: Flow, ctx: CallContext, *, language: str | None = None, opening: str = "", initial_directive: str = "") -> list[dict[str, Any]]:
+    """The three system messages of a call, most-stable first."""
+    lang = normalize_language(language or _get(ctx.merchant, "language", "en"))
+    head = core_rules(lang, ctx.channel)
+    rules = flow.rules(lang)
+    if rules:
+        head = f"{head}\n\n{rules}"
+    return [
+        {"role": "system", "content": head},
+        {"role": "system", "content": business_block(flow, ctx, lang)},
+        {"role": "system", "content": call_block(flow, ctx, lang, opening=opening, initial_directive=initial_directive)},
+    ]
+
+
+def build_system_prompt(flow: Flow, ctx: CallContext, *, language: str | None = None, opening: str = "", initial_directive: str = "") -> str:
+    """The same prompt as one string (tests, debugging)."""
+    return "\n\n".join(m["content"] for m in build_messages(flow, ctx, language=language, opening=opening, initial_directive=initial_directive))
 
 
 def transcription_prompt(supported: list[str]) -> str:
     """Vocabulary hint for the STT session, one line per supported language."""
     return " ".join(phrase("transcription_prompt", code) for code in supported).strip()
+
+
+__all__ = ["build_messages", "build_system_prompt", "core_rules", "transcription_prompt"]

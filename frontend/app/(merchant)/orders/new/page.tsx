@@ -1,42 +1,70 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 import { ApiError } from "@/components/api-error";
 import { useAppToast } from "@/components/app-toast";
-import { OrderForm, formValuesToInput, orderToFormValues, type OrderFormValues } from "@/components/order-form";
+import { RecordForm } from "@/components/order-form";
 import { PageHeader } from "@/components/page-header";
+import { compactValues, defaultValues, type FormValues } from "@/components/schema-form";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { formatApiError, ordersApi } from "@/services/api";
+import { t } from "@/lib/vertical";
+import { useWorkspace } from "@/lib/workspace";
+import { formatApiError, ordersApi, type OrderInput } from "@/services/api";
 
-export default function NewOrderPage() {
+export default function NewRecordPage() {
   const router = useRouter();
   const toast = useAppToast();
+  const { vertical } = useWorkspace();
+  const singular = t(vertical.record_label, "Record");
+  const plural = t(vertical.record_label_plural, "Records");
+  const canCall = vertical.directions.includes("outbound");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const initial = useMemo(() => defaultValues(vertical.record_fields), [vertical.record_fields]);
 
-  const submit = async (values: OrderFormValues) => {
+  const submit = async (values: FormValues) => {
     setBusy(true);
+    setError(null);
     try {
-      const order = await ordersApi.create(formValuesToInput(values));
-      toast.success("Order created.");
-      router.push(`/orders/${order.id}`);
+      // Vertical-only fields go top-level too; the API files them under `details`.
+      const record = await ordersApi.create(compactValues(values) as OrderInput);
+      toast.success(`${singular} saved.`);
+      router.push(`/orders/${record.id}`);
     } catch (err) {
-      const message = formatApiError(err, "Could not create the order.");
+      const message = formatApiError(err, `Could not save the ${singular.toLowerCase()}.`);
       setError(message);
       toast.error(message);
       setBusy(false);
     }
   };
 
+  const subtitle = canCall
+    ? `Add a ${singular.toLowerCase()} by hand. Your agent uses these details on the ${t(vertical.outbound_label, "call").toLowerCase()}.`
+    : `Add a ${singular.toLowerCase()} by hand. Your agent sees it when the customer calls or chats.`;
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <PageHeader title="New order" subtitle="Enter the order as the customer placed it; the agent reads these details back on the call." />
+      <PageHeader
+        title={`New ${singular.toLowerCase()}`}
+        subtitle={subtitle}
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/orders">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              {plural}
+            </Link>
+          </Button>
+        }
+      />
       <ApiError message={error} />
       <Card>
         <CardContent className="pt-5">
-          <OrderForm initial={orderToFormValues()} submitLabel="Create order" busy={busy} onSubmit={submit} onCancel={() => router.push("/orders")} />
+          <RecordForm initial={initial} submitLabel={`Save ${singular.toLowerCase()}`} busy={busy} onSubmit={submit} onCancel={() => router.push("/orders")} />
         </CardContent>
       </Card>
     </div>

@@ -42,7 +42,7 @@ export default function AdminLoginPage() {
     <div className="mx-auto max-w-md space-y-4 py-10">
       <div>
         <h1 className="text-2xl font-semibold tracking-normal">Platform admin</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Manage merchants and review every order and call.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Manage accounts, review records, calls and chats, and follow up on sales inquiries.</p>
       </div>
       <ApiError message={error} />
       <Card>
@@ -54,8 +54,16 @@ export default function AdminLoginPage() {
         </CardHeader>
         <CardContent>
           <form className="space-y-3" onSubmit={login}>
-            <Input autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} placeholder="Username" required />
             <Input
+              autoComplete="username"
+              aria-label="Username"
+              value={username}
+              onChange={(event) => setUsername(event.target.value)}
+              placeholder="Username"
+              required
+            />
+            <Input
+              aria-label="Password"
               autoComplete="current-password"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
@@ -64,15 +72,19 @@ export default function AdminLoginPage() {
               required
             />
             <Button className="w-full" type="submit" disabled={busy}>
-              {busy ? "Signing in…" : "Login"}
+              {busy ? "Signing in…" : "Sign in"}
             </Button>
           </form>
         </CardContent>
       </Card>
       <p className="text-center text-xs text-muted-foreground">
-        Merchant?{" "}
+        Business owner?{" "}
         <Link href="/login" className="text-primary hover:underline">
-          Merchant login
+          Sign in to your portal
+        </Link>
+        <span aria-hidden="true"> · </span>
+        <Link href="/" className="text-primary hover:underline">
+          Back to the website
         </Link>
       </p>
     </div>

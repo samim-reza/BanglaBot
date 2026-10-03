@@ -25,7 +25,9 @@ def test_bangla_numbers_and_amounts():
     assert spoken_amount("1850.00", "BDT", "bn") == "এক হাজার আটশো পঞ্চাশ টাকা"
     assert spoken_amount("1850.50", "BDT", "bn") == "এক হাজার আটশো পঞ্চাশ টাকা পঞ্চাশ পয়সা"
     assert spoken_amount("1850.00", "BDT", "en") == "1850 taka"
-    assert spoken_amount("12.50", "BDT", "en") == "12.50 taka"
+    assert spoken_amount("12.50", "BDT", "en") == "12 taka and 50 poisha"
+    assert spoken_amount("89.50", "GBP", "en") == "89 pounds and 50 pence"
+    assert spoken_amount("120", "USD", "en") == "120 dollars"
     assert spoken_amount("garbage", "BDT", "bn") == "শূন্য টাকা"
 
 
@@ -42,3 +44,11 @@ def test_detect_language_ignores_loanwords_and_single_english_words():
     assert detect_language("Yes, this is Nusrat speaking", supported=["bn", "en"]) == "en"
     assert detect_language("I want to cancel this order", supported=["bn", "en"]) == "en"
     assert detect_language("হ্যাঁ, ওকে confirm", supported=["bn", "en"]) == "bn"
+
+
+def test_english_word_count_ignores_loanwords():
+    from app.voice.languages import english_word_count
+
+    assert english_word_count("Okay, yes") == 0
+    assert english_word_count("Do you bulletin?") == 3
+    assert english_word_count("Yes, this is Nusrat speaking") == 4
