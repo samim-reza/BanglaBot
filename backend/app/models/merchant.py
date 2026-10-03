@@ -33,7 +33,7 @@ class Merchant(Base):
     vertical_config: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Facts the agent may answer from: address, hours, policies, FAQs.
     knowledge: Mapped[str] = mapped_column(Text, default="")
-    # Twilio number (E.164) whose inbound calls this account answers; "" = none.
+    # Telnyx number (E.164) whose inbound calls this account answers; "" = none.
     inbound_number: Mapped[str] = mapped_column(String(32), default="", index=True)
     region: Mapped[str] = mapped_column(String(8), default="INTL")
     timezone: Mapped[str] = mapped_column(String(64), default="UTC")

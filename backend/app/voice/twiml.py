@@ -1,4 +1,5 @@
-"""TwiML builders: the media stream (inbound + outbound), transfers, hang-ups."""
+"""TeXML (Telnyx's TwiML dialect) builders: the media stream (inbound + outbound),
+transfers, hang-ups — plus the callback URLs Telnyx posts to."""
 
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ class PublicUrlMissing(RuntimeError):
 def public_base_url() -> str:
     base = str(get_settings().public_base_url or "").strip().rstrip("/")
     if not base:
-        raise PublicUrlMissing("PUBLIC_BASE_URL (or TWILIO_PUBLIC_BASE_URL) is not set; Twilio cannot reach this server")
+        raise PublicUrlMissing("PUBLIC_BASE_URL is not set; Telnyx cannot reach this server")
     if not base.startswith(("http://", "https://")):
         base = f"https://{base}"
     return base
@@ -25,20 +26,20 @@ def public_base_url() -> str:
 def stream_url() -> str:
     base = public_base_url()
     if base.startswith("https://"):
-        return "wss://" + base[len("https://"):] + "/twilio/media"
-    return "ws://" + base[len("http://"):] + "/twilio/media"
+        return "wss://" + base[len("https://"):] + "/telnyx/media"
+    return "ws://" + base[len("http://"):] + "/telnyx/media"
 
 
 def status_callback_url(order_id: str) -> str:
-    return f"{public_base_url()}/twilio/status/{order_id}"
+    return f"{public_base_url()}/telnyx/status/{order_id}"
 
 
 def recording_callback_url(order_id: str) -> str:
-    return f"{public_base_url()}/twilio/recording/{order_id}"
+    return f"{public_base_url()}/telnyx/recording/{order_id}"
 
 
 def amd_callback_url(order_id: str) -> str:
-    return f"{public_base_url()}/twilio/amd/{order_id}"
+    return f"{public_base_url()}/telnyx/amd/{order_id}"
 
 
 def _param(name: str, value: Any) -> str:
@@ -46,11 +47,14 @@ def _param(name: str, value: Any) -> str:
 
 
 def log_recording_callback_url(call_log_id: str) -> str:
-    return f"{public_base_url()}/twilio/recording-log/{call_log_id}"
+    return f"{public_base_url()}/telnyx/recording-log/{call_log_id}"
 
 
 def stream_twiml(*, call_log_id: str, order_id: str = "") -> str:
-    """``<Connect><Stream>`` with the signed media token; the bridge speaks the greeting."""
+    """``<Connect><Stream>`` with the signed media token; the bridge speaks the greeting.
+
+    ``bidirectionalMode="rtp"`` lets the bridge stream 8 kHz μ-law frames back (the
+    default mode only plays whole MP3 files)."""
     params = {
         "order_id": order_id,
         "call_log_id": call_log_id,
@@ -60,7 +64,7 @@ def stream_twiml(*, call_log_id: str, order_id: str = "") -> str:
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
         "<Response><Connect>"
-        f'<Stream url="{escape(stream_url())}">{parameters}</Stream>'
+        f'<Stream url="{escape(stream_url())}" bidirectionalMode="rtp" bidirectionalCodec="PCMU">{parameters}</Stream>'
         "</Connect></Response>"
     )
 

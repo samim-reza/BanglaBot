@@ -54,11 +54,12 @@ def test_stream_twiml_carries_signed_parameters(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "public_base_url", "https://example.ngrok-free.app")
     body = twiml.stream_twiml(call_log_id="c1", order_id="o1")
-    assert 'url="wss://example.ngrok-free.app/twilio/media"' in body
+    assert 'url="wss://example.ngrok-free.app/telnyx/media"' in body
+    assert 'bidirectionalMode="rtp"' in body and 'bidirectionalCodec="PCMU"' in body
     assert '<Parameter name="order_id" value="o1"/>' in body
     assert '<Parameter name="media_token" value="' in body
     assert "<Say" not in body
-    assert twiml.status_callback_url("o1") == "https://example.ngrok-free.app/twilio/status/o1"
+    assert twiml.status_callback_url("o1") == "https://example.ngrok-free.app/telnyx/status/o1"
     assert "<Dial" in twiml.dial_twiml("+8801999999999", caller_id="+15550000000")
 
 
@@ -80,3 +81,10 @@ def test_machine_answer_detection():
     assert not is_machine_answer("human")
     assert not is_machine_answer("unknown")
     assert not is_machine_answer("")
+
+
+def test_machine_answers_cover_telnyx_values():
+    for value in ("machine_start", "machine_end_beep", "machine_end_silence", "machine_end_other", "fax", "machine"):
+        assert is_machine_answer(value)
+    for value in ("human", "unknown", "not_sure", ""):
+        assert not is_machine_answer(value)

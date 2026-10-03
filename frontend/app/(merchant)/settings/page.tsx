@@ -9,7 +9,6 @@
  */
 
 import { FormEvent, Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
   BookOpenText,
@@ -18,7 +17,6 @@ import {
   CalendarDays,
   Eye,
   EyeOff,
-  FlaskConical,
   Globe,
   KeyRound,
   LoaderCircle,
@@ -1083,14 +1081,6 @@ function FlowSection({ version }: { version: number }) {
       icon={Route}
       title="How your agent works"
       description="Updates when you save."
-      badge={
-        <Button asChild variant="outline" size="sm">
-          <Link href="/test">
-            <FlaskConical className="h-3.5 w-3.5" aria-hidden />
-            Test agent
-          </Link>
-        </Button>
-      }
     >
       {error ? (
         <div className="space-y-3">

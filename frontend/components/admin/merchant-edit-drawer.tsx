@@ -278,7 +278,7 @@ export function MerchantEditDrawer({
           <FormField
             id="edit-inbound"
             label="Inbound number"
-            hint="Twilio voice number. Blank detaches it."
+            hint="Telnyx voice number. Blank detaches it."
             error={errors.inbound_number}
           >
             <Input

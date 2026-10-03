@@ -98,8 +98,8 @@ async def workspace(merchant: Merchant = Depends(get_current_merchant), db: Asyn
         "entitlements": entitlements(merchant).as_json(),
         "public_base_url": settings.public_base_url or "",
         "telephony": {
-            "twilio_configured": bool(settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number),
-            "platform_number": settings.twilio_from_number or "",
+            "configured": bool(settings.telnyx_api_key and settings.telnyx_texml_app_id and settings.telnyx_from_number),
+            "platform_number": settings.telnyx_from_number or "",
         },
     }
 

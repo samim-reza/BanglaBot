@@ -9,7 +9,6 @@ import {
   CirclePlus,
   CircleX,
   Clock3,
-  FlaskConical,
   Globe,
   ListChecks,
   PhoneCall,
@@ -274,7 +273,6 @@ export default function DashboardPage() {
   const tiles = STATUS_TILES.filter((tile) => hasVoice || !tile.voice);
 
   const quickActions: { href: string; label: string; icon: LucideIcon }[] = [
-    { href: "/test", label: "Test your agent", icon: FlaskConical },
     hasCatalog
       ? { href: "/catalog", label: `Add ${catalogSingular.toLowerCase()}`, icon: CirclePlus }
       : { href: "/orders/new", label: `New ${singular.toLowerCase()}`, icon: CirclePlus },
@@ -356,12 +354,7 @@ export default function DashboardPage() {
             {calls === null ? (
               <SkeletonRows />
             ) : calls.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                No conversations yet.{" "}
-                <Link href="/test" className="font-medium text-primary-dark hover:underline">
-                  Test your agent
-                </Link>
-              </p>
+              <p className="py-4 text-center text-sm text-muted-foreground">No conversations yet.</p>
             ) : (
               <ul className="-mx-2 divide-y divide-border">
                 {calls.map((log) => (

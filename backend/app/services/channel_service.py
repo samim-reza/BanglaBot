@@ -145,15 +145,9 @@ async def whatsapp_merchant(to_number: str) -> Merchant | None:
     if not number:
         return None
     async with AsyncSessionLocal() as session:
-        merchant = await session.scalar(
+        return await session.scalar(
             select(Merchant).where(Merchant.channel_settings["whatsapp"]["number"].astext == number, Merchant.active.is_(True))
         )
-        if merchant is None:
-            # Development: Twilio's shared WhatsApp sandbox number routes to the default account.
-            fallback = str(get_settings().default_inbound_username or "").strip()
-            if fallback:
-                merchant = await session.scalar(select(Merchant).where(Merchant.username == fallback, Merchant.active.is_(True)))
-    return merchant
 
 
 def twiml_messages(messages: list[str]) -> str:

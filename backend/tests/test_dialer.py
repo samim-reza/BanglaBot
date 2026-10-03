@@ -89,7 +89,7 @@ async def test_cancel_stops_dialing_new_orders(fast, monkeypatch):
 
 async def test_config_error_aborts_the_whole_batch(fast, monkeypatch):
     async def fake_dial(run, order_id):
-        raise dialer.BatchAborted("TWILIO_FROM_NUMBER is not configured")
+        raise dialer.BatchAborted("TELNYX_FROM_NUMBER is not configured")
 
     async def no_live_calls(merchant_id):
         return 0
@@ -99,7 +99,7 @@ async def test_config_error_aborts_the_whole_batch(fast, monkeypatch):
     run = _run(["o1", "o2"])
     await dialer._run_batch(run)
     assert run.state == "failed"
-    assert "TWILIO_FROM_NUMBER" in run.error
+    assert "TELNYX_FROM_NUMBER" in run.error
 
 
 async def test_wait_for_slot_survives_a_db_hiccup_then_cancels(fast, monkeypatch):

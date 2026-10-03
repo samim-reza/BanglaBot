@@ -1,4 +1,4 @@
-"""Schema + seed on boot: ``create_all``, idempotent column patches, seeds.
+"""Schema on boot: ``create_all`` plus idempotent column patches.
 
 There is no migration tool. ``create_all`` builds missing tables from the
 models but never alters an existing one, so every column added after a
@@ -8,16 +8,12 @@ Everything here must be safe to run repeatedly against an up-to-date database.
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 import structlog
-from sqlalchemy import select, text
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncSession
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncConnection
 
-from app.core.config import get_settings
-from app.core.security import hash_password
 from app.db.base import Base
-from app.db.session import AsyncSessionLocal, engine
+from app.db.session import engine
 from app.models import AddonRequest, CallLog, CatalogItem, Merchant, Message, Order, SalesInquiry
 
 logger = structlog.get_logger(__name__)
@@ -152,73 +148,7 @@ async def create_schema() -> None:
         await apply_schema_patches(conn)
 
 
-DEMO_USERNAME = "demo"
-DEMO_PASSWORD = "demo123"
-
-
-async def seed_demo_merchant(session: AsyncSession) -> Merchant:
-    """Idempotent demo login ``demo`` / ``demo123`` with two sample orders."""
-    merchant = await session.scalar(select(Merchant).where(Merchant.username == DEMO_USERNAME))
-    if merchant is None:
-        merchant = Merchant(
-            business_name="Demo Shop",
-            owner_name="Demo Owner",
-            username=DEMO_USERNAME,
-            password_hash=hash_password(DEMO_PASSWORD),
-            phone="+8801700000000",
-            email="demo@example.com",
-            support_phone="",
-            language="bn",
-            supported_languages=["bn", "en"],
-            vertical="ecommerce",
-            region="BD",
-            timezone="Asia/Dhaka",
-            currency="BDT",
-            emergency_number="999",
-        )
-        session.add(merchant)
-        await session.flush()
-    has_orders = await session.scalar(select(Order.id).where(Order.merchant_id == merchant.id).limit(1))
-    if not has_orders:
-        session.add_all(
-            [
-                Order(
-                    merchant_id=merchant.id,
-                    order_ref="DEMO-1001",
-                    customer_name="রাহিম উদ্দিন",
-                    customer_phone="+8801711111111",
-                    address="বাড়ি ১২, রোড ৫, ধানমন্ডি, ঢাকা",
-                    items_summary="পাঞ্জাবি (L) x1, পায়জামা x1",
-                    total_amount=Decimal("1850.00"),
-                    currency="BDT",
-                    notes="",
-                ),
-                Order(
-                    merchant_id=merchant.id,
-                    order_ref="DEMO-1002",
-                    customer_name="Nusrat Jahan",
-                    customer_phone="+8801822222222",
-                    address="Flat 4B, House 7, Sector 11, Uttara, Dhaka",
-                    items_summary="Cotton saree x2",
-                    total_amount=Decimal("3200.00"),
-                    currency="BDT",
-                    notes="Deliver after 5pm",
-                ),
-            ]
-        )
-    await session.commit()
-    return merchant
-
-
 async def bootstrap() -> None:
-    """Called from the app lifespan: schema, patches and (optionally) demo data."""
-    settings = get_settings()
+    """Called from the app lifespan: schema and idempotent patches. No demo data in production —
+    accounts are created in the admin console (``scripts/create_merchant.py`` for the terminal)."""
     await create_schema()
-    if settings.auto_seed_demo_data:
-        from app.db.demo_accounts import seed_demo_accounts
-
-        async with AsyncSessionLocal() as session:
-            await seed_demo_merchant(session)
-        async with AsyncSessionLocal() as session:
-            created = await seed_demo_accounts(session)
-        await logger.ainfo("demo_data_seeded", usernames=[DEMO_USERNAME, *created])

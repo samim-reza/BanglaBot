@@ -4,7 +4,6 @@ import { ArrowRight, Check } from "lucide-react";
 
 import { CallTranscript } from "@/components/site/call-transcript";
 import { CtaBand } from "@/components/site/cta-band";
-import { DemoSection } from "@/components/site/demo-section";
 import { FeatureGrid } from "@/components/site/feature-grid";
 import { PageHero, Section, SectionHeading } from "@/components/site/section";
 import { Button } from "@/components/ui/button";
@@ -103,8 +102,6 @@ export default function SolutionsPage() {
           <FeatureGrid />
         </div>
       </Section>
-
-      <DemoSection />
 
       <CtaBand />
     </>

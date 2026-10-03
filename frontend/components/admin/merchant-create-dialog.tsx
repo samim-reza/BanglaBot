@@ -275,7 +275,7 @@ export function MerchantCreateDialog({
           <FormField
             id="create-inbound"
             label="Inbound number"
-            hint="The Twilio number whose calls this account answers, e.g. +14155550123. Each number can belong to one account only."
+            hint="The Telnyx number whose calls this account answers, e.g. +14155550123. Each number can belong to one account only."
             error={errors.inbound_number}
           >
             <Input

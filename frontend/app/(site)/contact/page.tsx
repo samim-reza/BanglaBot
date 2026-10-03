@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 const NEXT_STEPS = [
   "We confirm your business type, region and the number you want to use.",
-  "We set up your agent and show you the browser test console.",
+  "We set up your agent and call it with you.",
   "You test it on your own questions, then go live when you're happy.",
 ];
 
@@ -66,8 +66,8 @@ export default function ContactPage() {
               <div>
                 <h2 className="font-semibold text-foreground">Can&apos;t wait?</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  <Link href="/#demo" className="font-medium text-primary-dark hover:underline">
-                    Chat with our demo clinic agent
+                  <Link href="/pricing" className="font-medium text-primary-dark hover:underline">
+                    See plans and prices
                   </Link>{" "}
                   right now.
                 </p>

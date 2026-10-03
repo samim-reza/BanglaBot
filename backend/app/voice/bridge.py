@@ -1,4 +1,4 @@
-"""Audio transport for one call: Twilio Media Streams (or the browser test console).
+"""Audio transport for one call: Telnyx media streaming (or the browser test console).
 
 One ``CallBridge`` owns one media websocket and plugs it into a
 :class:`~app.voice.agent.CallAgent`:
@@ -11,10 +11,11 @@ One ``CallBridge`` owns one media websocket and plugs it into a
                           ▼
                      AzureSpeechTTS (μ-law 8 kHz, LRU-cached) ──▶ caller
 
-The browser test console speaks the same wire protocol as Twilio (``start`` /
-``media`` / ``mark`` / ``clear`` / ``stop``), so a test call exercises exactly
-the production path; in that mode the bridge also sends ``transcript`` and
-``state`` events for the console to show.
+Telnyx (bidirectional RTP mode) and the browser test console speak the same
+event set (``start`` / ``media`` / ``mark`` / ``clear`` / ``stop``), so a test
+call exercises exactly the production path. The console uses Twilio's field
+names (``streamSid``, camelCase) and also gets ``transcript`` and ``state``
+events; Telnyx frames carry no stream id.
 
 Turn design
 -----------
@@ -183,7 +184,7 @@ class CallBridge:
         self._barge_in_allowed = True
         self._assistant_turn_started_at = 0.0
         self._playout_end = 0.0
-        self._twilio_mark_counter = 0
+        self._mark_counter = 0
         self._pending_playback_mark: str | None = None
         self._playback_mark_event = asyncio.Event()
         self._tts_semaphore = asyncio.Semaphore(2)
@@ -276,7 +277,7 @@ class CallBridge:
                 self._turn_first_audio_logged = False
                 self._speaker_task = asyncio.create_task(self._speaker_loop())
                 self.speak(opening, allow_barge_in=False, message_ref=self.messages[-1])
-                twilio_task = asyncio.create_task(self._twilio_loop())
+                media_task = asyncio.create_task(self._media_loop())
                 self._stt = self._new_stt()
                 stt_connect = asyncio.create_task(self._stt.connect())
                 asyncio.create_task(self._warm_tts_cache())
@@ -286,7 +287,7 @@ class CallBridge:
                 logger.info("bridge_stt_connected", call_log_id=self.call_log_id, ms=int((time.monotonic() - self._turn_started_at) * 1000))
                 await self._emit_state()
                 tasks = [
-                    twilio_task,
+                    media_task,
                     asyncio.create_task(self._stt_loop()),
                     asyncio.create_task(self._watchdog()),
                 ]
@@ -357,8 +358,8 @@ class CallBridge:
         """Hang up when the carrier forwarded the call (reject → voicemail / divert).
 
         A rejected or busy callee is often forwarded by the network to a voicemail
-        or "call back" service that answers as if it were a person; Twilio marks
-        such calls with ``forwarded_from``. Talking to it wastes minutes, so the
+        or "call back" service that answers as if it were a person; the provider marks
+        such calls with ``forwarded_from`` (Telnyx doesn't report it, so this is a no-op there). Talking to it wastes minutes, so the
         call is dropped right away and the record goes back to ``no_answer``.
         """
         from app.services.call_service import fetch_call_details
@@ -366,12 +367,12 @@ class CallBridge:
         try:
             details = await fetch_call_details(self.call_sid)
         except Exception as exc:  # noqa: BLE001 — a lookup failure just means no shortcut
-            await logger.ainfo("twilio_call_lookup_failed", call_log_id=self.call_log_id, error=str(exc))
+            await logger.ainfo("call_lookup_failed", call_log_id=self.call_log_id, error=str(exc))
             return
         forwarded = str(details.get("forwarded_from") or "").strip()
         if not forwarded or self.closed:
             return
-        # Some carriers/Twilio stamp forwarded_from with the dialed number itself on
+        # Some carriers stamp forwarded_from with the dialed number itself on
         # ordinary answered calls; only a forward to a DIFFERENT number is a divert.
         from app.core.regions import normalize_phone
 
@@ -439,7 +440,15 @@ class CallBridge:
         )
 
     # ------------------------------------------------------------------ media in
-    async def _twilio_loop(self) -> None:
+    def _frame(self, event: str, **body: Any) -> dict[str, Any]:
+        """An outgoing media-socket event: the console wants ``streamSid``; Telnyx
+        rejects unknown fields."""
+        message: dict[str, Any] = {"event": event, **body}
+        if self.web:
+            message["streamSid"] = self.stream_sid
+        return message
+
+    async def _media_loop(self) -> None:
         while not self.closed:
             try:
                 message = await self.websocket.receive_json()
@@ -453,8 +462,8 @@ class CallBridge:
             event = message.get("event")
             if event == "start":
                 start = message.get("start") or {}
-                self.stream_sid = start.get("streamSid") or self.stream_sid
-                self.call_sid = start.get("callSid") or self.call_sid
+                self.stream_sid = message.get("stream_id") or start.get("streamSid") or self.stream_sid
+                self.call_sid = start.get("call_control_id") or start.get("callSid") or self.call_sid
             elif event == "media":
                 payload = (message.get("media") or {}).get("payload") or ""
                 if payload:
@@ -464,6 +473,8 @@ class CallBridge:
                 if mark_name and mark_name == self._pending_playback_mark:
                     self._pending_playback_mark = None
                     self._playback_mark_event.set()
+            elif event == "error":
+                await logger.awarning("media_stream_error", call_log_id=self.call_log_id, error=message.get("payload"))
             elif event == "stop":
                 self.closed = True
                 if self._stt is not None:
@@ -775,9 +786,7 @@ class CallBridge:
         for index, frame in enumerate(frames):
             if utterance.interrupted or self.closed:
                 return index / len(frames)
-            await self.websocket.send_json(
-                {"event": "media", "streamSid": self.stream_sid, "media": {"payload": base64.b64encode(frame).decode("ascii")}}
-            )
+            await self.websocket.send_json(self._frame("media", media={"payload": base64.b64encode(frame).decode("ascii")}))
             clock += FRAME_SECONDS
             self._playout_end = clock
             self._silence_counting_paused_until = max(self._silence_counting_paused_until, clock + 1.0)
@@ -789,18 +798,18 @@ class CallBridge:
     async def _await_playback_mark(self) -> None:
         if not self.stream_sid or self.closed:
             return
-        self._twilio_mark_counter += 1
-        mark_name = f"agent-{self._twilio_mark_counter}"
+        self._mark_counter += 1
+        mark_name = f"agent-{self._mark_counter}"
         self._pending_playback_mark = mark_name
         self._playback_mark_event.clear()
-        await self.websocket.send_json({"event": "mark", "streamSid": self.stream_sid, "mark": {"name": mark_name}})
+        await self.websocket.send_json(self._frame("mark", mark={"name": mark_name}))
         timeout = max(0.5, self._playout_end - time.monotonic()) + 3.0
         try:
             await asyncio.wait_for(self._playback_mark_event.wait(), timeout=timeout)
         except asyncio.TimeoutError:
             if self._pending_playback_mark == mark_name:
                 self._pending_playback_mark = None
-                await logger.awarning("twilio_playback_mark_timeout", call_log_id=self.call_log_id, mark_name=mark_name)
+                await logger.awarning("playback_mark_timeout", call_log_id=self.call_log_id, mark_name=mark_name)
 
     async def _interrupt_playback(self, reason: str) -> None:
         current = self._current_utterance
@@ -808,7 +817,7 @@ class CallBridge:
             current.interrupted = True
             if self.stream_sid and not self.closed:
                 try:
-                    await self.websocket.send_json({"event": "clear", "streamSid": self.stream_sid})
+                    await self.websocket.send_json(self._frame("clear"))
                 except Exception:  # noqa: BLE001
                     pass
             self._playout_end = time.monotonic()
@@ -851,7 +860,7 @@ class CallBridge:
 
     # ------------------------------------------------------------------ test console events
     async def _emit(self, message: dict[str, Any]) -> None:
-        """Extra events for the browser test console (never sent to Twilio)."""
+        """Extra events for the browser test console (never sent to Telnyx)."""
         if not self.web or self.closed:
             return
         try:
@@ -941,22 +950,23 @@ class CallBridge:
             await logger.awarning("transfer_dial_failed", call_log_id=self.call_log_id, error=str(exc))
         if ok:
             await logger.ainfo("transfer_started", call_log_id=self.call_log_id, target=number)
-            # Twilio ends the stream when the call moves to <Dial>; close our side too.
+            # Telnyx ends the stream when the call moves to <Dial>; close our side too.
             await asyncio.sleep(2.0)
-            await self._safe_close(end_twilio_call=False)
+            await self._safe_close(end_phone_call=False)
             return
         line = phrase("closing_transfer_callback", self.active_language)
         self.messages.append({"role": "assistant", "content": line})
         self.speak(line, allow_barge_in=False, close_after=True)
 
     async def _dial_support(self, number: str) -> bool:
+        from app.services import telnyx
         from app.services.call_service import redirect_call_to_human
 
         if not self.call_sid or self.web:
             return False
-        return await redirect_call_to_human(self.call_sid, number, region_of(self.merchant))
+        return await redirect_call_to_human(self.call_sid, number, region_of(self.merchant), caller_id=telnyx.number_for(self.merchant))
 
-    async def _end_twilio_call(self) -> None:
+    async def _end_phone_call(self) -> None:
         if not self.call_sid or self.web:
             return
         from app.services.call_service import complete_call
@@ -964,9 +974,9 @@ class CallBridge:
         try:
             await complete_call(self.call_sid)
         except Exception as exc:  # noqa: BLE001
-            await logger.ainfo("twilio_complete_call_failed", call_log_id=self.call_log_id, error=str(exc))
+            await logger.ainfo("complete_call_failed", call_log_id=self.call_log_id, error=str(exc))
 
-    async def _safe_close(self, *, code: int | None = None, end_twilio_call: bool = True) -> None:
+    async def _safe_close(self, *, code: int | None = None, end_phone_call: bool = True) -> None:
         self._closed_by_agent = True
         already_closed = self.closed
         self.closed = True
@@ -977,8 +987,8 @@ class CallBridge:
                 await self.websocket.close()
         except Exception:  # noqa: BLE001
             pass
-        if end_twilio_call and not already_closed:
-            await self._end_twilio_call()
+        if end_phone_call and not already_closed:
+            await self._end_phone_call()
 
 
 __all__ = ["CallBridge"]

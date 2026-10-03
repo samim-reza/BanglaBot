@@ -49,7 +49,6 @@ class Settings(BaseSettings):
         default="change-me-admin-token-secret",
         validation_alias=AliasChoices("ADMIN_TOKEN_SECRET", "JWT_SECRET"),
     )
-    auto_seed_demo_data: bool = False
 
     # --- OpenAI: streaming STT + the call brain ------------------------------
     openai_api_key: str | None = None
@@ -93,10 +92,10 @@ class Settings(BaseSettings):
     # Speak a one-word acknowledgement ("জি।" / "Okay.") the moment a caller turn
     # lands, masking the model + TTS latency of the real reply.
     voice_instant_ack: bool = True
-    # Twilio answering-machine detection (async): a voicemail answer is hung up
-    # on and the order stays callable (no_answer). Small per-call Twilio fee.
+    # Telnyx answering-machine detection (async): a voicemail answer is hung up
+    # on and the order stays callable (no_answer). Small per-call Telnyx fee.
     voice_machine_detection: bool = True
-    # Hang up when Twilio reports the call was forwarded to a DIFFERENT number
+    # Hang up when the carrier reports the call was forwarded to a DIFFERENT number
     # (divert service). Off by default: Bangladeshi carriers stamp forwarded_from
     # with the dialed number on ordinary answered calls, and answering-machine
     # detection already handles voicemail.
@@ -104,7 +103,7 @@ class Settings(BaseSettings):
     voice_max_call_seconds: int = 240
     # Inbound calls (booking a doctor, a technician, a viewing) run longer.
     voice_max_inbound_call_seconds: int = 480
-    # Record inbound calls too (Twilio recording, started when the stream connects).
+    # Record inbound calls too (Telnyx recording, started when the stream connects).
     voice_record_inbound: bool = True
 
     # --- Bulk dialer ("Call all" + scheduled auto-call) --------------------------
@@ -114,21 +113,28 @@ class Settings(BaseSettings):
     # Orders already dialed this many times are left out of batches (manual
     # calls are never limited).
     bulk_call_max_attempts: int = 3
-    # Pause between two originations in a batch (Twilio rate-limits bursts).
+    # Pause between two originations in a batch (Telnyx rate-limits bursts).
     bulk_call_gap_seconds: float = 1.5
     # A scheduled auto-call found this far past its time (e.g. the server was
     # down) is skipped instead of dialing everyone at an unexpected hour.
     auto_call_max_late_minutes: int = 120
 
-    # --- Twilio ------------------------------------------------------------------
-    twilio_account_sid: str | None = None
-    twilio_auth_token: str | None = None
-    twilio_from_number: str | None = Field(
-        default=None, validation_alias=AliasChoices("TWILIO_FROM_NUMBER", "TWILIO_PHONE_NUMBER")
+    # --- Telnyx (inbound + outbound calls, SMS) ----------------------------------------
+    telnyx_api_key: str | None = None
+    # The TeXML application the platform number is assigned to (Programmable Voice →
+    # TeXML Applications); outbound calls run under it.
+    telnyx_texml_app_id: str | None = None
+    # Telnyx user id for the account-scoped TeXML endpoints. Learned from the first
+    # webhook when empty (the log line "telnyx_account_sid_learned" shows it).
+    telnyx_account_sid: str | None = None
+    telnyx_from_number: str | None = Field(
+        default=None, validation_alias=AliasChoices("TELNYX_FROM_NUMBER", "TELNYX_PHONE_NUMBER")
     )
-    # Public https origin Twilio can reach (status callbacks + media websocket).
+    # Base64 Ed25519 key (Keys & Credentials → Public Key) for ENFORCE_WEBHOOK_SIGNATURES.
+    telnyx_public_key: str | None = None
+    # Public https origin Telnyx can reach (status callbacks + media websocket).
     public_base_url: str | None = Field(
-        default=None, validation_alias=AliasChoices("TWILIO_PUBLIC_BASE_URL", "PUBLIC_BASE_URL")
+        default=None, validation_alias=AliasChoices("PUBLIC_BASE_URL", "TELNYX_PUBLIC_BASE_URL")
     )
     enforce_webhook_signatures: bool = False
 
@@ -141,22 +147,17 @@ class Settings(BaseSettings):
     smtp_from_name: str = "BanglaBot"
 
     # --- Inbound calls --------------------------------------------------------------
-    # Account (username) that answers calls to a number no account has claimed —
-    # handy in development with a single Twilio number. Empty = reject such calls.
-    default_inbound_username: str | None = None
-    # On startup, point TWILIO_FROM_NUMBER's voice webhook at {PUBLIC_BASE_URL}/twilio/inbound
-    # (useful with ngrok, whose URL changes every run). Changes your Twilio number config.
-    twilio_auto_configure_inbound: bool = False
-    # Account whose website-chat widget the public website embeds as a live demo.
-    demo_widget_username: str | None = "clinic"
+    # On startup, point the TeXML application's voice webhook at {PUBLIC_BASE_URL}/telnyx/inbound
+    # (useful with ngrok, whose URL changes every run). Changes your Telnyx app config.
+    telnyx_auto_configure_inbound: bool = False
 
-    # --- SMS (Twilio Messaging) ------------------------------------------------------
+    # --- SMS (Telnyx Messaging) ------------------------------------------------------
     # Global switch; each account also has its own SMS settings.
     sms_enabled: bool = True
-    # A Messaging Service SID (MG…) is preferred (sender pools, US A2P 10DLC);
-    # otherwise SMS go out from TWILIO_SMS_FROM, falling back to TWILIO_FROM_NUMBER.
-    twilio_messaging_service_sid: str | None = None
-    twilio_sms_from: str | None = None
+    # The messaging profile the sender number is assigned to; SMS go out from
+    # TELNYX_SMS_FROM, falling back to TELNYX_FROM_NUMBER.
+    telnyx_messaging_profile_id: str | None = None
+    telnyx_sms_from: str | None = None
     # How often the reminder sender looks for upcoming appointments / visits.
     sms_reminder_interval_seconds: int = 300
 
@@ -174,10 +175,13 @@ class Settings(BaseSettings):
 
     # --- Chat channels -----------------------------------------------------------------
     # Facebook Messenger: the Meta app's secret (signs webhooks) and the verify token you
-    # type into the app's webhook settings. WhatsApp uses the Twilio credentials above.
+    # type into the app's webhook settings.
     meta_app_secret: str | None = None
     meta_verify_token: str | None = None
     meta_graph_version: str = "v21.0"
+    # WhatsApp runs on a Twilio WhatsApp sender (calls and SMS are on Telnyx).
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
 
     # --- Jev (TypeSafe System One) -------------------------------------------------------
     # Optional fast yes/no + choice decisions on scripted steps the keyword matcher can't
@@ -190,10 +194,11 @@ class Settings(BaseSettings):
     typesafe_min_confidence: float = 0.85
 
     @field_validator(
-        "openai_api_key", "azure_speech_key", "public_base_url", "twilio_from_number", "default_inbound_username",
-        "openai_prompt_cache_retention", "twilio_messaging_service_sid", "twilio_sms_from", "google_client_id",
+        "openai_api_key", "azure_speech_key", "public_base_url", "telnyx_api_key", "telnyx_texml_app_id",
+        "telnyx_account_sid", "telnyx_from_number", "telnyx_public_key",
+        "openai_prompt_cache_retention", "telnyx_messaging_profile_id", "telnyx_sms_from", "google_client_id",
         "google_client_secret", "google_redirect_uri", "encryption_secret", "meta_app_secret", "meta_verify_token",
-        "typesafe_api_key", mode="before",
+        "typesafe_api_key", "twilio_account_sid", "twilio_auth_token", mode="before",
     )
     @classmethod
     def blank_string_as_none(cls, value):
@@ -202,11 +207,6 @@ class Settings(BaseSettings):
         if value == "":
             return None
         return value
-
-    @property
-    def twilio_public_base_url(self) -> str | None:
-        """Alias kept for readers of the old name."""
-        return self.public_base_url
 
 
 @lru_cache

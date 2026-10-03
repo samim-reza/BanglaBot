@@ -9,7 +9,7 @@ import {
   Check,
   FileText,
   Mic,
-  MonitorPlay,
+  PhoneCall,
   PhoneForwarded,
   Volume2,
   Webhook,
@@ -125,14 +125,14 @@ export default function HowItWorksPage() {
               id="test-title"
               align="left"
               eyebrow="Before you go live"
-              title="Test it like a customer would"
-              subtitle="The test console lets you call your agent from the browser or chat with it. Ask the awkward questions, try to double-book, ask for a person — and read the transcript afterwards."
+              title="Try it like a customer would"
+              subtitle="Call your agent's number from your own phone and preview the website chat. Ask the awkward questions, then read the transcript."
             />
             <ul className="mt-6 space-y-2.5 text-sm">
               {[
-                "Browser test calls — no phone or number needed",
-                "Chat tests with the same agent your chat channels use",
-                "Every test transcribed with its outcome",
+                "Call your number from any phone",
+                "Preview the website chat before you embed it",
+                "Every conversation transcribed with its outcome",
               ].map((item) => (
                 <li key={item} className="flex gap-2.5 text-foreground">
                   <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
@@ -144,25 +144,25 @@ export default function HowItWorksPage() {
           <div className="rounded-2xl border border-border bg-card p-6">
             <div className="flex items-center gap-3">
               <span className="inline-flex h-10 w-10 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                <MonitorPlay className="h-5 w-5" aria-hidden />
+                <PhoneCall className="h-5 w-5" aria-hidden />
               </span>
               <div>
-                <p className="font-semibold text-foreground">Test console</p>
-                <p className="text-xs text-muted-foreground">Call or chat with your agent before it meets a customer</p>
+                <p className="font-semibold text-foreground">Before going live</p>
+                <p className="text-xs text-muted-foreground">Try your agent before customers do</p>
               </div>
             </div>
             <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg border border-border bg-surface p-4">
-                <p className="font-semibold text-foreground">Call from browser</p>
-                <p className="mt-1 text-xs text-muted-foreground">Talk through your microphone</p>
+                <p className="font-semibold text-foreground">Call your number</p>
+                <p className="mt-1 text-xs text-muted-foreground">From any phone</p>
               </div>
               <div className="rounded-lg border border-border bg-surface p-4">
-                <p className="font-semibold text-foreground">Chat test</p>
-                <p className="mt-1 text-xs text-muted-foreground">Type, like a website visitor</p>
+                <p className="font-semibold text-foreground">Chat preview</p>
+                <p className="mt-1 text-xs text-muted-foreground">On the Channels page</p>
               </div>
             </div>
             <p className="mt-4 rounded-lg bg-accent px-4 py-3 text-xs text-accent-foreground">
-              Test calls and chats land in your call log with their transcript and outcome, labelled as tests.
+              Every call and chat lands in Calls &amp; chats with its transcript and outcome.
             </p>
           </div>
         </div>

@@ -19,7 +19,7 @@ import { callsApi, formatApiError, type CallChannel, type CallLog, type ChannelK
 
 const PAGE_SIZE = 20;
 
-/** Filter chips; `channel` = the plan channel the chip needs (tests are always shown). */
+/** Filter chips; `channel` = the plan channel the chip needs. */
 const CHANNELS: { value: CallChannel | ""; label: string; channel?: ChannelKey }[] = [
   { value: "", label: "All" },
   { value: "inbound", label: "Inbound calls", channel: "voice" },
@@ -27,8 +27,6 @@ const CHANNELS: { value: CallChannel | ""; label: string; channel?: ChannelKey }
   { value: "widget", label: "Website chat", channel: "web_chat" },
   { value: "whatsapp", label: "WhatsApp", channel: "whatsapp" },
   { value: "messenger", label: "Messenger", channel: "messenger" },
-  { value: "web", label: "Browser tests" },
-  { value: "chat", label: "Chat tests" },
 ];
 
 /** Outcomes the agent records, for the filter (labels come from the shared helper). */
@@ -198,7 +196,7 @@ export default function CallsPage() {
       ) : items.length === 0 ? (
         error ? null : (
           <EmptyState title={filtered ? "Nothing matches these filters" : "No calls or chats yet"}>
-            {filtered ? (
+            {filtered && (
               <button
                 type="button"
                 className="font-medium text-primary-dark hover:underline"
@@ -210,10 +208,6 @@ export default function CallsPage() {
               >
                 Clear filters
               </button>
-            ) : (
-              <Link href="/test" className="font-medium text-primary-dark hover:underline">
-                Test your agent
-              </Link>
             )}
           </EmptyState>
         )

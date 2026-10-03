@@ -236,7 +236,7 @@ export function SmsSection({ data, onSaved }: { data: Integrations; onSaved: (ne
           <UsageMeter label="Texts this month" used={sms.sent_this_month} included={usage.limits.sms} unit="texts" />
           {sms.sender && (
             <p className="text-xs text-muted-foreground">
-              From {sms.sender.startsWith("+") ? <span className="font-mono">{sms.sender}</span> : `your Twilio ${sms.sender}`}
+              From <span className="font-mono">{sms.sender}</span>
             </p>
           )}
           <form onSubmit={sendTest} noValidate className="grid gap-2 rounded-md border border-border bg-surface p-3">
@@ -244,7 +244,7 @@ export function SmsSection({ data, onSaved }: { data: Integrations; onSaved: (ne
               <label htmlFor="sms-test-to" className="text-[13.5px] font-semibold text-muted-foreground">
                 Test text
               </label>
-              <InfoTip label="About test texts">On a Twilio trial account, texts only reach numbers verified in your Twilio console.</InfoTip>
+              <InfoTip label="About test texts">US texts need the sender number registered for 10DLC in Telnyx.</InfoTip>
             </div>
             <div className="flex gap-2">
               <Input id="sms-test-to" type="tel" inputMode="tel" autoComplete="tel" placeholder="+1 617 555 0100" value={testTo} onChange={(e) => setTestTo(e.target.value)} />

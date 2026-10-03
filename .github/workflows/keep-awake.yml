@@ -1,5 +1,5 @@
 # Render's free plan sleeps a service after 15 idle minutes; a sleeping backend
-# misses Twilio calls and pauses scheduled auto-calls and SMS reminders.
+# misses phone calls and pauses scheduled auto-calls and SMS reminders.
 # Ping it every 10 minutes so it stays awake (one free service fits in Render's
 # 750 free hours a month).
 name: Keep backend awake

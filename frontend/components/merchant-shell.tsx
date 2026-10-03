@@ -10,7 +10,6 @@ import {
   CirclePlus,
   ClipboardList,
   Contact,
-  FlaskConical,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -62,7 +61,6 @@ function navFor(vertical: VerticalSpec): NavItem[] {
   }
   items.push(
     { href: "/calls", label: "Calls & chats", icon: MessagesSquare },
-    { href: "/test", label: "Test your agent", icon: FlaskConical },
     { href: "/channels", label: "Channels", icon: Radio },
     { href: "/addons", label: "Add-ons", icon: Puzzle },
     { href: "/settings", label: "Settings", icon: Settings },

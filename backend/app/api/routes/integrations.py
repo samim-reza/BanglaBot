@@ -83,7 +83,7 @@ async def _summary(request: Request, merchant: Merchant, db: AsyncSession) -> di
         "sms": {
             "settings": sms_service.settings_of(merchant),
             "platform_ready": sms_service.platform_ready(),
-            "sender": settings.twilio_messaging_service_sid and "Messaging Service" or (settings.twilio_sms_from or settings.twilio_from_number or ""),
+            "sender": settings.telnyx_sms_from or settings.telnyx_from_number or "",
             "sent_this_month": month_sms,
         },
         "calendar": {

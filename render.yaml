@@ -28,3 +28,17 @@ services:
         sync: false
       - key: FRONTEND_ORIGIN
         sync: false
+      # Telnyx: calls + SMS. The API key is a secret; the rest identify the portal setup.
+      - key: TELNYX_API_KEY
+        sync: false
+      - key: TELNYX_TEXML_APP_ID
+        value: "3062706520463508771"
+      - key: TELNYX_FROM_NUMBER
+        value: "+18723428160"
+      - key: TELNYX_MESSAGING_PROFILE_ID
+        value: 4001a102-da15-41e1-9fc0-62171ef56b94
+      - key: TELNYX_ACCOUNT_SID
+        sync: false
+      # New Telnyx accounts allow 2 concurrent outbound calls.
+      - key: BULK_CALL_MAX_CONCURRENT
+        value: "2"

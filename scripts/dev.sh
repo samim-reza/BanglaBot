@@ -2,10 +2,10 @@
 # Local development launcher: ngrok tunnel + FastAPI backend (:8000) + Next.js frontend (:3000).
 #
 #   ./scripts/dev.sh            start everything (re-runnable: stops previous instances first)
-#   ./scripts/dev.sh --no-ngrok start without a tunnel (no outbound calls will reach Twilio webhooks)
+#   ./scripts/dev.sh --no-ngrok start without a tunnel (no outbound calls will reach Telnyx webhooks)
 #
-# The ngrok https URL is exported as PUBLIC_BASE_URL / TWILIO_PUBLIC_BASE_URL so the backend
-# builds Twilio webhook + media-stream URLs that Twilio can reach. Real environment variables
+# The ngrok https URL is exported as PUBLIC_BASE_URL / TELNYX_PUBLIC_BASE_URL so the backend
+# builds Telnyx webhook + media-stream URLs that Telnyx can reach. Real environment variables
 # override the values in .env, so .env itself is never rewritten.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -97,7 +97,7 @@ except Exception:
     echo "✖ Could not get the ngrok URL (is ngrok authed? run: ngrok config add-authtoken <token>). See /tmp/banglabot-ngrok.log"
     exit 1
   fi
-  export PUBLIC_BASE_URL TWILIO_PUBLIC_BASE_URL="$PUBLIC_BASE_URL"
+  export PUBLIC_BASE_URL TELNYX_PUBLIC_BASE_URL="$PUBLIC_BASE_URL"
   echo "✔ Public URL: $PUBLIC_BASE_URL"
 else
   echo "▶ Skipping ngrok (--no-ngrok): outbound calls cannot reach this machine."
@@ -129,10 +129,9 @@ echo "▶ Starting frontend on :3000..."
 echo ""
 echo "  UI:      http://localhost:3000            (website; portal sign-in at /login)"
 echo "  Admin:   http://localhost:3000/admin      (ADMIN_USERNAME / ADMIN_PASSWORD from .env)"
-echo "  Test:    clinic/clinic123 · realestate/realestate123 · homeservice/homeservice123 · shop/shop123"
 echo "  API:     http://localhost:8000/docs"
 if [ -n "$PUBLIC_BASE_URL" ]; then
-  echo "  Public:  $PUBLIC_BASE_URL  (Twilio webhooks + media stream)"
+  echo "  Public:  $PUBLIC_BASE_URL  (Telnyx webhooks + media stream)"
 fi
 echo ""
 wait

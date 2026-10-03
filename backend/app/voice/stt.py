@@ -1,6 +1,6 @@
 """Streaming speech-to-text over OpenAI's transcription-only Realtime session.
 
-This is the *ears* of the cascade pipeline: Twilio μ-law frames go in, server
+This is the *ears* of the cascade pipeline: phone μ-law frames go in, server
 VAD marks speech start/stop, and finished utterances come back as text. No
 speech model reasons or speaks here — that is ``gpt-5.4-mini`` + Azure TTS —
 so the only OpenAI audio cost is the transcription model.
@@ -82,7 +82,7 @@ class TranscriptionStream:
         await self._ws.send(json.dumps({"type": "session.update", "session": self._session_body()}))
 
     async def send_audio_b64(self, payload: str) -> None:
-        """Forward one Twilio media payload (base64 μ-law) unchanged."""
+        """Forward one media payload (base64 μ-law) unchanged."""
         if self._ws is None or not payload:
             return
         try:

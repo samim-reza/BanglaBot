@@ -169,12 +169,11 @@ function ContactFormInner({ plan, type }: { plan: string | null; type: string | 
         <CircleCheck className="mx-auto h-10 w-10 text-primary" aria-hidden />
         <h2 className="mt-4 text-xl font-semibold text-foreground">Thanks, {values.name.trim().split(" ")[0]} — we&apos;ve got it.</h2>
         <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-          Someone from our team will reach out{values.email.trim() ? ` at ${values.email.trim()}` : " by phone"} shortly. In the
-          meantime, try the live demo agent.
+          Someone from our team will reach out{values.email.trim() ? ` at ${values.email.trim()}` : " by phone"} shortly.
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-3">
           <Button asChild>
-            <Link href="/#demo">Try the live demo</Link>
+            <Link href="/how-it-works">How it works</Link>
           </Button>
           <Button asChild variant="outline">
             <Link href="/solutions">Explore solutions</Link>

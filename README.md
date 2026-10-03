@@ -17,7 +17,6 @@ Every engine also gets (some as add-ons — a plan is one product with limits, e
 - **live transfer** to the business's team;
 - **recordings and transcripts**;
 - **bulk and scheduled outbound** calls;
-- a **test console**: call your agent from the browser, or chat with it.
 
 Accounts are English by default (Bangla is supported). Each account has a **region preset** that sets time zone, currency, emergency number, phone format and English accent.
 
@@ -25,7 +24,7 @@ Pricing, unit economics and go-to-market: [docs/pricing.md](docs/pricing.md).
 
 ## Stack
 
-- **Backend:** FastAPI + SQLAlchemy (async, PostgreSQL); optional Redis; Twilio Programmable Voice (inbound + outbound, Media Streams).
+- **Backend:** FastAPI + SQLAlchemy (async, PostgreSQL); optional Redis; Telnyx TeXML (inbound + outbound calls, bidirectional media streaming) and Telnyx Messaging (SMS); Twilio only for WhatsApp.
 - **Voice pipeline:** streaming speech-to-text (`gpt-4o-mini-transcribe`) → `gpt-5.4-mini` with flow tools → Azure neural text-to-speech (μ-law 8 kHz) behind an in-memory + disk LRU voice cache.
 - **Frontend:** Next.js (app router) + Tailwind. It serves the marketing website, the account portal and the admin console.
 
@@ -47,13 +46,13 @@ backend/app/
     forms.py      validates portal input against those field specs
   voice/        TRANSPORTS + speech
     agent.py      CallAgent: the conversation brain (model loop, tools, fast paths)
-    bridge.py     audio transport (Twilio media stream, or the browser test call)
+    bridge.py     audio transport (Telnyx media stream, or the browser test call)
     text_session.py  text transport (portal chat test, website widget)
     tools.py      save_details / terminals / transfer / end_call; commits through a CallStore
     prompts.py    layered prompt: core rules → engine rules → business → this call
     llm.py stt.py tts.py tts_cache.py audio.py languages.py prepared.py twiml.py
   services/     call lifecycle (call_service), context loading, catalog, records, usage, webhooks, dialer
-  api/routes/   auth (owner), orders (records), catalog, calls, agent (tests), admin, public, twilio
+  api/routes/   auth (owner), orders (records), catalog, calls, agent (tests), admin, public, telnyx (calls + SMS), twilio (WhatsApp)
 ```
 
 **One model round-trip per caller turn.**
@@ -68,29 +67,19 @@ backend/app/
 ## Running locally
 
 ```bash
-cp .env.example .env   # fill OPENAI_API_KEY, AZURE_SPEECH_KEY/REGION, TWILIO_*, DATABASE_URL
+cp .env.example .env   # fill OPENAI_API_KEY, AZURE_SPEECH_KEY/REGION, TELNYX_*, DATABASE_URL
 ./scripts/dev.sh       # uv venv, ngrok, backend :8000, frontend :3000
 ```
 
-- **First start:** creates or extends the schema with idempotent patches. With `AUTO_SEED_DEMO_DATA=true` it also creates the demo accounts below; accounts that already exist are left untouched.
+- **First start:** creates or extends the schema with idempotent patches. No demo data is created: add accounts in the admin console (or `python -m scripts.create_merchant`).
 - **Admin console:** `/admin`, log in with `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
 - **Website:** `/`. Owner portal: `/login`.
 
-| Login | Business | Engine |
-|---|---|---|
-| `clinic` / `clinic123` | CityCare Family Clinic (4 doctors, Boston, US) | clinic |
-| `realestate` / `realestate123` | Keystone Realty (5 listings, Miami, US) | real_estate |
-| `homeservice` / `homeservice123` | FixRight Home Services (5 services, NYC area, US) | home_service |
-| `shop` / `shop123` | Urban Threads (US) | ecommerce |
-| `demo` / `demo123` | Demo Shop (Bangla, Bangladesh) | ecommerce |
-
-The demo accounts have the website widget enabled and sample records for outbound tests. The public site embeds the `clinic` account's widget as a live demo (`DEMO_WIDGET_USERNAME`).
-
-**Testing an agent:**
-- **No phone needed:** in the portal, open *Test your agent*. Choose a browser voice call (microphone; headphones recommended) or a typed chat, inbound or outbound.
-- **Real inbound calls:** in the admin console, set an account's *inbound number* to your Twilio number. Point the number's voice webhook at `{PUBLIC_BASE_URL}/twilio/inbound`, or set `TWILIO_AUTO_CONFIGURE_INBOUND=true` and the backend does it on startup. `DEFAULT_INBOUND_USERNAME` routes calls to numbers no account has claimed.
-- **SMS:** with `TWILIO_*` set, texts go out from `TWILIO_MESSAGING_SERVICE_SID`, `TWILIO_SMS_FROM` or the calling number. Each account switches texts on in *Add-ons → SMS confirmations* and can send itself a test. A trial Twilio account only texts verified numbers. Delivery receipts need a public `PUBLIC_BASE_URL`.
-- **Google Calendar:** create an OAuth web client (enable the Google Calendar API), set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, and register `{PUBLIC_BASE_URL or http://localhost:8000}/api/integrations/google/callback` as a redirect URI. Then use *Add-ons → Calendar sync → Connect Google Calendar*. While the OAuth app is in "Testing", add your Google account as a test user.
+**Running an agent:**
+- **Inbound calls:** in the admin console, set an account's *inbound number* to a Telnyx number. The number belongs to the TeXML application `TELNYX_TEXML_APP_ID`, whose voice webhook is `{PUBLIC_BASE_URL}/telnyx/inbound` (POST); `TELNYX_AUTO_CONFIGURE_INBOUND=true` sets it on startup. Calls to a number no account has claimed are answered "not in service".
+- **Try it:** call the account's number from your phone; preview the website chat on the portal's Channels page. Every conversation lands in *Calls & chats* with its transcript.
+- **SMS:** with `TELNYX_API_KEY` set, texts go out from `TELNYX_SMS_FROM` or the calling number, which must be on the messaging profile `TELNYX_MESSAGING_PROFILE_ID` (US local numbers also need 10DLC registration). Each account switches texts on in *Settings → Notifications* and can send itself a test. Delivery receipts need a public `PUBLIC_BASE_URL`.
+- **Google Calendar:** create an OAuth web client (enable the Google Calendar API), set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, and register `{PUBLIC_BASE_URL or http://localhost:8000}/api/integrations/google/callback` as a redirect URI. Then use *Settings → Calendar → Connect Google Calendar*. While the OAuth app is in "Testing", add your Google account as a test user.
 - **Plans and add-ons:** `backend/app/core/plans.py` (Chat agent; voice Starter / Growth / Pro) and `backend/app/core/addons.py` (catalog + `entitlements()` = what an account may use). Owners request add-ons on the portal's Add-ons page; the admin approves them (Admin → Requests) or edits an account's add-ons directly.
 - **WhatsApp / Messenger:** see the "Chat channels" block in `.env.example`. Both run the same agent as the website chat (`app/services/channel_service.py`).
 - **Jev (optional):** set `TYPESAFE_API_KEY` to settle natural yes/no answers on scripted steps without a full LLM turn (`app/voice/jev.py`); cancellations always need the caller's own words.
@@ -106,7 +95,7 @@ The demo accounts have the website widget enabled and sample records for outboun
 | DNS | cPanel zone `banglabot.xyz`: `@` A → Vercel, `www` CNAME → Vercel, `api` CNAME → Render; email `MX`/`mail` point at the cPanel server | |
 | Keep-awake | `.github/workflows/keep-awake.yml` pings `/health` every 10 minutes (Render free sleeps after 15 idle minutes) | |
 
-- Backend secrets live in Render → Environment (never in git). `PUBLIC_BASE_URL` is the Render address (Twilio webhooks, calendar feeds); `FRONTEND_ORIGIN` lists the site origins (the first one is used for redirects); `TWILIO_AUTO_CONFIGURE_INBOUND=true` points the Twilio number at the hosted backend on every start.
+- Backend secrets live in Render → Environment (never in git). `PUBLIC_BASE_URL` is the Render address (Telnyx webhooks, calendar feeds); `FRONTEND_ORIGIN` lists the site origins (the first one is used for redirects); `TELNYX_AUTO_CONFIGURE_INBOUND=true` points the TeXML application at the hosted backend on every start.
 - Both Render and Vercel redeploy on every push to `main`.
 - The hosted backend and a local `./scripts/dev.sh` share the Supabase database, and both run the scheduled jobs: don't run them at the same time, or auto-calls and SMS reminders can go out twice. Incoming calls to the Twilio number go to the hosted backend; outbound calls from a local run still work through ngrok.
 - `deploy/docker-compose.yml` + `deploy/Caddyfile` run the whole stack on any single server (VPS) instead.

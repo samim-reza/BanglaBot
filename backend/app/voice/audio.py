@@ -1,4 +1,4 @@
-"""Small, dependency-free audio helpers for the Twilio media bridge.
+"""Small, dependency-free audio helpers for the phone media bridge.
 
 μ-law decoding is a 256-entry table (no ``audioop``, which is gone in 3.13),
 so the RMS gate that drives barge-in and the silence watchdog costs a few
@@ -11,7 +11,7 @@ import base64
 import math
 import re
 
-# Twilio Media Streams: 8 kHz μ-law, one frame per 20 ms.
+# Telnyx media streaming (PCMU): 8 kHz μ-law, one frame per 20 ms.
 FRAME_BYTES = 160
 FRAME_SECONDS = 0.02
 

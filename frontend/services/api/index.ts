@@ -22,7 +22,6 @@ export type { OrderListParams } from "./orders";
 export { catalogApi } from "./catalog";
 export { callsApi } from "./calls";
 export type { CallListParams } from "./calls";
-export { agentApi } from "./agent";
 export { integrationsApi } from "./integrations";
 export { addonsApi, channelsApi } from "./addons";
 export { publicApi } from "./public";

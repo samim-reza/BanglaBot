@@ -22,6 +22,7 @@ class CallLog(Base):
     flow: Mapped[str] = mapped_column(String(40), default="")
     # Caller ID of an inbound call.
     caller_number: Mapped[str] = mapped_column(String(32), default="")
+    # Telnyx TeXML CallSid (column named from the Twilio days; see telnyx.sid_key).
     twilio_call_sid: Mapped[str] = mapped_column(String(64), index=True, default="")
     recording_sid: Mapped[str] = mapped_column(String(64), default="")
     call_status: Mapped[str] = mapped_column(String(32), default="initiated")

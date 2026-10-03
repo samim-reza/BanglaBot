@@ -12,7 +12,6 @@ const PRODUCT_LINKS = [
 const PLATFORM_LINKS = [
   { href: "/how-it-works", label: "How it works" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/#demo", label: "Live demo" },
   { href: TRIAL_HREF, label: "Start free trial" },
 ];
 

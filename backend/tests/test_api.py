@@ -60,7 +60,6 @@ def test_portal_routes_require_a_login(client):
     assert client.patch("/api/integrations/sms", json={"enabled": True}).status_code == 401
     assert client.post("/api/integrations/sms/test", json={"to": "+15550100"}).status_code == 401
     assert client.get("/api/integrations/google/connect").status_code == 401
-    assert client.post("/api/agent/chat", json={"direction": "inbound"}).status_code == 401
     assert client.get("/api/admin/meta").status_code == 401
 
 

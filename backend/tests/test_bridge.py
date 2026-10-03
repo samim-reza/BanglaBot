@@ -218,7 +218,7 @@ def _build(monkeypatch: pytest.MonkeyPatch, order, merchant, *, replies: list[LL
         merchant=merchant,
         call_log_id="log-1",
         stream_sid="MZ_test",
-        call_sid="",  # no Twilio hangup fallback → no network
+        call_sid="",  # no Telnyx hangup fallback → no network
         store=store,
     )
     bridge.settings = bridge.settings.model_copy(update={"openai_api_key": "sk-test", "azure_speech_key": "azure-test", "voice_instant_ack": False})

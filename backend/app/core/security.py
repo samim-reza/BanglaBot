@@ -76,7 +76,7 @@ def verify_token(token: str) -> dict:
 
 
 def sign_media_stream_token(*, order_id: str, call_log_id: str, ttl_seconds: int = MEDIA_STREAM_TOKEN_TTL_SECONDS) -> str:
-    """Token carried in the Twilio ``<Stream>`` parameters; ties a socket to one call."""
+    """Token carried in the TeXML ``<Stream>`` parameters; ties a socket to one call."""
     return sign_token(
         {"typ": "media_stream", "order_id": str(order_id), "call_log_id": str(call_log_id)},
         ttl_seconds=ttl_seconds,

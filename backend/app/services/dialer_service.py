@@ -138,10 +138,7 @@ async def status_payload(db: AsyncSession, merchant: Merchant) -> dict[str, Any]
 # ------------------------------------------------------------------ batches
 def preflight() -> None:
     """Fail the whole batch up front on the config errors every call would hit."""
-    settings = get_settings()
-    if not settings.twilio_from_number:
-        raise HTTPException(status_code=500, detail="TWILIO_FROM_NUMBER is not configured")
-    call_service.twilio_client()
+    call_service.require_telephony()
     try:
         status_callback_url("preflight")
     except PublicUrlMissing as exc:

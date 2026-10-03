@@ -1,7 +1,7 @@
 """Azure Speech text-to-speech for the phone line, with the LRU cache in front.
 
 Azure returns ``raw-8khz-8bit-mono-mulaw`` directly, which is exactly what a
-Twilio Media Stream plays, so no resampling happens on the call path. The
+phone media stream plays, so no resampling happens on the call path. The
 voice is chosen per *persona* (female / male) and per language, so a bilingual
 merchant keeps one consistent "person" whether the customer speaks Bangla or
 English.

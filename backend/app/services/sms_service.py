@@ -1,9 +1,9 @@
-"""SMS confirmations and reminders over Twilio Messaging.
+"""SMS confirmations and reminders over Telnyx Messaging.
 
 When the agent books, moves or cancels something (or a COD order is confirmed),
 the customer gets a short text with the details; appointments, visits and
 viewings also get a reminder ``reminder_hours`` before they start. Every text is
-logged in ``messages`` with its Twilio status (delivery receipts update it).
+logged in ``messages`` with its delivery status (Telnyx receipts update it).
 
 Account settings live in ``merchants.sms_settings``::
 
@@ -18,7 +18,6 @@ from typing import Any
 
 import structlog
 from sqlalchemy import select
-from twilio.rest import Client as TwilioClient
 
 from app.core.config import get_settings
 from app.core.datetime_utils import utcnow
@@ -26,6 +25,7 @@ from app.core.regions import normalize_phone, region_of
 from app.db.session import AsyncSessionLocal
 from app.flows.timefmt import business_tz, date_phrase
 from app.models import CatalogItem, Merchant, Message, Order, OrderStatus
+from app.services import telnyx
 from app.voice.languages import normalize_language
 
 logger = structlog.get_logger(__name__)
@@ -48,9 +48,8 @@ def platform_ready() -> bool:
     settings = get_settings()
     return bool(
         settings.sms_enabled
-        and settings.twilio_account_sid
-        and settings.twilio_auth_token
-        and (settings.twilio_messaging_service_sid or settings.twilio_sms_from or settings.twilio_from_number)
+        and settings.telnyx_api_key
+        and (settings.telnyx_sms_from or settings.telnyx_from_number)
     )
 
 
@@ -199,12 +198,11 @@ def segments(body: str) -> int:
 # --------------------------------------------------------------------------- sending
 def _sms_status_url(message_id: str) -> str | None:
     base = str(get_settings().public_base_url or "").rstrip("/")
-    return f"{base}/twilio/sms-status/{message_id}" if base.startswith("https://") else None
+    return f"{base}/telnyx/sms-status/{message_id}" if base.startswith("https://") else None
 
 
 async def send(merchant: Merchant, to: str, body: str, *, kind: str, order_id: str | None = None) -> Message:
     """Send one SMS (logged whatever happens). Never raises for delivery problems."""
-    settings = get_settings()
     to_number = normalize_phone(to, region_of(merchant))
     async with AsyncSessionLocal() as session:
         message = Message(
@@ -215,29 +213,17 @@ async def send(merchant: Merchant, to: str, body: str, *, kind: str, order_id: s
         await session.commit()
         await session.refresh(message)
     if not platform_ready():
-        await _update(message.id, status="skipped", error="SMS is not configured on the platform (Twilio credentials / sender).")
+        await _update(message.id, status="skipped", error="SMS is not configured on the platform (Telnyx API key / sender).")
         message.status = "skipped"
         return message
     callback = _sms_status_url(message.id)
-
-    def _create() -> str:
-        client = TwilioClient(settings.twilio_account_sid, settings.twilio_auth_token)
-        params: dict[str, Any] = {"to": to_number, "body": body}
-        if settings.twilio_messaging_service_sid:
-            params["messaging_service_sid"] = settings.twilio_messaging_service_sid
-        else:
-            params["from_"] = settings.twilio_sms_from or settings.twilio_from_number
-        if callback:
-            params["status_callback"] = callback
-        return str(client.messages.create(**params).sid)
-
     try:
-        sid = await asyncio.to_thread(_create)
+        sid = await telnyx.send_sms(to=to_number, text=body, webhook_url=callback, from_number=telnyx.number_for(merchant))
         await _update(message.id, status="sent", provider_sid=sid)
         message.status, message.provider_sid = "sent", sid
         await logger.ainfo("sms_sent", merchant_id=merchant.id, kind=kind, to=to_number, sid=sid)
     except Exception as exc:  # noqa: BLE001 — a failed text never breaks the call / request
-        detail = getattr(exc, "msg", None) or str(exc)
+        detail = getattr(exc, "detail", None) or str(exc)
         await _update(message.id, status="failed", error=str(detail)[:500])
         message.status, message.error = "failed", str(detail)[:500]
         await logger.awarning("sms_failed", merchant_id=merchant.id, kind=kind, to=to_number, error=str(detail)[:200])
@@ -255,14 +241,33 @@ async def _update(message_id: str, **fields: Any) -> None:
         await session.commit()
 
 
-async def apply_status(message_id: str, status: str, error_code: str = "") -> None:
-    """Twilio delivery receipt (queued / sent / delivered / undelivered / failed)."""
-    status = str(status or "").lower()
-    if status not in ("queued", "sending", "sent", "delivered", "undelivered", "failed", "read"):
+#: Telnyx recipient status → ours.
+TELNYX_STATUS = {
+    "queued": "queued",
+    "sending": "sent",
+    "sent": "sent",
+    "delivery_unconfirmed": "sent",
+    "delivered": "delivered",
+    "read": "read",
+    "expired": "undelivered",
+    "delivery_failed": "undelivered",
+    "sending_failed": "failed",
+}
+
+
+async def apply_status(message_id: str, status: str, error: str = "", *, provider_sid: str = "") -> None:
+    """Telnyx delivery receipt, matched by our message id or else by Telnyx's."""
+    mapped = TELNYX_STATUS.get(str(status or "").lower())
+    if mapped is None:
         return
-    fields: dict[str, Any] = {"status": "sent" if status == "sending" else status}
-    if error_code:
-        fields["error"] = f"Twilio error {error_code}"
+    if not message_id and provider_sid:
+        async with AsyncSessionLocal() as session:
+            message_id = str(await session.scalar(select(Message.id).where(Message.provider_sid == provider_sid)) or "")
+    if not message_id:
+        return
+    fields: dict[str, Any] = {"status": mapped}
+    if error:
+        fields["error"] = str(error)[:500]
     await _update(message_id, **fields)
 
 

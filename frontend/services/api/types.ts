@@ -197,7 +197,7 @@ export type Workspace = {
   usage: Usage;
   entitlements: Entitlements;
   public_base_url: string;
-  telephony: { twilio_configured: boolean; platform_number: string };
+  telephony: { configured: boolean; platform_number: string };
 };
 
 /** A record: an order, appointment, lead, booking or message. */
@@ -314,28 +314,6 @@ export type CatalogImportResult = { created: number; skipped: number; errors: st
 
 export type FlowPreview = { steps: string[]; sections: Partial<Record<Direction, string[]>> };
 
-/** Test console. */
-export type TestCallInput = { direction: Direction; record_id?: string | null; caller_number?: string };
-export type TestCallTicket = {
-  call_log_id: string;
-  /** The record of an outbound test call ("" for inbound). */
-  order_id: string;
-  media_token: string;
-  /** Public wss:// media URL when the server has one; local dev connects to :8000 directly. */
-  ws_url: string | null;
-  stream_sid: string;
-};
-export type AgentState = {
-  stage: string;
-  node: string;
-  slots: Record<string, unknown>;
-  outcome: string;
-  record_id: string;
-  ended?: boolean;
-};
-export type ChatStart = { session_id: string; messages: string[]; state: AgentState };
-export type ChatReply = { messages: string[]; ended: boolean; state: AgentState };
-
 export type AdminOverview = {
   merchants: number;
   active_merchants: number;
@@ -428,7 +406,6 @@ export type PublicCatalog = {
   addons: AddonItem[];
   regions: Region[];
   /** Widget key of the demo account (empty when no demo is configured). */
-  demo_widget_key: string;
 };
 
 export type BulkCallRunState = "queued" | "running" | "done" | "cancelled" | "failed";
@@ -508,7 +485,7 @@ export type GoogleCalendarState = {
 export type Integrations = {
   sms: {
     settings: SmsSettings;
-    /** Twilio is configured with a sender on this server. */
+    /** Telnyx is configured with a sender on this server. */
     platform_ready: boolean;
     sender: string;
     sent_this_month: number;

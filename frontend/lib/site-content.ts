@@ -16,7 +16,6 @@ import {
   ListChecks,
   MessageSquare,
   MessageSquareText,
-  MonitorPlay,
   PhoneCall,
   PhoneForwarded,
   ShoppingBag,
@@ -353,11 +352,6 @@ export const FEATURES: Feature[] = [
     title: "Fast, natural turns",
     body: "Scripted lines play from a voice cache and each turn takes one AI round-trip, so callers aren't left waiting.",
   },
-  {
-    icon: MonitorPlay,
-    title: "Test console",
-    body: "Call or chat with your agent in the browser before going live, and see exactly what it would book.",
-  },
 ];
 
 export type Step = { title: string; body: string; points: string[] };
@@ -374,9 +368,9 @@ export const STEPS: Step[] = [
     points: ["Days, hours, capacity and prices", "Insurance, service areas, fees, documents"],
   },
   {
-    title: "Test it in your browser",
-    body: "Call or chat with your agent from the test console. Every test is transcribed, so you see exactly what it said and booked.",
-    points: ["No phone needed to try it", "Tweak your greeting and knowledge, test again"],
+    title: "Call it yourself",
+    body: "Ring your agent's number from your phone and preview the website chat. Every call is transcribed, so you see exactly what it said and booked.",
+    points: ["Works from any phone", "Tweak your greeting and knowledge, call again"],
   },
   {
     title: "Go live",
@@ -641,7 +635,7 @@ export const HOME_FAQS: Faq[] = [
   },
   {
     q: "How much work is setup?",
-    a: "Add your doctors, listings or services, paste your FAQs and test in the browser. Or let us do it: done-for-you setup is $299 once.",
+    a: "Add your doctors, listings or services, paste your FAQs and call your number to try it. Or let us do it: done-for-you setup is $299 once.",
   },
   {
     q: "Is there a free trial?",
@@ -692,7 +686,7 @@ export const PRICING_FAQS: Faq[] = [
   },
   {
     q: "What's included in the free trial?",
-    a: `${TRIAL.days} days, ${TRIAL.minutes} call minutes and ${TRIAL.texts} texts, with every channel and feature switched on, plus the browser test console.`,
+    a: `${TRIAL.days} days, ${TRIAL.minutes} call minutes and ${TRIAL.texts} texts, with every channel and feature switched on.`,
   },
 ];
 

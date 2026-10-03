@@ -4,7 +4,7 @@
 
 ## 1. What a minute costs us
 
-Our call stack: Twilio Programmable Voice with a bidirectional media stream, OpenAI `gpt-4o-mini-transcribe` (speech-to-text), `gpt-5.4-mini` (the agent), Azure neural text-to-speech with our own voice cache.
+Our call stack (figures below are Twilio list prices; calls and SMS now run on Telnyx, which needs a re-price): Telnyx TeXML with a bidirectional media stream, OpenAI `gpt-4o-mini-transcribe` (speech-to-text), `gpt-5.4-mini` (the agent), Azure neural text-to-speech with our own voice cache.
 
 | Item | Unit price | Per call-minute |
 |---|---|---|

@@ -89,7 +89,7 @@ function outcomeStyle(outcome: string | null | undefined): string {
   }
 }
 
-/** Line results (Twilio call status) for a call that ended before the agent recorded an outcome. */
+/** Line results (Telnyx call status) for a call that ended before the agent recorded an outcome. */
 const LINE_RESULTS: Record<string, string> = {
   "no-answer": "No answer",
   busy: "Busy",

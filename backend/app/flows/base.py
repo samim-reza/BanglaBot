@@ -55,7 +55,7 @@ OUTCOME_UNCLEAR = "unclear"
 OUTCOME_AUTO_DROPPED = "auto_dropped"
 #: The callee rejected / was busy and the carrier forwarded the call.
 OUTCOME_DIVERTED = "diverted"
-#: Twilio's answering-machine detection heard a machine.
+#: Answering-machine detection heard a machine.
 OUTCOME_VOICEMAIL = "voicemail"
 #: A new appointment / booking / site visit was written.
 OUTCOME_BOOKED = "booked"

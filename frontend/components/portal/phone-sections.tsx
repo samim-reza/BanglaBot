@@ -3,7 +3,7 @@
 /** Phone line, outbound calling and recordings. */
 
 import Link from "next/link";
-import { ArrowRight, FileText, FlaskConical, Phone, PhoneOutgoing } from "lucide-react";
+import { ArrowRight, FileText, Phone, PhoneOutgoing } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useCopy, CopyButton, SectionCard, StatusPill, SetupNote } from "@/components/portal/kit";
@@ -16,7 +16,7 @@ export function PhoneLineSection() {
   const { merchant, telephony } = useWorkspace();
   const { copied, copy } = useCopy();
   const number = merchant.inbound_number?.trim();
-  const ready = telephony.twilio_configured;
+  const ready = telephony.configured;
   return (
     <SectionCard id="phone" icon={Phone} title="Phone line" badge={<StatusPill ok={ready}>{ready ? "Ready" : "Not set up"}</StatusPill>}>
       <div className="space-y-3 text-sm">
@@ -29,15 +29,7 @@ export function PhoneLineSection() {
             <p className="text-muted-foreground">Forward your business number here.</p>
           </>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-muted-foreground">No number yet — your admin assigns one.</p>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/test">
-                <FlaskConical className="h-3.5 w-3.5" aria-hidden />
-                Test in browser
-              </Link>
-            </Button>
-          </div>
+          <p className="text-muted-foreground">No number yet — your admin assigns one.</p>
         )}
         {!ready && <SetupNote>Phone calling isn&apos;t set up on this server yet.</SetupNote>}
         {ready && telephony.platform_number && (

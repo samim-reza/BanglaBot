@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import addons, admin, agent, auth, calls, catalog, channels, integrations, orders, public, twilio
+from app.api.routes import addons, admin, auth, calls, catalog, channels, integrations, orders, public, telnyx, twilio
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.redis import close_redis, connect_redis
@@ -46,7 +46,7 @@ async def lifespan(app: FastAPI):
     await connect_redis()
     await bootstrap()
     if not settings.public_base_url:
-        await log.awarning("public_base_url_missing", hint="set PUBLIC_BASE_URL (or TWILIO_PUBLIC_BASE_URL) before placing calls")
+        await log.awarning("public_base_url_missing", hint="set PUBLIC_BASE_URL before placing calls")
     # Open the OpenAI connection now so the first call's first turn skips the TLS handshake.
     asyncio.create_task(warm_connection(settings.openai_api_key))
     await call_service.configure_inbound_webhook()
@@ -105,9 +105,9 @@ app.include_router(auth.router)
 app.include_router(orders.router)
 app.include_router(catalog.router)
 app.include_router(calls.router)
-app.include_router(agent.router)
 app.include_router(integrations.router)
 app.include_router(addons.router)
 app.include_router(channels.router)
 app.include_router(admin.router)
+app.include_router(telnyx.router)
 app.include_router(twilio.router)

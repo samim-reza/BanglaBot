@@ -3,7 +3,6 @@ import { ArrowRight, CalendarCheck, Clock, PhoneForwarded, PhoneOutgoing } from 
 
 import { AgentCards } from "@/components/site/agent-cards";
 import { CtaBand } from "@/components/site/cta-band";
-import { DemoSection } from "@/components/site/demo-section";
 import { FaqList } from "@/components/site/faq";
 import { FeatureGrid } from "@/components/site/feature-grid";
 import { HeroVisual } from "@/components/site/hero-visual";
@@ -56,8 +55,8 @@ export default function HomePage() {
               </Button>
             </div>
             <p className="mt-5 text-sm text-muted-foreground">
-              <Link href="#demo" className="font-semibold text-primary-dark hover:underline">
-                Try the live demo
+              <Link href="/how-it-works" className="font-semibold text-primary-dark hover:underline">
+                See how it works
               </Link>{" "}
               · {TRIAL.days}-day free trial with {TRIAL.minutes} call minutes
             </p>
@@ -132,8 +131,6 @@ export default function HomePage() {
           <FeatureGrid />
         </div>
       </Section>
-
-      <DemoSection />
 
       {/* Pricing teaser */}
       <Section id="pricing" labelledBy="pricing-title">

@@ -47,20 +47,7 @@ async def public_catalog():
         "plans": [plan.as_json() for plan in PLANS.values() if plan.public],
         "addons": addon_catalog(),
         "regions": regions_json(),
-        "demo_widget_key": await _demo_widget_key(),
     }
-
-
-async def _demo_widget_key() -> str:
-    """The website's "try it" chat: the widget of the configured demo account."""
-    username = get_settings().demo_widget_username
-    if not username:
-        return ""
-    async with AsyncSessionLocal() as session:
-        merchant = await session.scalar(select(Merchant).where(Merchant.username == username))
-    if merchant is None or not merchant.active or not merchant.widget_enabled:
-        return ""
-    return merchant.widget_key
 
 
 # ------------------------------------------------------------------ talk to sales
