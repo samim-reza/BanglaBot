@@ -73,9 +73,9 @@ def test_google_callback_rejects_a_denied_or_forged_consent(client):
     app.dependency_overrides[get_db] = no_db
     try:
         denied = client.get("/api/integrations/google/callback?error=access_denied", follow_redirects=False)
-        assert denied.status_code in (302, 307) and denied.headers["location"].endswith("/addons?google=denied#calendar")
+        assert denied.status_code in (302, 307) and denied.headers["location"].endswith("/settings?tab=calendar&google=denied")
         forged = client.get("/api/integrations/google/callback?code=c&state=forged", follow_redirects=False)
-        assert forged.headers["location"].endswith("/addons?google=expired#calendar")
+        assert forged.headers["location"].endswith("/settings?tab=calendar&google=expired")
     finally:
         app.dependency_overrides.pop(get_db, None)
 

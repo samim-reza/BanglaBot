@@ -2,10 +2,12 @@
 
 import { queryString, request } from "./client";
 import type {
+  AdminAddonRequest,
   AdminMerchantDetail,
   AdminMeta,
   AdminOverview,
   CallChannel,
+  Entitlements,
   CallLog,
   Merchant,
   MerchantAdminUpdate,
@@ -59,4 +61,19 @@ export const adminApi = {
     }),
   deleteInquiry: (id: string) =>
     request<void>(`/api/admin/inquiries/${encodeURIComponent(id)}`, { method: "DELETE", auth: "admin" }),
+  /** Replace the account's add-ons: {key: quantity}; keys left out are removed. */
+  setAddons: (id: string, addons: Record<string, number>) =>
+    request<{ merchant: Merchant; entitlements: Entitlements }>(`/api/admin/merchants/${encodeURIComponent(id)}/addons`, {
+      method: "PUT",
+      auth: "admin",
+      body: JSON.stringify({ addons }),
+    }),
+  addonRequests: (status: "pending" | "approved" | "declined" | "cancelled" | "all" = "pending") =>
+    request<{ items: AdminAddonRequest[] }>(`/api/admin/addon-requests${queryString({ status })}`, { auth: "admin" }),
+  decideAddonRequest: (id: string, decision: "approve" | "decline", admin_note = "") =>
+    request<AdminAddonRequest>(`/api/admin/addon-requests/${encodeURIComponent(id)}/${decision}`, {
+      method: "POST",
+      auth: "admin",
+      body: JSON.stringify({ admin_note }),
+    }),
 };

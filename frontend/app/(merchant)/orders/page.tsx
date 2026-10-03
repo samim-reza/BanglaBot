@@ -29,11 +29,12 @@ function kindLabel(kind: string): string {
 
 export default function RecordsPage() {
   const toast = useAppToast();
-  const { vertical, merchant } = useWorkspace();
+  const { vertical, merchant, entitlements } = useWorkspace();
   const timezone = merchant.timezone;
   const singular = t(vertical.record_label, "Record");
   const plural = t(vertical.record_label_plural, "Records");
-  const canCall = vertical.directions.includes("outbound");
+  // Outbound calls need a voice plan.
+  const canCall = vertical.directions.includes("outbound") && entitlements.channels.includes("voice");
   const callName = t(vertical.outbound_label, "Call");
 
   const [items, setItems] = useState<Order[]>([]);
@@ -118,15 +119,12 @@ export default function RecordsPage() {
   };
 
   const filtered = Boolean(search || status || upcoming);
-  const subtitle = canCall
-    ? `Every ${singular.toLowerCase()} your agent took or you added, and where its ${callName.toLowerCase()} stands.`
-    : `Every ${singular.toLowerCase()} your agent took or you added.`;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={plural}
-        subtitle={subtitle}
+        subtitle="Taken by your agent or added by you."
         actions={
           <Button asChild>
             <Link href="/orders/new">
@@ -197,15 +195,23 @@ export default function RecordsPage() {
         error ? null : (
           <EmptyState title={filtered ? `No ${plural.toLowerCase()} match` : `No ${plural.toLowerCase()} yet`}>
             {filtered ? (
-              "Try clearing the search or filters."
+              <button
+                type="button"
+                className="font-medium text-primary-dark hover:underline"
+                onClick={() => {
+                  setSearchInput("");
+                  setSearch("");
+                  setStatus("");
+                  setUpcoming(false);
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </button>
             ) : (
-              <>
-                {`${plural} appear here when your agent books them on a call or chat, or when you `}
-                <Link href="/orders/new" className="font-medium text-primary-dark hover:underline">
-                  add one yourself
-                </Link>
-                .
-              </>
+              <Link href="/orders/new" className="font-medium text-primary-dark hover:underline">
+                New {singular.toLowerCase()}
+              </Link>
             )}
           </EmptyState>
         )

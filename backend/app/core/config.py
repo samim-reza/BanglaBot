@@ -172,10 +172,28 @@ class Settings(BaseSettings):
     # Secret used to encrypt integration credentials at rest (any long random string).
     encryption_secret: str | None = None
 
+    # --- Chat channels -----------------------------------------------------------------
+    # Facebook Messenger: the Meta app's secret (signs webhooks) and the verify token you
+    # type into the app's webhook settings. WhatsApp uses the Twilio credentials above.
+    meta_app_secret: str | None = None
+    meta_verify_token: str | None = None
+    meta_graph_version: str = "v21.0"
+
+    # --- Jev (TypeSafe System One) -------------------------------------------------------
+    # Optional fast yes/no + choice decisions on scripted steps the keyword matcher can't
+    # settle; empty = off (the main model decides, as before).
+    typesafe_api_key: str | None = None
+    typesafe_model: str = "jev-latest"
+    # Give up and let the main model decide after this long.
+    typesafe_timeout_seconds: float = 0.8
+    # Act on Jev only when it is at least this sure.
+    typesafe_min_confidence: float = 0.85
+
     @field_validator(
         "openai_api_key", "azure_speech_key", "public_base_url", "twilio_from_number", "default_inbound_username",
         "openai_prompt_cache_retention", "twilio_messaging_service_sid", "twilio_sms_from", "google_client_id",
-        "google_client_secret", "google_redirect_uri", "encryption_secret", mode="before",
+        "google_client_secret", "google_redirect_uri", "encryption_secret", "meta_app_secret", "meta_verify_token",
+        "typesafe_api_key", mode="before",
     )
     @classmethod
     def blank_string_as_none(cls, value):

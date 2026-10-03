@@ -9,7 +9,10 @@ export type VoicePersona = "female" | "male";
 export type VerticalKey = "ecommerce" | "clinic" | "real_estate" | "home_service";
 export type Direction = "inbound" | "outbound";
 /** Where a call log came from: phone (outbound / inbound), browser test (web), chat test (chat), website widget. */
-export type CallChannel = "outbound" | "inbound" | "web" | "chat" | "widget";
+export type CallChannel = "outbound" | "inbound" | "web" | "chat" | "widget" | "whatsapp" | "messenger";
+
+/** Where an account talks to customers. */
+export type ChannelKey = "voice" | "web_chat" | "whatsapp" | "messenger";
 
 /** A label in both portal languages. */
 export type Label = { en: string; bn: string };
@@ -87,16 +90,24 @@ export type Plan = {
   included_chats: number;
   included_sms: number;
   phone_numbers: number;
+  /** Channels the plan itself includes; the rest are add-ons. */
+  channels: ChannelKey[];
+  /** Feature keys the plan includes (e.g. "google_calendar"). */
+  includes: string[];
+  product: "voice" | "chat";
   tagline: string;
   features: string[];
   public: boolean;
   highlight: boolean;
 };
 
-export type Addon = { key: string; name: string; price: string; note: string };
+
+/** Monthly allowances from the plan + add-ons; null = no limit. */
+export type Limits = { minutes: number | null; chats: number | null; sms: number | null; numbers: number | null };
 
 export type Usage = {
   plan: Plan;
+  limits: Limits;
   period_start: string;
   minutes: number;
   calls: number;
@@ -142,7 +153,15 @@ export type Merchant = {
   /** Next scheduled "call everyone" run (ISO UTC), or null. */
   auto_call_at: string | null;
   auto_call_repeat_daily: boolean;
+  /** Add-ons on top of the plan: {key: quantity}. */
+  addons: Record<string, number>;
+  channels: ChannelSetup;
   created_at: string;
+};
+
+export type ChannelSetup = {
+  whatsapp: { number: string };
+  messenger: { page_id: string; page_name: string; connected: boolean };
 };
 
 export type MerchantSettingsInput = Partial<{
@@ -176,6 +195,7 @@ export type Workspace = {
   config: Record<string, unknown>;
   regions: Region[];
   usage: Usage;
+  entitlements: Entitlements;
   public_base_url: string;
   telephony: { twilio_configured: boolean; platform_number: string };
 };
@@ -330,6 +350,7 @@ export type AdminOverview = {
   inbound_today: number;
   booked_today: number;
   by_vertical: Record<string, number>;
+  pending_addon_requests: number;
 };
 
 export type AdminMeta = {
@@ -342,6 +363,8 @@ export type AdminMeta = {
 export type AdminMerchantDetail = {
   merchant: Merchant;
   usage: Usage;
+  entitlements: Entitlements;
+  addon_requests: AdminAddonRequest[];
   catalog_items: number;
   records: number;
 };
@@ -366,7 +389,7 @@ export type MerchantCreateInput = {
 };
 
 export type MerchantAdminUpdate = MerchantSettingsInput &
-  Partial<{ password: string; active: boolean; plan: string; region: string; inbound_number: string }>;
+  Partial<{ password: string; active: boolean; plan: string; region: string; inbound_number: string; whatsapp_number: string }>;
 
 export type SalesInquiryStatus = "new" | "contacted" | "demo" | "won" | "lost";
 
@@ -402,7 +425,7 @@ export type SalesInquiryInput = {
 export type PublicCatalog = {
   verticals: { key: VerticalKey; label: Label; description: Label; directions: Direction[] }[];
   plans: Plan[];
-  addons: Addon[];
+  addons: AddonItem[];
   regions: Region[];
   /** Widget key of the demo account (empty when no demo is configured). */
   demo_widget_key: string;
@@ -473,6 +496,8 @@ export type CalendarItem = {
 export type GoogleCalendarState = {
   /** The server has GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET. */
   available: boolean;
+  /** The plan (or an add-on) includes two-way Google sync. */
+  included: boolean;
   connected: boolean;
   email: string;
   calendar_id: string;
@@ -513,3 +538,72 @@ export type SmsMessage = {
 export type CalendarCheck = { ok: true; busy_count: number; next: [string, string][] } | { ok: false; error: string };
 
 export type GoogleCalendarOption = { id: string; name: string; primary: boolean };
+
+// ------------------------------------------------------------------ add-ons + channels
+
+/** What the account may use: plan + add-ons. */
+export type Entitlements = {
+  plan: string;
+  product: "voice" | "chat";
+  channels: ChannelKey[];
+  features: string[];
+  addons: Record<string, number>;
+  limits: Limits;
+};
+
+export type AddonCategory = "channel" | "capacity" | "feature" | "service";
+
+export type AddonItem = {
+  key: string;
+  name: string;
+  category: AddonCategory;
+  price: number;
+  period: "month" | "once";
+  /** "$29 / mo", "$299 once" */
+  price_label: string;
+  summary: string;
+  /** Can be bought more than once (minute packs, numbers). */
+  stackable: boolean;
+  channel: ChannelKey | "";
+  feature: string;
+  /** Per unit, e.g. {minutes: 100}. */
+  grants: Record<string, number>;
+  products: string[];
+};
+
+export type AddonRequestStatus = "pending" | "approved" | "declined" | "cancelled";
+
+export type AddonRequest = {
+  id: string;
+  addon: string;
+  quantity: number;
+  note: string;
+  status: AddonRequestStatus;
+  admin_note: string;
+  created_at: string;
+  decided_at: string | null;
+};
+
+export type AdminAddonRequest = AddonRequest & {
+  merchant_id: string;
+  merchant_name: string;
+  merchant_plan: string;
+  addon_name: string;
+  price_label: string;
+};
+
+/** GET /api/addons */
+export type AddonShop = {
+  catalog: AddonItem[];
+  /** Keys this account may still request. */
+  available: string[];
+  entitlements: Entitlements;
+  plan: Plan;
+  requests: AddonRequest[];
+};
+
+/** GET /api/channels */
+export type ChannelsView = ChannelSetup & {
+  active: ChannelKey[];
+  platform: { whatsapp_ready: boolean; whatsapp_webhook: string; messenger_ready: boolean; messenger_webhook: string };
+};

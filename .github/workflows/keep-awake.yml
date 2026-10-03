@@ -1,0 +1,18 @@
+# Render's free plan sleeps a service after 15 idle minutes; a sleeping backend
+# misses Twilio calls and pauses scheduled auto-calls and SMS reminders.
+# Ping it every 10 minutes so it stays awake (one free service fits in Render's
+# 750 free hours a month).
+name: Keep backend awake
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Ping the API health check
+        run: curl -fsS --retry 3 --retry-delay 20 --max-time 90 https://banglabot-api.onrender.com/health

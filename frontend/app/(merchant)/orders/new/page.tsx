@@ -22,7 +22,6 @@ export default function NewRecordPage() {
   const { vertical } = useWorkspace();
   const singular = t(vertical.record_label, "Record");
   const plural = t(vertical.record_label_plural, "Records");
-  const canCall = vertical.directions.includes("outbound");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const initial = useMemo(() => defaultValues(vertical.record_fields), [vertical.record_fields]);
@@ -43,15 +42,10 @@ export default function NewRecordPage() {
     }
   };
 
-  const subtitle = canCall
-    ? `Add a ${singular.toLowerCase()} by hand. Your agent uses these details on the ${t(vertical.outbound_label, "call").toLowerCase()}.`
-    : `Add a ${singular.toLowerCase()} by hand. Your agent sees it when the customer calls or chats.`;
-
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <PageHeader
         title={`New ${singular.toLowerCase()}`}
-        subtitle={subtitle}
         actions={
           <Button asChild variant="ghost" size="sm">
             <Link href="/orders">

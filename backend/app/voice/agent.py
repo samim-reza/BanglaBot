@@ -24,6 +24,7 @@ from app.flows import hearing
 from app.flows.base import STAGE_COMMIT, STAGE_DONE, STAGE_RELAY, STAGE_WRONG_NUMBER, Flow
 from app.flows.context import CallContext
 from app.flows.runtime import FlowRuntime
+from app.voice import jev
 from app.voice.audio import clean_spoken_text
 from app.voice.languages import ack_lines, phrase
 from app.voice.llm import ChatLLM, LLMReply
@@ -191,7 +192,11 @@ class CallAgent:
             return False
         stage = self.runtime.stage
         labels = hearing.classify(text)
-        if not labels or "repeat" in labels:
+        if not labels:
+            # Nothing the keyword matcher recognises: maybe a natural yes/no Jev can settle.
+            fields = await self._jev_fields(stage, text)
+            return bool(fields) and await self._speak_fast_fields(stage, text, fields, heard=self._jev_heard(fields))
+        if "repeat" in labels:
             return False
         terminal = getattr(self.flow, "fast_terminal", None)
         if terminal is not None:
@@ -206,8 +211,39 @@ class CallAgent:
         if "later" in labels or hearing.looks_like_question(text):
             return False
         fields = self.flow.fast_fields(stage, text, labels, self.runtime.slots, self.ctx)
+        heard = text
+        if not fields:
+            fields = await self._jev_fields(stage, text, labels)
+            heard = self._jev_heard(fields)
         if not fields:
             return False
+        return await self._speak_fast_fields(stage, text, fields, heard=heard)
+
+    async def _jev_fields(self, stage: str, text: str, labels: set[str] | None = None) -> dict[str, Any] | None:
+        """A yes/no step the keyword matcher couldn't settle: ask Jev (off without an API key)."""
+        slot = (getattr(self.flow, "yes_no_stages", None) or {}).get(stage)
+        if not slot or not jev.enabled(self.language) or hearing.looks_like_question(text):
+            return None
+        if labels and labels & {"repeat", "later", "not_me", "wrong_number"}:
+            return None
+        confirms_cancel = getattr(self.flow, "confirms_cancellation", None)
+        if confirms_cancel is not None and confirms_cancel(self.runtime.slots, self.ctx):
+            # A cancellation needs the caller's own unmistakable words — never a model's guess.
+            return None
+        question = next((m.get("content") or "" for m in reversed(self.messages) if m.get("role") == "assistant"), "")
+        decision = await jev.decide_yes_no(str(question), text, language=self.language)
+        if decision is None:
+            return None
+        return {slot: decision == "yes"}
+
+    @staticmethod
+    def _jev_heard(fields: dict[str, Any] | None) -> str:
+        """What the hearing gate checks when Jev decided: its confident verdict, as a plain answer."""
+        if not fields:
+            return ""
+        return "yes" if next(iter(fields.values())) is True else "no"
+
+    async def _speak_fast_fields(self, stage: str, text: str, fields: dict[str, Any], *, heard: str = "") -> bool:
         # Decide whether a line would be spoken BEFORE touching the runtime, so a
         # step the model must phrase itself leaves the flow untouched.
         preview = self.runtime.preview(fields)
@@ -218,7 +254,7 @@ class CallAgent:
         )
         if not speakable:
             return False
-        result = await self.tools.execute(SAVE_DETAILS, fields, caller_text=text)
+        result = await self.tools.execute(SAVE_DETAILS, fields, caller_text=heard or text)
         if not result.say:
             return False
         self._record_turn(text, result)

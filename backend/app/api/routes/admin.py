@@ -13,11 +13,13 @@ from app.api.deps import ADMIN_ROLE, require_admin
 from app.api.routes.auth import apply_settings, merchant_out
 from app.core.config import get_settings
 from app.core.datetime_utils import today_bounds_utc
+from app.core.addons import CATALOG, MAX_QUANTITY, entitlements, quantities, stored
+from app.core.datetime_utils import utcnow
 from app.core.plans import PLANS
 from app.core.regions import normalize_phone, region_defaults, regions_json
 from app.core.security import hash_password, sign_token
 from app.db.session import get_db
-from app.models import CallLog, CatalogItem, Merchant, Order, OrderStatus, SalesInquiry
+from app.models import AddonRequest, CallLog, CatalogItem, Merchant, Order, OrderStatus, SalesInquiry
 from app.schemas.admin import (
     AdminCallPage,
     AdminLoginRequest,
@@ -28,7 +30,7 @@ from app.schemas.admin import (
     MerchantCreate,
 )
 from app.schemas.merchant import MerchantOut
-from app.services import order_service, usage_service
+from app.services import channel_service, order_service, usage_service
 from app.verticals import VERTICALS, get_vertical
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
@@ -86,6 +88,7 @@ async def overview(_: dict = Depends(require_admin), db: AsyncSession = Depends(
         inbound_today=await count(select(func.count(CallLog.id)).where(*today_calls, CallLog.direction == "inbound")),
         booked_today=await count(select(func.count(CallLog.id)).where(*today_calls, CallLog.outcome == "booked")),
         by_vertical=by_vertical,
+        pending_addon_requests=await count(select(func.count(AddonRequest.id)).where(AddonRequest.status == "pending")),
     )
 
 
@@ -157,9 +160,14 @@ async def get_merchant(merchant_id: str, _: dict = Depends(require_admin), db: A
     merchant = await _merchant_or_404(db, merchant_id)
     catalog = int(await db.scalar(select(func.count(CatalogItem.id)).where(CatalogItem.merchant_id == merchant.id)) or 0)
     records = int(await db.scalar(select(func.count(Order.id)).where(Order.merchant_id == merchant.id)) or 0)
+    requests = await db.scalars(
+        select(AddonRequest).where(AddonRequest.merchant_id == merchant.id).order_by(AddonRequest.created_at.desc()).limit(20)
+    )
     return {
         "merchant": admin_out(merchant).model_dump(mode="json"),
         "usage": await usage_service.month_usage(db, merchant),
+        "entitlements": entitlements(merchant).as_json(),
+        "addon_requests": [_addon_request(row, merchant) for row in requests],
         "catalog_items": catalog,
         "records": records,
     }
@@ -171,7 +179,9 @@ async def update_merchant(
 ):
     merchant = await _merchant_or_404(db, merchant_id)
     changes = data.model_dump(exclude_unset=True)
-    admin_only = {key: changes.pop(key) for key in ("password", "active", "plan", "region", "inbound_number") if key in changes}
+    admin_only = {
+        key: changes.pop(key) for key in ("password", "active", "plan", "region", "inbound_number", "whatsapp_number") if key in changes
+    }
     apply_settings(merchant, MerchantAdminUpdate.model_validate(changes))
     if admin_only.get("password"):
         merchant.password_hash = hash_password(admin_only["password"])
@@ -187,9 +197,118 @@ async def update_merchant(
         if number and await _inbound_taken(db, number, merchant.id):
             raise HTTPException(status_code=409, detail="That inbound number already belongs to another account")
         merchant.inbound_number = number
+    if admin_only.get("whatsapp_number") is not None:
+        raw = str(admin_only["whatsapp_number"]).strip()
+        number = normalize_phone(raw, merchant.region) if raw else ""
+        if number and await _whatsapp_taken(db, number, merchant.id):
+            raise HTTPException(status_code=409, detail="That WhatsApp number already belongs to another account")
+        config = channel_service.settings_of(merchant)
+        config["whatsapp"] = {**(config.get("whatsapp") or {}), "number": number}
+        merchant.channel_settings = config
     await db.commit()
     await db.refresh(merchant)
     return admin_out(merchant)
+
+
+async def _whatsapp_taken(db: AsyncSession, number: str, merchant_id: str) -> bool:
+    owner = await db.scalar(
+        select(Merchant.id).where(Merchant.channel_settings["whatsapp"]["number"].astext == number, Merchant.id != merchant_id)
+    )
+    return owner is not None
+
+
+# ------------------------------------------------------------------ add-ons
+class AddonsUpdate(BaseModel):
+    #: The account's complete add-on set: {key: quantity}; missing keys are removed.
+    addons: dict[str, int] = Field(default_factory=dict)
+
+
+@router.put("/merchants/{merchant_id}/addons")
+async def set_addons(merchant_id: str, data: AddonsUpdate, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    merchant = await _merchant_or_404(db, merchant_id)
+    unknown = sorted(set(data.addons) - set(CATALOG))
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown add-on: {', '.join(unknown)}")
+    if any(qty < 0 or qty > MAX_QUANTITY for qty in data.addons.values()):
+        raise HTTPException(status_code=422, detail=f"Quantities must be between 0 and {MAX_QUANTITY}")
+    merchant.addons = stored(data.addons)
+    _sync_channels(merchant)
+    await db.commit()
+    await db.refresh(merchant)
+    return {"merchant": admin_out(merchant).model_dump(mode="json"), "entitlements": entitlements(merchant).as_json()}
+
+
+def _sync_channels(merchant: Merchant) -> None:
+    """Losing the website chat switches the widget off (and turning it on is the owner's call)."""
+    from app.core.plans import CHANNEL_WEB_CHAT
+
+    if merchant.widget_enabled and not entitlements(merchant).has_channel(CHANNEL_WEB_CHAT):
+        merchant.widget_enabled = False
+
+
+def _addon_request(row: AddonRequest, merchant: Merchant | None) -> dict:
+    addon = CATALOG.get(row.addon)
+    return {
+        "id": row.id,
+        "merchant_id": row.merchant_id,
+        "merchant_name": merchant.business_name if merchant else "",
+        "merchant_plan": merchant.plan if merchant else "",
+        "addon": row.addon,
+        "addon_name": addon.name if addon else row.addon,
+        "price_label": addon.price_label() if addon else "",
+        "quantity": row.quantity,
+        "note": row.note,
+        "status": row.status,
+        "admin_note": row.admin_note,
+        "created_at": row.created_at,
+        "decided_at": row.decided_at,
+    }
+
+
+@router.get("/addon-requests")
+async def list_addon_requests(
+    status: str = Query(default="pending"),
+    _: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    stmt = select(AddonRequest)
+    if status and status != "all":
+        stmt = stmt.where(AddonRequest.status == status)
+    rows = list(await db.scalars(stmt.order_by(AddonRequest.created_at.desc()).limit(200)))
+    merchants = await _merchants(db, {row.merchant_id for row in rows})
+    return {"items": [_addon_request(row, merchants.get(row.merchant_id)) for row in rows]}
+
+
+class AddonDecision(BaseModel):
+    admin_note: str = Field(default="", max_length=500)
+
+
+@router.post("/addon-requests/{request_id}/{decision}")
+async def decide_addon_request(
+    request_id: str, decision: str, data: AddonDecision, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)
+):
+    if decision not in ("approve", "decline"):
+        raise HTTPException(status_code=404, detail="Unknown action")
+    row = await db.get(AddonRequest, request_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if row.status != "pending":
+        raise HTTPException(status_code=409, detail="This request was already handled")
+    merchant = await _merchant_or_404(db, row.merchant_id)
+    if decision == "approve":
+        addon = CATALOG.get(row.addon)
+        if addon is None:
+            raise HTTPException(status_code=422, detail="That add-on no longer exists")
+        owned = quantities(merchant.addons)
+        owned[addon.key] = min(MAX_QUANTITY, owned.get(addon.key, 0) + row.quantity) if addon.stackable else 1
+        merchant.addons = stored(owned)
+        row.status = "approved"
+    else:
+        row.status = "declined"
+    row.admin_note = data.admin_note.strip()
+    row.decided_at = utcnow()
+    await db.commit()
+    return _addon_request(row, merchant)
 
 
 @router.delete("/merchants/{merchant_id}", status_code=204)

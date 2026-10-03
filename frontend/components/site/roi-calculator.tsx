@@ -4,7 +4,7 @@ import { useId, useState } from "react";
 
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { PLANS, usd } from "@/lib/site-content";
+import { VOICE_PLANS, usd } from "@/lib/site-content";
 
 const WEEKS_PER_MONTH = 4.33;
 /** Only used for the "minutes check" line; shown to the visitor as an assumption. */
@@ -28,7 +28,7 @@ export function RoiCalculator() {
   const [value, setValue] = useState("120");
   const [planKey, setPlanKey] = useState("growth");
 
-  const plan = PLANS.find((item) => item.key === planKey) ?? PLANS[1];
+  const plan = VOICE_PLANS.find((item) => item.key === planKey) ?? VOICE_PLANS[1];
   const missedWeek = toNumber(missed, 10_000);
   const ratePct = toNumber(rate, 100);
   const jobValue = toNumber(value, 1_000_000);
@@ -100,7 +100,7 @@ export function RoiCalculator() {
             Plan
           </label>
           <Select id={`${id}-plan`} value={planKey} onChange={(event) => setPlanKey(event.target.value)}>
-            {PLANS.map((item) => (
+            {VOICE_PLANS.map((item) => (
               <option key={item.key} value={item.key}>
                 {item.name} — {usd(item.price)} / month
               </option>

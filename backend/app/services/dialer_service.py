@@ -153,6 +153,7 @@ async def start_batch(db: AsyncSession, merchant: Merchant, statuses=None, *, so
     existing = current_run(merchant.id)
     if existing is not None and existing.active:
         raise HTTPException(status_code=409, detail="A call-all run is already in progress")
+    call_service.require_voice(merchant)
     preflight()
     order_ids = await eligible_order_ids(db, merchant.id, chosen)
     if not order_ids:

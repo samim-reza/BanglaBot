@@ -77,7 +77,8 @@ function PlanCard({ plan, billing }: { plan: SitePlan; billing: Billing }) {
           Most popular
         </span>
       )}
-      <h3 className="text-lg font-semibold text-foreground">{plan.name}</h3>
+      <p className="text-xs font-semibold uppercase tracking-wide text-primary-dark">{plan.product === "chat" ? "Website chat" : "Voice agent"}</p>
+      <h3 className="mt-1 text-lg font-semibold text-foreground">{plan.name}</h3>
       <p className="mt-1 min-h-[40px] text-sm text-muted-foreground">{plan.tagline}</p>
       <div className="mt-5">
         <Price monthly={plan.price} billing={billing} />
@@ -97,15 +98,15 @@ function PlanCard({ plan, billing }: { plan: SitePlan; billing: Billing }) {
       </ul>
       <div className="mt-auto pt-6">
         <p className="border-t border-border pt-4 text-xs text-muted-foreground">
-          Extra minutes {usd(plan.overage, 2)} each
+          {plan.product === "chat" ? "Add WhatsApp or Messenger anytime" : `Extra minutes ${usd(plan.overage, 2)} each`}
         </p>
       </div>
     </li>
   );
 }
 
-/** Plan cards with a Monthly / Annual toggle (annual = 2 months free). */
-export function PricingPlans({ showEnterprise = true }: { showEnterprise?: boolean }) {
+/** Plan cards with a Monthly / Annual toggle (annual = 2 months free), then a pointer to the add-ons. */
+export function PricingPlans({ showEnterprise = true, addonsHref = "/pricing#addons" }: { showEnterprise?: boolean; addonsHref?: string }) {
   const [billing, setBilling] = useState<Billing>("monthly");
   return (
     <div>
@@ -120,11 +121,20 @@ export function PricingPlans({ showEnterprise = true }: { showEnterprise?: boole
         </p>
       </div>
 
-      <ul className="mt-10 grid gap-6 md:grid-cols-3">
+      <ul className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {PLANS.map((plan) => (
           <PlanCard key={plan.key} plan={plan} billing={billing} />
         ))}
       </ul>
+
+      <p className="mt-6 text-center text-sm text-muted-foreground">
+        <span className="font-semibold text-foreground">Pick a plan, add what you need:</span> website chat, WhatsApp, Messenger, extra
+        minutes and more.{" "}
+        <Link href={addonsHref} className="inline-flex items-center gap-1 font-semibold text-primary-dark hover:underline">
+          See add-ons
+          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+        </Link>
+      </p>
 
       {showEnterprise && (
         <div className="mt-6 grid gap-6 rounded-2xl border border-border bg-surface p-6 md:grid-cols-[1fr_1.4fr_auto] md:items-center">

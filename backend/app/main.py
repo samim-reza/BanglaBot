@@ -10,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import admin, agent, auth, calls, catalog, integrations, orders, public, twilio
+from app.api.routes import addons, admin, agent, auth, calls, catalog, channels, integrations, orders, public, twilio
 from app.core.config import get_settings
 from app.core.logging import configure_logging
 from app.core.redis import close_redis, connect_redis
@@ -107,5 +107,7 @@ app.include_router(catalog.router)
 app.include_router(calls.router)
 app.include_router(agent.router)
 app.include_router(integrations.router)
+app.include_router(addons.router)
+app.include_router(channels.router)
 app.include_router(admin.router)
 app.include_router(twilio.router)

@@ -52,6 +52,8 @@ const CHANNEL_LABELS: Record<string, string> = {
   web: "Browser test call",
   chat: "Chat test",
   widget: "Website chat",
+  whatsapp: "WhatsApp",
+  messenger: "Messenger",
 };
 
 export function channelLabel(direction: string | null | undefined): string {

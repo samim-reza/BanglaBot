@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import Link from "next/link";
 import { Lightbulb, MessageSquare, Mic, PhoneIncoming, PhoneOutgoing, RefreshCw, Send, type LucideIcon } from "lucide-react";
 
+import { InfoTip } from "@/components/portal/kit";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,7 +22,7 @@ import { useVoiceCall, voiceActive } from "./use-voice-call";
 import { VoicePanel } from "./voice-panel";
 
 const MODES: { id: ConsoleMode; label: string; icon: LucideIcon }[] = [
-  { id: "voice", label: "Voice call (browser)", icon: Mic },
+  { id: "voice", label: "Voice call", icon: Mic },
   { id: "chat", label: "Chat", icon: MessageSquare },
 ];
 
@@ -36,13 +37,16 @@ function shorten(text: string, max = 60): string {
  * of your records), with the agent's live state alongside.
  */
 export function TestConsole() {
-  const { vertical } = useWorkspace();
+  const { vertical, entitlements } = useWorkspace();
+  // A chat-only plan has no phone agent: test by chat, as a customer writing in.
+  const hasVoice = entitlements.channels.includes("voice");
   const canInbound = vertical.directions.includes("inbound");
-  const canOutbound = vertical.directions.includes("outbound");
+  const canOutbound = vertical.directions.includes("outbound") && (hasVoice || !canInbound);
+  const modes = hasVoice ? MODES : MODES.filter((item) => item.id === "chat");
   const singular = t(vertical.record_label, "record").toLowerCase();
   const plural = t(vertical.record_label_plural, "records").toLowerCase();
 
-  const [mode, setMode] = useState<ConsoleMode>("voice");
+  const [mode, setMode] = useState<ConsoleMode>(hasVoice ? "voice" : "chat");
   const [direction, setDirection] = useState<Direction>(canInbound || !canOutbound ? "inbound" : "outbound");
   const [recordId, setRecordId] = useState("");
   const [callerNumber, setCallerNumber] = useState("");
@@ -92,7 +96,7 @@ export function TestConsole() {
   const sampleDisabled = chat.waiting || chat.starting || chat.ending || (!chat.active && needsRecord);
 
   const switchMode = (next: ConsoleMode) => {
-    if (next === mode || (next === "chat" && voiceBusy)) return;
+    if (next === mode || (next === "chat" && voiceBusy) || !modes.some((item) => item.id === next)) return;
     setMode(next);
   };
 
@@ -100,33 +104,22 @@ export function TestConsole() {
     if (event.key !== "ArrowLeft" && event.key !== "ArrowRight" && event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
     const next: ConsoleMode = mode === "voice" ? "chat" : "voice";
-    if (next === "chat" && voiceBusy) return;
+    if ((next === "chat" && voiceBusy) || !modes.some((item) => item.id === next)) return;
     setMode(next);
     tabRefs.current[next]?.focus();
   };
 
-  const directionOptions: { value: Direction; label: string; hint: string; icon: LucideIcon }[] = [
-    ...(canInbound
-      ? [{ value: "inbound" as const, label: "Customer contacts you", hint: "They call or message your business.", icon: PhoneIncoming }]
-      : []),
-    ...(canOutbound
-      ? [
-          {
-            value: "outbound" as const,
-            label: "You call a customer",
-            hint: `${t(vertical.outbound_label, "Outbound call")} about one of your ${plural}.`,
-            icon: PhoneOutgoing,
-          },
-        ]
-      : []),
+  const directionOptions: { value: Direction; label: string; icon: LucideIcon }[] = [
+    ...(canInbound ? [{ value: "inbound" as const, label: "Customer contacts you", icon: PhoneIncoming }] : []),
+    ...(canOutbound ? [{ value: "outbound" as const, label: t(vertical.outbound_label, "You call a customer"), icon: PhoneOutgoing }] : []),
   ];
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <Card className="min-w-0">
         <CardContent className="space-y-5 p-4 sm:p-5">
-          <div role="tablist" aria-label="How to test" className="grid grid-cols-2 gap-1 rounded-lg bg-secondary p-1">
-            {MODES.map((item) => {
+          <div role="tablist" aria-label="How to test" className={cn("grid gap-1 rounded-lg bg-secondary p-1", modes.length > 1 ? "grid-cols-2" : "grid-cols-1")}>
+            {modes.map((item) => {
               const active = mode === item.id;
               const locked = item.id === "chat" && voiceBusy;
               return (
@@ -180,12 +173,9 @@ export function TestConsole() {
                         onChange={() => setDirection(option.value)}
                         className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
                       />
-                      <span className="min-w-0">
-                        <span className="flex items-center gap-1.5 font-semibold">
-                          <option.icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />
-                          {option.label}
-                        </span>
-                        <span className="mt-0.5 block text-xs text-muted-foreground">{option.hint}</span>
+                      <span className="flex min-w-0 items-center gap-1.5 font-semibold">
+                        <option.icon className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                        {option.label}
                       </span>
                     </label>
                   );
@@ -220,8 +210,7 @@ export function TestConsole() {
                     No {plural} yet.{" "}
                     <Link href="/orders/new" className="font-medium text-primary underline-offset-2 hover:underline">
                       Create one
-                    </Link>{" "}
-                    with your own phone number, then come back.
+                    </Link>
                   </p>
                 ) : (
                   <div className="flex gap-2">
@@ -254,14 +243,20 @@ export function TestConsole() {
                   </div>
                 )}
                 <p id="test-record-hint" className="text-xs text-muted-foreground">
-                  You play the customer; nothing is dialed. Your latest 50 {plural} are listed.
+                  You play the customer; nothing is dialed.
                 </p>
               </div>
             ) : (
               <div className="flex flex-col gap-1.5 text-sm">
-                <label htmlFor="test-caller" className="text-[13.5px] font-semibold text-muted-foreground">
-                  Pretend caller number <span className="font-normal">(optional)</span>
-                </label>
+                <span className="flex items-center gap-1.5">
+                  <label htmlFor="test-caller" className="text-[13.5px] font-semibold text-muted-foreground">
+                    Caller number <span className="font-normal">(optional)</span>
+                  </label>
+                  <InfoTip label="About the caller number">
+                    Use a customer&apos;s number to test cancelling or rescheduling their {singular} — the agent finds it by the caller&apos;s number. Empty = a new
+                    caller.
+                  </InfoTip>
+                </span>
                 <Input
                   id="test-caller"
                   type="tel"
@@ -269,13 +264,8 @@ export function TestConsole() {
                   maxLength={32}
                   value={callerNumber}
                   placeholder="+1 415 555 0100"
-                  aria-describedby="test-caller-hint"
                   onChange={(e) => setCallerNumber(e.target.value)}
                 />
-                <p id="test-caller-hint" className="text-xs leading-relaxed text-muted-foreground">
-                  Use a customer&apos;s phone number to test cancelling or rescheduling their existing {singular} — the agent finds it by the caller&apos;s
-                  number. Leave empty to test as a new caller.
-                </p>
               </div>
             )}
             {busy && (
@@ -328,14 +318,10 @@ export function TestConsole() {
             ) : (
               <p className="text-sm text-muted-foreground">Talk to it the way your customers would.</p>
             )}
-            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            <p className="mt-4 text-xs text-muted-foreground">
               Answers come from your{" "}
-              <Link href="/settings#knowledge" className="font-medium text-primary underline-offset-2 hover:underline">
+              <Link href="/settings?tab=agent#knowledge" className="font-medium text-primary underline-offset-2 hover:underline">
                 knowledge base
-              </Link>{" "}
-              and business settings. Test calls and chats are free and show up in your{" "}
-              <Link href="/calls" className="font-medium text-primary underline-offset-2 hover:underline">
-                call history
               </Link>
               .
             </p>

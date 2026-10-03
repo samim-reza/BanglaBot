@@ -133,7 +133,7 @@ export function VoicePanel({ voice, onStart, startDisabled, startHint }: { voice
         </div>
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
           <Headphones className="h-3.5 w-3.5 shrink-0" aria-hidden />
-          Use headphones so the agent doesn&apos;t hear itself through your speakers.
+          Use headphones to avoid echo.
         </p>
       </div>
 
@@ -142,7 +142,7 @@ export function VoicePanel({ voice, onStart, startDisabled, startHint }: { voice
           <div className="space-y-2">
             <ApiError message={error.message} />
             {/could not connect/i.test(error.message) && (
-              <p className="text-xs text-muted-foreground">The backend must be running for test calls (in local development it listens on localhost:8000).</p>
+              <p className="text-xs text-muted-foreground">Check that the backend is running (localhost:8000 in development).</p>
             )}
           </div>
         ) : (
@@ -155,8 +155,7 @@ export function VoicePanel({ voice, onStart, startDisabled, startHint }: { voice
               <p className="break-words text-muted-foreground">{error.message}</p>
               {(error.kind === "server" || error.kind === "dropped") && (
                 <p className="text-muted-foreground">
-                  The backend must be running and reachable from this browser. In local development the browser connects straight to{" "}
-                  <code className="rounded bg-secondary px-1 font-mono text-xs">ws://localhost:8000</code>.
+                  Check that the backend is reachable (<code className="rounded bg-secondary px-1 font-mono text-xs">ws://localhost:8000</code> in development).
                 </p>
               )}
             </div>
@@ -165,7 +164,7 @@ export function VoicePanel({ voice, onStart, startDisabled, startHint }: { voice
       {endedQuickly && !error && (
         <p className="flex items-start gap-2 rounded-md border border-border bg-surface p-3 text-xs text-muted-foreground">
           <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-          The call ended right away. Check that the backend is running{socketUrl ? ` and accepts connections at ${socketUrl}` : ""}, and look at its logs for errors.
+          The call ended right away. Check the backend{socketUrl ? ` at ${socketUrl}` : ""} and its logs.
         </p>
       )}
 
@@ -175,8 +174,8 @@ export function VoicePanel({ voice, onStart, startDisabled, startHint }: { voice
         className="h-80"
         empty={
           active
-            ? "Listening… the agent speaks first, then it's your turn."
-            : "The conversation appears here as you talk. The agent is on the left, you're on the right."
+            ? "Listening… the agent speaks first."
+            : "The transcript appears here."
         }
       />
     </div>

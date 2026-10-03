@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Activity, ArrowRight } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { outcomeLabel, t } from "@/lib/vertical";
 import type { AgentState, VerticalSpec } from "@/services/api";
@@ -56,12 +56,11 @@ export function AgentStatePanel({
             </span>
           )}
         </CardTitle>
-        <CardDescription>What the agent has understood so far.</CardDescription>
       </CardHeader>
       <CardContent>
         {!state ? (
           <p className="rounded-md border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
-            Start a call or a chat — the stage, outcome and details the agent collects appear here live.
+            Start a call or chat to see it live.
           </p>
         ) : (
           <div className="space-y-4 text-sm" aria-live="polite">

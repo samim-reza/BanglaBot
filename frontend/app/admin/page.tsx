@@ -2,7 +2,19 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Activity, ArrowRight, Building2, CalendarCheck, ClipboardList, Inbox, PhoneCall, PhoneIncoming, Plus, RefreshCw } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  Building2,
+  CalendarCheck,
+  ClipboardList,
+  Inbox,
+  PhoneCall,
+  PhoneIncoming,
+  Plus,
+  Puzzle,
+  RefreshCw,
+} from "lucide-react";
 
 import { KpiTile } from "@/components/admin/stats";
 import { useAdminMeta, verticalName } from "@/components/admin/use-admin-meta";
@@ -66,7 +78,7 @@ export default function AdminOverviewPage() {
     <>
       <PageHeader
         title="Overview"
-        subtitle="Platform-wide activity across every account. “Today” runs from midnight on the platform clock (Asia/Dhaka)."
+        subtitle="Every account. “Today” is from midnight, Asia/Dhaka."
         actions={
           <>
             <Button variant="outline" onClick={() => void load()} disabled={refreshing} aria-label="Refresh overview">
@@ -83,6 +95,22 @@ export default function AdminOverviewPage() {
         }
       />
       <ApiError message={error} />
+
+      {o && o.pending_addon_requests > 0 && (
+        <Link
+          href="/admin/requests"
+          className="group flex items-center gap-3 rounded-md border border-[#fcd34d] bg-[#fef3c7] p-3 text-sm text-[#92400e] transition-colors hover:border-[#f59e0b] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
+        >
+          <Puzzle className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1 font-medium">
+            {fmt(o.pending_addon_requests)} add-on {o.pending_addon_requests === 1 ? "request" : "requests"} waiting
+          </span>
+          <span className="inline-flex items-center gap-1 font-semibold">
+            Review
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+          </span>
+        </Link>
+      )}
 
       <section aria-label="Key figures" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         <KpiTile label="Accounts" icon={Building2} href="/admin/merchants" value={fmt(o?.merchants)} hint={o ? `${fmt(o.orders)} records in total` : undefined} />
@@ -126,7 +154,7 @@ export default function AdminOverviewPage() {
         <Card className="lg:col-span-3">
           <CardHeader>
             <CardTitle>Accounts by business type</CardTitle>
-            <CardDescription>Which agent each account runs. Fixed when the account is created.</CardDescription>
+            <CardDescription>Fixed when the account is created.</CardDescription>
           </CardHeader>
           <CardContent>
             {!o ? (
@@ -168,20 +196,28 @@ export default function AdminOverviewPage() {
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Quick links</CardTitle>
-            <CardDescription>Common admin tasks.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
-            <QuickLink href="/admin/merchants?create=1" icon={Plus} title="Create account" detail="Set up a new business with its agent, region and plan." />
+            <QuickLink href="/admin/merchants?create=1" icon={Plus} title="Create account" detail="Business, region and plan." />
+            <QuickLink
+              href="/admin/requests"
+              icon={Puzzle}
+              title="Add-on requests"
+              detail={
+                !o ? "Owners asking for add-ons." : o.pending_addon_requests === 0 ? "None waiting." : `${fmt(o.pending_addon_requests)} waiting for approval.`
+              }
+              count={o?.pending_addon_requests ?? 0}
+            />
             <QuickLink
               href="/admin/inquiries"
               icon={Inbox}
               title="Sales inquiries"
               detail={
                 newInquiries === null
-                  ? "Leads from the website's Talk to sales form."
+                  ? "Leads from the website."
                   : newInquiries === 0
-                    ? "No new inquiries — you're all caught up."
-                    : `${newInquiries.toLocaleString("en-US")} new ${newInquiries === 1 ? "inquiry" : "inquiries"} waiting for a reply.`
+                    ? "None new."
+                    : `${newInquiries.toLocaleString("en-US")} new, waiting for a reply.`
               }
               count={newInquiries ?? 0}
             />
@@ -189,9 +225,9 @@ export default function AdminOverviewPage() {
               href="/admin/orders?status=needs_review"
               icon={ClipboardList}
               title="Records needing review"
-              detail="Calls the agent couldn't settle on its own."
+              detail="Calls the agent couldn't settle."
             />
-            <QuickLink href="/admin/calls" icon={PhoneCall} title="Latest calls & chats" detail="Transcripts and recordings across every account." />
+            <QuickLink href="/admin/calls" icon={PhoneCall} title="Latest calls & chats" detail="Transcripts and recordings." />
           </CardContent>
         </Card>
       </div>

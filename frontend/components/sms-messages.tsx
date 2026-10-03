@@ -1,6 +1,6 @@
 "use client";
 
-/** The texts sent to customers (confirmations, reminders, manual sends) — Add-ons and record pages. */
+/** The texts sent to customers (confirmations, reminders, manual sends) — Settings and record pages. */
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { LoaderCircle, MessageSquareText, RefreshCw, Send } from "lucide-react";
@@ -142,7 +142,7 @@ export function RecordSmsCard({
       <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
         <div className="min-w-0 space-y-1.5">
           <CardTitle>Texts</CardTitle>
-          <CardDescription>{phone ? <>SMS to <span className="tabular-nums">{phone}</span> about this {recordLabel}.</> : `This ${recordLabel} has no phone number to text.`}</CardDescription>
+          <CardDescription>{phone ? <>To <span className="tabular-nums">{phone}</span></> : "No phone number to text."}</CardDescription>
         </div>
         <div className="flex gap-1">
           <Button type="button" variant="ghost" size="sm" onClick={() => void load()} disabled={loading} aria-label="Refresh texts">
@@ -168,7 +168,7 @@ export function RecordSmsCard({
               maxLength={640}
               value={body}
               autoFocus
-              placeholder={`Leave empty to send the standard text with this ${recordLabel}'s details.`}
+              placeholder="Empty = standard confirmation"
               onChange={(e) => setBody(e.target.value)}
             />
             <div className="flex flex-wrap items-center gap-2">

@@ -1,0 +1,28 @@
+# Redeploy the backend on Render after every push to main that touches it.
+# Render was linked through the public repo URL, which doesn't auto-deploy, so this
+# calls the service's Deploy Hook (Render → banglabot-api → Settings → Deploy Hook),
+# stored as the repository secret RENDER_DEPLOY_HOOK. Vercel deploys the frontend itself.
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "render.yaml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::warning::RENDER_DEPLOY_HOOK secret is not set — deploy the backend from the Render dashboard."
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK" > /dev/null && echo "Render deploy triggered."

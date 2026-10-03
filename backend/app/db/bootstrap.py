@@ -18,12 +18,12 @@ from app.core.config import get_settings
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import AsyncSessionLocal, engine
-from app.models import CallLog, CatalogItem, Merchant, Message, Order, SalesInquiry
+from app.models import AddonRequest, CallLog, CatalogItem, Merchant, Message, Order, SalesInquiry
 
 logger = structlog.get_logger(__name__)
 
 #: Importing the models registers their tables on ``Base.metadata`` for create_all.
-REGISTERED_MODELS = (Merchant, Order, CallLog, CatalogItem, SalesInquiry, Message)
+REGISTERED_MODELS = (Merchant, Order, CallLog, CatalogItem, SalesInquiry, Message, AddonRequest)
 
 SCHEMA_PATCHES: tuple[str, ...] = (
     # merchants
@@ -125,6 +125,19 @@ SCHEMA_PATCHES: tuple[str, ...] = (
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS calendar_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
     "CREATE INDEX IF NOT EXISTS ix_merchants_calendar_token ON merchants (calendar_token)",
     "CREATE INDEX IF NOT EXISTS ix_messages_merchant_created ON messages (merchant_id, created_at DESC)",
+    # --- Add-ons + chat channels (2026-10) ----------------------------------------------
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS addons JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS channel_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+    # Accounts from before add-ons existed keep the website chat they already had on.
+    (
+        "UPDATE merchants SET addons = CASE WHEN widget_enabled AND plan NOT IN ('trial', 'enterprise', 'chat') "
+        "THEN '{\"_v\": 1, \"web_chat\": 1}'::jsonb ELSE '{\"_v\": 1}'::jsonb || addons END "
+        "WHERE addons->'_v' IS NULL"
+    ),
+    "ALTER TABLE merchants ALTER COLUMN addons SET DEFAULT '{\"_v\": 1}'::jsonb",
+    "CREATE INDEX IF NOT EXISTS ix_merchants_whatsapp ON merchants ((channel_settings->'whatsapp'->>'number'))",
+    "CREATE INDEX IF NOT EXISTS ix_merchants_messenger ON merchants ((channel_settings->'messenger'->>'page_id'))",
+    "CREATE INDEX IF NOT EXISTS ix_addon_requests_status ON addon_requests (status, created_at DESC)",
 )
 
 

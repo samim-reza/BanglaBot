@@ -132,13 +132,15 @@ class MerchantAdminUpdate(MerchantSettingsUpdate):
         return key
     region: str | None = None
     inbound_number: str | None = Field(default=None, max_length=32)
+    #: The account's Twilio WhatsApp sender ("" = none).
+    whatsapp_number: str | None = Field(default=None, max_length=32)
 
     @field_validator("region")
     @classmethod
     def _region(cls, value: str | None) -> str | None:
         return None if value is None else _region(value)
 
-    @field_validator("inbound_number")
+    @field_validator("inbound_number", "whatsapp_number")
     @classmethod
     def _inbound(cls, value: str | None) -> str | None:
         return None if value is None else _phone(value)
@@ -158,6 +160,7 @@ class AdminOverview(BaseModel):
     inbound_today: int = 0
     booked_today: int = 0
     by_vertical: dict[str, int] = {}
+    pending_addon_requests: int = 0
 
 
 class AdminOrderOut(OrderOut):

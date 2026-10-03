@@ -21,7 +21,9 @@ import { adminApi, formatApiError, type CallChannel, type CallLog, type Merchant
 
 const PAGE_SIZE = 25;
 const FILTER_KEYS = ["merchant_id", "direction", "page"] as const;
-const CHANNELS: CallChannel[] = ["outbound", "inbound", "widget", "web", "chat"];
+const CHANNELS: CallChannel[] = ["outbound", "inbound", "widget", "whatsapp", "messenger", "web", "chat"];
+const CHAT_APPS: Record<string, string> = { whatsapp: "WhatsApp", messenger: "Messenger" };
+const sourceLabel = (direction: string | null | undefined) => CHAT_APPS[direction ?? ""] ?? channelLabel(direction);
 const VOICE: string[] = ["outbound", "inbound", "web"];
 
 export default function AdminCallsPage() {
@@ -94,7 +96,7 @@ function CallsView() {
           <option value="">All channels</option>
           {CHANNELS.map((value) => (
             <option key={value} value={value}>
-              {channelLabel(value)}
+              {sourceLabel(value)}
             </option>
           ))}
         </Select>
@@ -174,7 +176,7 @@ function CallsView() {
                           <span className="font-medium">{log.merchant_name || "—"}</span>
                         )}
                       </TableCell>
-                      <TableCell className="whitespace-nowrap">{channelLabel(log.direction)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{sourceLabel(log.direction)}</TableCell>
                       <TableCell className="min-w-[9rem]">
                         <div>{log.customer_name || (log.direction === "widget" ? "Website visitor" : "—")}</div>
                         {log.caller_number && <div className="font-mono text-xs text-muted-foreground">{log.caller_number}</div>}

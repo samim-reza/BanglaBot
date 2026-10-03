@@ -11,6 +11,7 @@ import {
   Globe,
   Lock,
   LogIn,
+  MessageCircle,
   MessagesSquare,
   Pencil,
   PhoneIncoming,
@@ -21,16 +22,17 @@ import {
 import { ActiveBadge, Pill } from "@/components/admin/badges";
 import { DeleteMerchantDialog, OpenPortalDialog } from "@/components/admin/merchant-actions";
 import { MerchantEditDrawer } from "@/components/admin/merchant-edit-drawer";
+import { PlanAddonsCard } from "@/components/admin/plan-addons-card";
 import { LoadingRows } from "@/components/admin/states";
 import { Meter } from "@/components/admin/stats";
-import { planPrice, regionOf, useAdminMeta, verticalOf } from "@/components/admin/use-admin-meta";
+import { planPrice, regionOf, useAddonCatalog, useAdminMeta, verticalOf } from "@/components/admin/use-admin-meta";
 import { ApiError } from "@/components/api-error";
 import { EmptyState } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatDate, formatDateTime, languageLabel } from "@/lib/format";
 import { t } from "@/lib/vertical";
-import { adminApi, formatApiError, isApiRequestError, type AdminMerchantDetail } from "@/services/api";
+import { adminApi, formatApiError, isApiRequestError, type AdminMerchantDetail, type ChannelKey } from "@/services/api";
 
 const num = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 1 });
 
@@ -39,6 +41,7 @@ export default function AdminAccountDetailPage() {
   const id = String(params?.id ?? "");
   const router = useRouter();
   const { meta } = useAdminMeta();
+  const { addons: catalog, error: catalogError } = useAddonCatalog();
   const [detail, setDetail] = useState<AdminMerchantDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
@@ -100,6 +103,10 @@ export default function AdminAccountDetailPage() {
   const recordsHref = `/admin/orders?merchant_id=${encodeURIComponent(merchant.id)}`;
   const callsHref = `/admin/calls?merchant_id=${encodeURIComponent(merchant.id)}`;
   const overageCost = usage.overage_minutes > 0 ? usage.overage_minutes * (plan.overage_per_minute || 0) : 0;
+  const limits = usage.limits ?? detail.entitlements?.limits ?? { minutes: plan.included_minutes, chats: plan.included_chats, sms: plan.included_sms, numbers: plan.phone_numbers };
+  const hasChannel = (channel: ChannelKey) => detail.entitlements?.channels?.includes(channel) ?? false;
+  const whatsappNumber = merchant.channels?.whatsapp?.number ?? "";
+  const messenger = merchant.channels?.messenger;
 
   return (
     <>
@@ -151,14 +158,14 @@ export default function AdminAccountDetailPage() {
           <CardHeader>
             <CardTitle>Plan & usage</CardTitle>
             <CardDescription>
-              {plan.name} · {planPrice(plan)} · this period since {formatDate(usage.period_start)}
+              {plan.name} · {planPrice(plan)} · since {formatDate(usage.period_start)}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
             <UsageRow
               label="Call minutes"
               used={usage.minutes}
-              included={plan.included_minutes}
+              limit={limits.minutes}
               unit="min"
               note={
                 usage.overage_minutes > 0
@@ -168,7 +175,8 @@ export default function AdminAccountDetailPage() {
                     : undefined
               }
             />
-            <UsageRow label="Website chats" used={usage.chats} included={plan.included_chats} unit="chats" />
+            <UsageRow label="Chats" used={usage.chats} limit={limits.chats} unit="chats" />
+            <UsageRow label="Texts" used={usage.sms ?? 0} limit={limits.sms} unit="texts" />
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               <Figure label="Phone calls this period" value={num(usage.calls)} />
               <Figure label={recordsLabel} value={num(detail.records)} href={recordsHref} />
@@ -180,13 +188,23 @@ export default function AdminAccountDetailPage() {
         <Card>
           <CardHeader>
             <CardTitle>Activity</CardTitle>
-            <CardDescription>This account&apos;s data in the console.</CardDescription>
+            <CardDescription>This account&apos;s data.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
             <ActivityLink href={recordsHref} icon={ClipboardList} title={recordsLabel} detail={`${num(detail.records)} in total`} />
-            <ActivityLink href={callsHref} icon={MessagesSquare} title="Calls & chats" detail="Transcripts, outcomes and recordings" />
+            <ActivityLink href={callsHref} icon={MessagesSquare} title="Calls & chats" detail="Transcripts and recordings" />
           </CardContent>
         </Card>
+
+        <PlanAddonsCard
+          merchantId={merchant.id}
+          plan={plan}
+          entitlements={detail.entitlements}
+          requests={detail.addon_requests ?? []}
+          catalog={catalog}
+          catalogError={catalogError}
+          onChanged={() => void load()}
+        />
 
         <Card>
           <CardHeader>
@@ -268,27 +286,49 @@ export default function AdminAccountDetailPage() {
             <CardTitle>Channels</CardTitle>
             <CardDescription>Where this account&apos;s agent answers.</CardDescription>
           </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-3">
+          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Channel
               icon={PhoneIncoming}
               title="Inbound number"
               ok={Boolean(merchant.inbound_number)}
               value={merchant.inbound_number ? <span className="font-mono">{merchant.inbound_number}</span> : "Not assigned"}
-              hint={merchant.inbound_number ? "Calls to this number reach this agent." : "Assign a Twilio number in Edit."}
+              hint={merchant.inbound_number ? "Calls reach this agent." : <EditLink onClick={() => setEditing(true)}>Assign number</EditLink>}
             />
             <Channel
               icon={Globe}
-              title="Website chat widget"
-              ok={merchant.widget_enabled && Boolean(merchant.widget_key)}
-              value={merchant.widget_enabled ? "Enabled" : "Disabled"}
-              hint={merchant.widget_key ? "Embed key issued." : "No embed key yet — issued when the owner enables the widget."}
+              title="Website chat"
+              ok={hasChannel("web_chat") && merchant.widget_enabled && Boolean(merchant.widget_key)}
+              value={!hasChannel("web_chat") ? "Not on plan" : merchant.widget_enabled ? "Enabled" : "Disabled"}
+              hint={!hasChannel("web_chat") ? "Add-on off." : merchant.widget_key ? "Embed key issued." : "The owner turns it on."}
+            />
+            <Channel
+              icon={MessageCircle}
+              title="WhatsApp"
+              ok={hasChannel("whatsapp") && Boolean(whatsappNumber)}
+              value={whatsappNumber ? <span className="font-mono">{whatsappNumber}</span> : "No number"}
+              hint={
+                !hasChannel("whatsapp") ? (
+                  "Add-on off."
+                ) : whatsappNumber ? (
+                  "Twilio WhatsApp sender."
+                ) : (
+                  <EditLink onClick={() => setEditing(true)}>Set number</EditLink>
+                )
+              }
+            />
+            <Channel
+              icon={MessagesSquare}
+              title="Messenger"
+              ok={hasChannel("messenger") && Boolean(messenger?.connected)}
+              value={messenger?.connected ? messenger.page_name || "Page connected" : "Not connected"}
+              hint={!hasChannel("messenger") ? "Add-on off." : messenger?.connected ? "Connected by the owner." : "The owner connects a Page."}
             />
             <Channel
               icon={Webhook}
               title="Webhook"
               ok={Boolean(merchant.webhook_url)}
               value={merchant.webhook_url ? "Configured" : "Not configured"}
-              hint={merchant.webhook_url ? <span className="break-all">{hostOf(merchant.webhook_url)}</span> : "Set by the owner in their portal."}
+              hint={merchant.webhook_url ? <span className="break-all">{hostOf(merchant.webhook_url)}</span> : "Set by the owner."}
             />
           </CardContent>
           {merchant.auto_call_at && (
@@ -339,19 +379,28 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-function UsageRow({ label, used, included, unit, note }: { label: string; used: number; included: number; unit: string; note?: string }) {
+function EditLink({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button type="button" onClick={onClick} className="font-semibold text-primary hover:underline">
+      {children}
+    </button>
+  );
+}
+
+/** Used vs. the monthly limit (plan + add-ons); null = no limit, 0 = not included. */
+function UsageRow({ label, used, limit, unit, note }: { label: string; used: number; limit: number | null; unit: string; note?: string }) {
   return (
     <div>
       <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
         <span className="font-semibold">{label}</span>
         <span>
           <span className="font-semibold">{num(used)}</span>
-          <span className="text-muted-foreground"> / {included ? `${num(included)} ${unit}` : "custom"}</span>
+          <span className="text-muted-foreground"> / {limit === null ? "unlimited" : limit > 0 ? `${num(limit)} ${unit}` : "not included"}</span>
         </span>
       </div>
-      {included > 0 ? (
+      {limit ? (
         <div className="mt-2">
-          <Meter value={used} max={included} label={`${label} used`} />
+          <Meter value={used} max={limit} label={`${label} used`} />
         </div>
       ) : null}
       {note && <p className="mt-1 text-xs text-muted-foreground">{note}</p>}

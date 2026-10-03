@@ -1,20 +1,24 @@
 "use client";
 
 /**
- * Account settings: one card per concern, each with its own draft, dirty state
- * and Save button. Values come from the workspace (`useWorkspace()`); after a
- * save the card adopts what the server returned and the workspace is refreshed
- * so the shell (business name, plan, …) updates too.
+ * Account settings, in tabs (`?tab=business|agent|notifications|calendar|developers|security`).
+ * Each card keeps its own draft, dirty state and Save button. Values come from
+ * the workspace (`useWorkspace()`); after a save the card adopts what the server
+ * returned and the workspace is refreshed so the shell updates too. Tabs mount
+ * on first visit and stay mounted, so unsaved edits survive switching tabs.
  */
 
-import { FormEvent, createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { FormEvent, Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   BookOpenText,
   Bot,
   Building2,
+  CalendarDays,
   Eye,
   EyeOff,
+  FlaskConical,
   Globe,
   KeyRound,
   LoaderCircle,
@@ -22,17 +26,27 @@ import {
   RotateCcw,
   Route,
   SlidersHorizontal,
+  Smartphone,
   Sparkles,
   Trash2,
+  Webhook,
   type LucideIcon,
 } from "lucide-react";
 
 import { ApiError } from "@/components/api-error";
 import { useAppToast } from "@/components/app-toast";
 import { PageHeader } from "@/components/page-header";
+import {
+  CalendarSection,
+  IntegrationsPlaceholder,
+  SmsSection,
+  useGoogleCalendarReturn,
+  useIntegrations,
+} from "@/components/portal/integrations-sections";
+import { InfoTip, SectionCard, SwitchRow, same, useDraft } from "@/components/portal/kit";
+import { WebhookSection } from "@/components/portal/webhook-section";
 import { SchemaFields, compactValues, type FormValues } from "@/components/schema-form";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -44,6 +58,7 @@ import {
   merchantApi,
   type FieldSpec,
   type FlowPreview,
+  type Integrations,
   type Language,
   type Merchant,
   type VerticalKey,
@@ -147,29 +162,6 @@ FAQ — Do you give quotes over the phone? [Only the call-out charge and the usu
 
 // ---------------------------------------------------------------- helpers
 
-function same(a: unknown, b: unknown): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
-/**
- * A form draft over server values. When the server values change (after a
- * workspace refresh) an untouched draft follows them; an edited one is kept.
- * `commit()` adopts freshly saved values as the new baseline.
- */
-function useDraft<T>(source: T) {
-  const sourceKey = JSON.stringify(source);
-  const [state, setState] = useState(() => ({ key: sourceKey, base: source, draft: source }));
-  if (state.key !== sourceKey) {
-    const edited = !same(state.draft, state.base);
-    setState({ key: sourceKey, base: source, draft: edited ? state.draft : source });
-  }
-  const setDraft = useCallback((update: (previous: T) => T) => setState((current) => ({ ...current, draft: update(current.draft) })), []);
-  const reset = useCallback(() => setState((current) => ({ ...current, draft: current.base })), []);
-  // Keeps the source key: the refreshed server values that follow are adopted as-is.
-  const commit = useCallback((saved: T) => setState((current) => ({ key: current.key, base: saved, draft: saved })), []);
-  return { draft: state.draft, dirty: !same(state.draft, state.base), setDraft, reset, commit };
-}
-
 /** Saving state + inline error for one card. */
 function useSaver() {
   const toast = useAppToast();
@@ -205,7 +197,7 @@ function validTimeZone(zone: string): boolean {
   }
 }
 
-/** Page-level registry of which cards have unsaved edits (for the nav dots and the unload guard). */
+/** Page-level registry of which cards have unsaved edits (for the tab dots and the unload guard). */
 const DirtyContext = createContext<(id: string, dirty: boolean) => void>(() => undefined);
 
 function useReportDirty(id: string, dirty: boolean) {
@@ -218,37 +210,11 @@ function useReportDirty(id: string, dirty: boolean) {
 
 // ---------------------------------------------------------------- building blocks
 
-function SectionCard({
-  id,
-  icon: Icon,
-  title,
-  description,
-  children,
-}: {
-  id: string;
-  icon: LucideIcon;
-  title: string;
-  description?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card id={id} role="region" className="scroll-mt-24" aria-labelledby={`${id}-title`}>
-      <CardHeader>
-        <CardTitle id={`${id}-title`} className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-primary" aria-hidden />
-          {title}
-        </CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-      </CardHeader>
-      <CardContent>{children}</CardContent>
-    </Card>
-  );
-}
-
 function FormRow({
   id,
   label,
   hint,
+  info,
   aside,
   className,
   children,
@@ -256,16 +222,21 @@ function FormRow({
   id: string;
   label: string;
   hint?: React.ReactNode;
+  /** Longer explanation behind an info icon. */
+  info?: React.ReactNode;
   aside?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className={cn("flex min-w-0 flex-col gap-1.5 text-sm", className)}>
-      <div className="flex items-baseline justify-between gap-3">
-        <label htmlFor={id} className="text-[13.5px] font-semibold text-muted-foreground">
-          {label}
-        </label>
+      <div className="flex items-center justify-between gap-3">
+        <span className="flex items-center gap-1.5">
+          <label htmlFor={id} className="text-[13.5px] font-semibold text-muted-foreground">
+            {label}
+          </label>
+          {info && <InfoTip label={`About ${label.toLowerCase()}`}>{info}</InfoTip>}
+        </span>
         {aside}
       </div>
       {children}
@@ -338,38 +309,12 @@ function Segmented<T extends string>({
   );
 }
 
-function Toggle({
-  checked,
-  onChange,
-  label,
-  description,
-}: {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-  description?: string;
-}) {
-  return (
-    <label className="flex cursor-pointer items-start justify-between gap-4 rounded-md border border-border p-3">
-      <span className="min-w-0">
-        <span className="block text-sm font-medium">{label}</span>
-        {description && <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{description}</span>}
-      </span>
-      <input type="checkbox" role="switch" className="peer sr-only" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      <span
-        aria-hidden
-        className="relative mt-0.5 inline-flex h-5 w-9 shrink-0 rounded-full bg-input transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow after:transition-transform peer-checked:bg-primary peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-ring"
-      />
-    </label>
-  );
-}
-
 function SaveBar({
   dirty,
   saving,
   error,
   onReset,
-  label = "Save changes",
+  label = "Save",
 }: {
   dirty: boolean;
   saving: boolean;
@@ -393,9 +338,7 @@ function SaveBar({
               <span className="h-1.5 w-1.5 rounded-full bg-current" aria-hidden />
               Unsaved changes
             </span>
-          ) : (
-            "No unsaved changes"
-          )}
+          ) : null}
         </p>
         <div className="flex gap-2">
           {dirty && (
@@ -443,7 +386,7 @@ function ProfileSection({ onSaved }: { onSaved: () => void }) {
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!draft.business_name.trim()) {
-      setError("Business name is required — your agent introduces itself with it.");
+      setError("Business name is required.");
       return;
     }
     void run(async () => {
@@ -461,7 +404,7 @@ function ProfileSection({ onSaved }: { onSaved: () => void }) {
   };
 
   return (
-    <SectionCard id="profile" icon={Building2} title="Business profile" description="Who you are. The business name is what your agent introduces itself with.">
+    <SectionCard id="profile" icon={Building2} title="Business profile" description="Your agent introduces itself with the business name.">
       <form className="grid gap-4 sm:grid-cols-2" onSubmit={submit} noValidate>
         <FormRow id="business_name" label="Business name *">
           <Input id="business_name" value={draft.business_name} onChange={set("business_name")} maxLength={160} required autoComplete="organization" />
@@ -469,17 +412,17 @@ function ProfileSection({ onSaved }: { onSaved: () => void }) {
         <FormRow id="owner_name" label="Owner name">
           <Input id="owner_name" value={draft.owner_name} onChange={set("owner_name")} maxLength={120} autoComplete="name" />
         </FormRow>
-        <FormRow id="phone" label="Phone" hint="Your contact number for the platform team.">
-          <Input id="phone" type="tel" inputMode="tel" value={draft.phone} onChange={set("phone")} maxLength={32} aria-describedby="phone-hint" autoComplete="tel" />
+        <FormRow id="phone" label="Phone" info="How the platform team reaches you.">
+          <Input id="phone" type="tel" inputMode="tel" value={draft.phone} onChange={set("phone")} maxLength={32} autoComplete="tel" />
         </FormRow>
         <FormRow id="email" label="Email">
           <Input id="email" type="email" value={draft.email} onChange={set("email")} maxLength={160} autoComplete="email" />
         </FormRow>
         <FormRow
           id="support_phone"
-          label="Live transfer number"
+          label="Transfer number"
           className="sm:col-span-2"
-          hint="Your agent puts callers through to this number when they ask for a person. Leave it empty and the agent tells them a team member will call back."
+          info="Callers who ask for a person are put through to this number. Empty = the agent says a team member will call back."
         >
           <Input
             id="support_phone"
@@ -489,11 +432,10 @@ function ProfileSection({ onSaved }: { onSaved: () => void }) {
             onChange={set("support_phone")}
             maxLength={32}
             placeholder="+1 415 555 0100"
-            aria-describedby="support_phone-hint"
           />
         </FormRow>
         <div className="sm:col-span-2">
-          <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} label="Save profile" />
+          <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} />
         </div>
       </form>
     </SectionCard>
@@ -532,13 +474,15 @@ function withCurrent(options: number[], current: number): number[] {
 }
 
 function AgentSection({ onSaved }: { onSaved: () => void }) {
-  const { merchant, vertical, refresh } = useWorkspace();
+  const { merchant, vertical, entitlements, refresh } = useWorkspace();
   const source = useMemo(() => agentFrom(merchant), [merchant]);
   const { draft, dirty, setDraft, reset, commit } = useDraft(source);
   const { saving, error, setError, run } = useSaver();
   useReportDirty("agent", dirty);
   const isEcommerce = vertical.key === "ecommerce";
-  const defaultGreeting = `Hello, thank you for calling ${merchant.business_name || "your business"}.`;
+  // A chat-only plan has no phone agent: hide the voice and call-length settings.
+  const hasVoice = entitlements.channels.includes("voice");
+  const defaultGreeting = `Hello, thank you for ${hasVoice ? "calling" : "contacting"} ${merchant.business_name || "your business"}.`;
 
   const patch = (values: Partial<AgentForm>) => setDraft((current) => ({ ...current, ...values }));
 
@@ -566,25 +510,25 @@ function AgentSection({ onSaved }: { onSaved: () => void }) {
   };
 
   return (
-    <SectionCard id="agent" icon={Bot} title="Agent voice & behaviour" description="How your agent sounds and when it ends a call.">
+    <SectionCard
+      id="agent"
+      icon={Bot}
+      title={hasVoice ? "Voice & behaviour" : "Language & greeting"}
+      description={hasVoice ? "How your agent sounds and when it hangs up." : undefined}
+    >
       <form className="grid gap-5" onSubmit={submit} noValidate>
         <div className="grid gap-5 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Segmented<Language>
-              name="language"
-              label="Language"
-              value={draft.language}
-              options={[
-                { value: "en", label: "English" },
-                { value: "bn", label: "Bangla" },
-              ]}
-              onChange={(language) => patch({ language })}
-            />
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              English is the main language today. Bangla is available for customers in Bangladesh.
-            </p>
-          </div>
-          <div className="space-y-1.5">
+          <Segmented<Language>
+            name="language"
+            label="Language"
+            value={draft.language}
+            options={[
+              { value: "en", label: "English" },
+              { value: "bn", label: "Bangla" },
+            ]}
+            onChange={(language) => patch({ language })}
+          />
+          {hasVoice && (
             <Segmented<VoicePersona>
               name="voice_persona"
               label="Voice"
@@ -595,15 +539,14 @@ function AgentSection({ onSaved }: { onSaved: () => void }) {
               ]}
               onChange={(voice_persona) => patch({ voice_persona })}
             />
-            <p className="text-xs leading-relaxed text-muted-foreground">The accent follows your region.</p>
-          </div>
+          )}
         </div>
 
         <FormRow
           id="custom_greeting"
           label="Greeting"
           aside={<Counter value={draft.custom_greeting.length} max={GREETING_MAX} />}
-          hint="Said word for word at the start of every call and chat. Leave empty to use the default shown above."
+          hint="Said word for word. Empty = default."
         >
           <Textarea
             id="custom_greeting"
@@ -616,51 +559,51 @@ function AgentSection({ onSaved }: { onSaved: () => void }) {
           />
         </FormRow>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormRow
-            id="silence_hangup_secs"
-            label="Silence before hanging up"
-            hint="After this much silence the agent asks whether the caller can hear it; after the same again, it ends the call."
-          >
-            <Select
+        {hasVoice && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormRow
               id="silence_hangup_secs"
-              value={String(draft.silence_hangup_secs)}
-              aria-describedby="silence_hangup_secs-hint"
-              onChange={(e) => patch({ silence_hangup_secs: Number(e.target.value) })}
+              label="Silence timeout"
+              info="After this much silence the agent asks whether the caller can hear it; after the same again, it ends the call."
             >
-              {withCurrent(SILENCE_OPTIONS, draft.silence_hangup_secs).map((value) => (
-                <option key={value} value={value}>
-                  {value} seconds
-                </option>
-              ))}
-            </Select>
-          </FormRow>
-          <FormRow id="max_call_seconds" label="Maximum call length" hint="The agent politely wraps up a call that reaches this length.">
-            <Select
-              id="max_call_seconds"
-              value={String(draft.max_call_seconds)}
-              aria-describedby="max_call_seconds-hint"
-              onChange={(e) => patch({ max_call_seconds: Number(e.target.value) })}
-            >
-              {withCurrent(MAX_CALL_OPTIONS, draft.max_call_seconds).map((value) => (
-                <option key={value} value={value}>
-                  {maxCallLabel(value)}
-                </option>
-              ))}
-            </Select>
-          </FormRow>
-        </div>
+              <Select
+                id="silence_hangup_secs"
+                value={String(draft.silence_hangup_secs)}
+                onChange={(e) => patch({ silence_hangup_secs: Number(e.target.value) })}
+              >
+                {withCurrent(SILENCE_OPTIONS, draft.silence_hangup_secs).map((value) => (
+                  <option key={value} value={value}>
+                    {value} seconds
+                  </option>
+                ))}
+              </Select>
+            </FormRow>
+            <FormRow id="max_call_seconds" label="Max call length" info="The agent politely wraps up a call that reaches this length.">
+              <Select
+                id="max_call_seconds"
+                value={String(draft.max_call_seconds)}
+                onChange={(e) => patch({ max_call_seconds: Number(e.target.value) })}
+              >
+                {withCurrent(MAX_CALL_OPTIONS, draft.max_call_seconds).map((value) => (
+                  <option key={value} value={value}>
+                    {maxCallLabel(value)}
+                  </option>
+                ))}
+              </Select>
+            </FormRow>
+          </div>
+        )}
 
         {isEcommerce && (
-          <Toggle
+          <SwitchRow
             checked={draft.verify_address}
             onChange={(verify_address) => patch({ verify_address })}
-            label="Verify the delivery address"
-            description="On confirmation calls the agent reads the address back and asks the customer to confirm or correct it."
+            title="Verify delivery address"
+            hint="Read back on confirmation calls."
           />
         )}
 
-        <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} label="Save agent settings" />
+        <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} />
       </form>
     </SectionCard>
   );
@@ -728,19 +671,21 @@ function RegionSection({ onSaved }: { onSaved: () => void }) {
   };
 
   return (
-    <SectionCard id="region" icon={Globe} title="Region & locale" description="The clock, currency and emergency number your agent uses.">
+    <SectionCard id="region" icon={Globe} title="Region & locale" description="Clock, currency and emergency number.">
       <form className="grid gap-4" onSubmit={submit} noValidate>
         <div className="flex flex-col gap-3 rounded-md border border-border bg-surface p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <p className="text-[13.5px] font-semibold text-muted-foreground">Region</p>
+            <p className="flex items-center gap-1.5 text-[13.5px] font-semibold text-muted-foreground">
+              Region
+              <InfoTip label="About region">Set by your admin. It decides the phone number format and the agent&apos;s accent.</InfoTip>
+            </p>
             <p className="mt-0.5 font-medium">
               {region?.label ?? merchant.region} <span className="text-muted-foreground">({merchant.region})</span>
             </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">Set by your admin — it decides the phone number format and the agent&apos;s English accent.</p>
           </div>
           {regionDefaults && !same(draft, regionDefaults) && (
             <Button type="button" variant="outline" size="sm" className="shrink-0" onClick={() => patch(regionDefaults)}>
-              Use {region?.label} defaults
+              Use region defaults
             </Button>
           )}
         </div>
@@ -750,7 +695,7 @@ function RegionSection({ onSaved }: { onSaved: () => void }) {
             id="timezone"
             label="Time zone"
             className="sm:col-span-3"
-            hint={zoneOk ? `Local time there now: ${formatInZone(new Date().toISOString(), draft.timezone.trim())}. Bookings and the agent's "today" / "tomorrow" use this clock.` : "Type or pick an IANA time zone, e.g. Europe/London."}
+            hint={zoneOk ? `Now: ${formatInZone(new Date().toISOString(), draft.timezone.trim())}` : "e.g. Europe/London"}
           >
             <Input
               id="timezone"
@@ -772,7 +717,7 @@ function RegionSection({ onSaved }: { onSaved: () => void }) {
               ))}
             </datalist>
           </FormRow>
-          <FormRow id="currency" label="Currency" hint={currencyOk ? `e.g. ${money(1234.5, draft.currency)}` : "3-letter code, e.g. USD, GBP, BDT"}>
+          <FormRow id="currency" label="Currency" hint={currencyOk ? `e.g. ${money(1234.5, draft.currency)}` : "3-letter code, e.g. USD"}>
             <Input
               id="currency"
               value={draft.currency}
@@ -789,7 +734,7 @@ function RegionSection({ onSaved }: { onSaved: () => void }) {
             id="emergency_number"
             label="Emergency number"
             className="sm:col-span-2"
-            hint="Your agent tells callers to dial this in an emergency (gas smell, chest pain, fire)."
+            info="The agent tells callers to dial this in an emergency (gas smell, chest pain, fire)."
           >
             <Input
               id="emergency_number"
@@ -798,13 +743,12 @@ function RegionSection({ onSaved }: { onSaved: () => void }) {
               maxLength={8}
               className={cn(!emergencyOk && "border-destructive")}
               aria-invalid={!emergencyOk}
-              aria-describedby="emergency_number-hint"
               onChange={(e) => patch({ emergency_number: e.target.value.replace(/\D/g, "") })}
             />
           </FormRow>
         </div>
 
-        <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} label="Save region settings" />
+        <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} />
       </form>
     </SectionCard>
   );
@@ -846,29 +790,20 @@ function KnowledgeSection({ onSaved }: { onSaved: () => void }) {
       id="knowledge"
       icon={BookOpenText}
       title="Knowledge base"
-      description="Facts your agent may answer questions from. It never makes up anything that isn't here or in your catalog."
+      description="Facts your agent answers from. It never makes things up."
+      info={
+        <>
+          Short, plain lines: address and directions, opening hours, payment and cancellation policies, frequent questions. Put what customers ask most at the top.
+          {catalogPlural ? ` Your ${catalogPlural} are managed separately.` : ""} With the example, replace the [bracketed] parts.
+        </>
+      }
     >
       <form className="grid gap-3" onSubmit={submit} noValidate>
-        <div className="rounded-md border border-border bg-surface p-3 text-xs leading-relaxed text-muted-foreground">
-          <p>
-            Write short, plain lines: <span className="font-medium text-foreground">address and directions, opening hours, payment and cancellation policies, and frequent questions</span>. Put
-            the details customers ask about most at the top.
-            {catalogPlural ? ` Your ${catalogPlural} are managed separately — no need to repeat them here.` : ""}
-          </p>
-        </div>
         <FormRow
           id="knowledge"
           label="Business information"
-          aside={
-            <div className="flex items-center gap-3">
-              <Counter value={length} max={KNOWLEDGE_MAX} warnAt={KNOWLEDGE_USED} />
-            </div>
-          }
-          hint={
-            length > KNOWLEDGE_USED
-              ? `Getting long — every call reads all of this, so keep it to the facts callers actually ask about (limit ${KNOWLEDGE_MAX.toLocaleString("en-US")}).`
-              : undefined
-          }
+          aside={<Counter value={length} max={KNOWLEDGE_MAX} warnAt={KNOWLEDGE_USED} />}
+          hint={length > KNOWLEDGE_USED ? "Getting long — keep to what callers actually ask." : undefined}
         >
           <Textarea
             id="knowledge"
@@ -886,9 +821,8 @@ function KnowledgeSection({ onSaved }: { onSaved: () => void }) {
             <Sparkles className="h-3.5 w-3.5" aria-hidden />
             Insert example
           </Button>
-          <span className="ml-2 text-xs text-muted-foreground">Replace the [bracketed] parts with your own details.</span>
         </div>
-        <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} label="Save knowledge" />
+        <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} />
       </form>
     </SectionCard>
   );
@@ -957,11 +891,14 @@ function TimeWindowsEditor({ windows, onChange, teams }: { windows: TimeWindow[]
   };
   return (
     <fieldset className="space-y-3 sm:col-span-2">
-      <legend className="text-[13.5px] font-semibold text-muted-foreground">Arrival windows</legend>
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        The time slots your agent offers on working days{typeof teams === "number" && teams > 0 ? `; each takes up to ${teams} booking${teams === 1 ? "" : "s"} (your teams per window)` : ""}. Use names
-        callers would say — e.g. morning, afternoon, evening.
-      </p>
+      <legend className="flex items-center gap-1.5 text-[13.5px] font-semibold text-muted-foreground">
+        Arrival windows
+        <InfoTip label="About arrival windows">
+          The time slots your agent offers on working days
+          {typeof teams === "number" && teams > 0 ? `; each takes up to ${teams} booking${teams === 1 ? "" : "s"} (your teams per window)` : ""}. Name them the way
+          callers would — morning, afternoon, evening.
+        </InfoTip>
+      </legend>
       {windows.length === 0 && <p className="rounded-md border border-dashed border-border p-3 text-sm text-muted-foreground">No arrival windows yet.</p>}
       <ul className="space-y-2">
         {windows.map((window, index) => (
@@ -1015,6 +952,10 @@ function TimeWindowsEditor({ windows, onChange, teams }: { windows: TimeWindow[]
   );
 }
 
+function hasBusinessSettings(vertical: VerticalSpec): boolean {
+  return vertical.config_fields.length > 0 || "time_windows" in (vertical.config_defaults ?? {});
+}
+
 function BusinessSettingsSection({ onSaved }: { onSaved: () => void }) {
   const { merchant, vertical, config, refresh } = useWorkspace();
   const specs = vertical.config_fields;
@@ -1047,17 +988,17 @@ function BusinessSettingsSection({ onSaved }: { onSaved: () => void }) {
       commit(configFrom(specs, mergedConfig(vertical, updated.vertical_config ?? {}), hasWindows));
       await refresh();
       onSaved();
-    }, "Business settings saved.");
+    }, vertical.scheduled ? "Booking rules saved." : "Business settings saved.");
   };
 
-  if (!specs.length && !hasWindows) return null;
+  if (!hasBusinessSettings(vertical)) return null;
 
   return (
     <SectionCard
       id="business"
       icon={SlidersHorizontal}
-      title="Business settings"
-      description={`How your agent books and handles ${t(vertical.record_label_plural, "records").toLowerCase()}. Leave a field empty to use the default.`}
+      title={vertical.scheduled ? "Booking rules" : "Business settings"}
+      description="Empty fields use the default."
     >
       <form className="grid gap-4" onSubmit={submit} noValidate>
         <SchemaFields
@@ -1072,7 +1013,7 @@ function BusinessSettingsSection({ onSaved }: { onSaved: () => void }) {
             <TimeWindowsEditor windows={draft.windows} teams={draft.values.teams} onChange={(windows) => setDraft((current) => ({ ...current, windows }))} />
           </div>
         )}
-        <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} label="Save business settings" />
+        <SaveBar dirty={dirty} saving={saving} error={error} onReset={() => { reset(); setError(null); }} />
       </form>
     </SectionCard>
   );
@@ -1080,14 +1021,10 @@ function BusinessSettingsSection({ onSaved }: { onSaved: () => void }) {
 
 // ---------------------------------------------------------------- how your agent works
 
-function StepList({ title, subtitle, steps, icon: Icon }: { title: string; subtitle: string; steps: string[]; icon: LucideIcon }) {
+function StepList({ title, steps }: { title: string; steps: string[] }) {
   return (
     <section className="min-w-0 rounded-md border border-border p-4" aria-label={title}>
-      <h4 className="flex items-center gap-2 text-sm font-semibold">
-        <Icon className="h-4 w-4 text-primary" aria-hidden />
-        {title}
-      </h4>
-      <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+      <h4 className="text-sm font-semibold">{title}</h4>
       {steps.length ? (
         <ol className="mt-3 space-y-2.5">
           {steps.map((step, index) => (
@@ -1139,14 +1076,21 @@ function FlowSection({ version }: { version: number }) {
 
   const inbound = preview?.sections?.inbound;
   const outbound = preview?.sections?.outbound;
-  const recordLabel = t(vertical.record_label, "record").toLowerCase();
 
   return (
     <SectionCard
       id="flow"
       icon={Route}
       title="How your agent works"
-      description="The steps your agent follows with the settings above. It updates when you save."
+      description="Updates when you save."
+      badge={
+        <Button asChild variant="outline" size="sm">
+          <Link href="/test">
+            <FlaskConical className="h-3.5 w-3.5" aria-hidden />
+            Test agent
+          </Link>
+        </Button>
+      }
     >
       {error ? (
         <div className="space-y-3">
@@ -1163,25 +1107,11 @@ function FlowSection({ version }: { version: number }) {
         </div>
       ) : (
         <div className={cn("grid gap-4 transition-opacity", loading && "opacity-60", inbound && outbound && "md:grid-cols-2")}>
-          {inbound && <StepList icon={Bot} title="When a customer contacts you" subtitle="Inbound calls and chats" steps={inbound} />}
-          {outbound && (
-            <StepList
-              icon={Bot}
-              title={`${t(vertical.outbound_label, "Outbound call")}`}
-              subtitle={`When you call a customer about a ${recordLabel}`}
-              steps={outbound}
-            />
-          )}
+          {inbound && <StepList title="Customer contacts you" steps={inbound} />}
+          {outbound && <StepList title={t(vertical.outbound_label, "Outbound call")} steps={outbound} />}
           {!inbound && !outbound && <p className="text-sm text-muted-foreground">No preview available.</p>}
         </div>
       )}
-      <p className="mt-4 text-xs text-muted-foreground">
-        Want to hear it?{" "}
-        <Link href="/test" className="font-medium text-primary underline-offset-2 hover:underline">
-          Test your agent
-        </Link>{" "}
-        with a browser call or a chat.
-      </p>
     </SectionCard>
   );
 }
@@ -1213,7 +1143,7 @@ function SecuritySection() {
 
   const type = show ? "text" : "password";
   return (
-    <SectionCard id="security" icon={KeyRound} title="Security" description="Change the password you sign in with.">
+    <SectionCard id="security" icon={KeyRound} title="Password" description="Change the password you sign in with.">
       <form className="grid gap-4 sm:grid-cols-3" onSubmit={submit} noValidate>
         <FormRow id="current_password" label="Current password">
           <Input id="current_password" type={type} autoComplete="current-password" value={form.current} onChange={(e) => setForm({ ...form, current: e.target.value })} />
@@ -1228,7 +1158,7 @@ function SecuritySection() {
             onChange={(e) => setForm({ ...form, next: e.target.value })}
           />
         </FormRow>
-        <FormRow id="confirm_password" label="Confirm new password" hint={mismatch ? "Doesn't match the new password." : undefined}>
+        <FormRow id="confirm_password" label="Confirm password" hint={mismatch ? "Doesn't match." : undefined}>
           <Input
             id="confirm_password"
             type={type}
@@ -1262,22 +1192,146 @@ function SecuritySection() {
   );
 }
 
-// ---------------------------------------------------------------- page
+// ---------------------------------------------------------------- tabs
 
-const SECTIONS: { id: string; label: string }[] = [
-  { id: "profile", label: "Profile" },
-  { id: "agent", label: "Voice & behaviour" },
-  { id: "region", label: "Region" },
-  { id: "knowledge", label: "Knowledge" },
-  { id: "business", label: "Business settings" },
-  { id: "flow", label: "How it works" },
-  { id: "security", label: "Security" },
+type TabKey = "business" | "agent" | "notifications" | "calendar" | "developers" | "security";
+
+type TabDef = { key: TabKey; label: string; icon: LucideIcon; /** Card ids inside (for the unsaved dots and #anchors). */ sections: string[] };
+
+const TABS: TabDef[] = [
+  { key: "business", label: "Business", icon: Building2, sections: ["profile", "region", "business"] },
+  { key: "agent", label: "Agent", icon: Bot, sections: ["agent", "knowledge", "flow"] },
+  { key: "notifications", label: "Notifications", icon: Smartphone, sections: ["sms"] },
+  { key: "calendar", label: "Calendar", icon: CalendarDays, sections: ["calendar"] },
+  { key: "developers", label: "Developers", icon: Webhook, sections: ["webhooks"] },
+  { key: "security", label: "Security", icon: KeyRound, sections: ["security"] },
 ];
 
-export default function SettingsPage() {
+function SettingsTabs({ tabs, active, dirty, onSelect }: { tabs: TabDef[]; active: TabKey; dirty: Record<string, boolean>; onSelect: (key: TabKey) => void }) {
+  const refs = useRef<Partial<Record<TabKey, HTMLButtonElement | null>>>({});
+
+  const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    const index = tabs.findIndex((tab) => tab.key === active);
+    let next = index;
+    if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = tabs.length - 1;
+    else return;
+    event.preventDefault();
+    const key = tabs[next].key;
+    onSelect(key);
+    refs.current[key]?.focus();
+  };
+
+  return (
+    <div role="tablist" aria-label="Settings" className="-mx-4 flex gap-1 overflow-x-auto border-b border-border px-4 sm:mx-0 sm:px-0">
+      {tabs.map((tab) => {
+        const selected = tab.key === active;
+        const unsaved = tab.sections.some((id) => dirty[id]);
+        return (
+          <button
+            key={tab.key}
+            ref={(node) => {
+              refs.current[tab.key] = node;
+            }}
+            type="button"
+            role="tab"
+            id={`settings-tab-${tab.key}`}
+            aria-controls={`settings-panel-${tab.key}`}
+            aria-selected={selected}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onSelect(tab.key)}
+            onKeyDown={onKeyDown}
+            className={cn(
+              "-mb-px inline-flex h-10 shrink-0 items-center gap-2 whitespace-nowrap border-b-2 px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+              selected ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <tab.icon className="h-4 w-4 shrink-0" aria-hidden />
+            {tab.label}
+            {unsaved && (
+              <>
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
+                <span className="sr-only">(unsaved changes)</span>
+              </>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function TabPanel({ tab, active, children }: { tab: TabKey; active: boolean; children: React.ReactNode }) {
+  return (
+    <div role="tabpanel" id={`settings-panel-${tab}`} aria-labelledby={`settings-tab-${tab}`} hidden={!active} className="space-y-6">
+      {children}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- page
+
+function SettingsView() {
   const { merchant, vertical } = useWorkspace();
+  const searchParams = useSearchParams();
   const [dirty, setDirty] = useState<Record<string, boolean>>({});
   const [previewVersion, setPreviewVersion] = useState(0);
+
+  const tabs = useMemo(() => TABS.filter((tab) => tab.key !== "calendar" || vertical.scheduled), [vertical.scheduled]);
+  const resolve = useCallback((value: string | null): TabKey | null => tabs.find((tab) => tab.key === value)?.key ?? null, [tabs]);
+
+  // The address decides the tab (?tab=…); follow it when it changes (links, Google's redirect).
+  const urlTab = searchParams.get("tab");
+  const [active, setActive] = useState<TabKey>(() => resolve(urlTab) ?? tabs[0].key);
+  const [seenUrlTab, setSeenUrlTab] = useState(urlTab);
+  if (urlTab !== seenUrlTab) {
+    setSeenUrlTab(urlTab);
+    const next = resolve(urlTab);
+    if (next && next !== active) setActive(next);
+  }
+
+  // Tabs mount on first visit and then stay mounted (drafts survive switching).
+  const [visited, setVisited] = useState<TabKey[]>([active]);
+  if (!visited.includes(active)) setVisited([...visited, active]);
+  const mounted = (key: TabKey) => key === active || visited.includes(key);
+
+  const select = useCallback((key: TabKey) => {
+    setActive(key);
+    const params = new URLSearchParams(window.location.search);
+    params.set("tab", key);
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  }, []);
+
+  // Old #section links (e.g. /settings#knowledge): open the tab that holds the card and scroll to it.
+  const anchor = useRef<string | null>(null);
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    anchor.current = hash;
+    if (!resolve(new URLSearchParams(window.location.search).get("tab"))) {
+      const owner = tabs.find((tab) => tab.sections.includes(hash));
+      if (owner) setActive(owner.key);
+    }
+  }, [resolve, tabs]);
+
+  useGoogleCalendarReturn();
+
+  // SMS + calendar share one load, started the first time either tab opens.
+  const needsIntegrations = mounted("notifications") || mounted("calendar");
+  const integrations = useIntegrations(needsIntegrations);
+  const integrationsLoaded = integrations.data !== null;
+
+  useEffect(() => {
+    const id = anchor.current;
+    if (!id) return;
+    const node = document.getElementById(id);
+    if (node && !node.closest("[hidden]")) {
+      node.scrollIntoView({ block: "start" });
+      anchor.current = null;
+    }
+  }, [active, integrationsLoaded]);
 
   const report = useCallback((id: string, value: boolean) => {
     setDirty((current) => (Boolean(current[id]) === value ? current : { ...current, [id]: value }));
@@ -1296,40 +1350,64 @@ export default function SettingsPage() {
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [anyDirty]);
 
-  const hasBusinessSettings = vertical.config_fields.length > 0 || "time_windows" in (vertical.config_defaults ?? {});
-  const sections = SECTIONS.filter((section) => section.id !== "business" || hasBusinessSettings);
+  const integrationsBody = (render: (data: Integrations) => React.ReactNode) =>
+    integrations.data ? render(integrations.data) : <IntegrationsPlaceholder error={integrations.error} onRetry={() => void integrations.reload()} />;
 
   return (
     <DirtyContext.Provider value={report}>
       <div className="mx-auto max-w-4xl space-y-6">
-        <PageHeader title="Settings" subtitle={`Signed in as ${merchant.username} · ${t(vertical.label)}`} />
+        <PageHeader title="Settings" subtitle={`Signed in as ${merchant.username}`} />
 
-        <nav aria-label="Settings sections" className="-mt-2 flex flex-wrap gap-1.5">
-          {sections.map((section) => (
-            <a
-              key={section.id}
-              href={`#${section.id}`}
-              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 text-[13px] font-medium text-muted-foreground transition hover:border-tint-strong hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              {section.label}
-              {dirty[section.id] && (
-                <>
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-hidden />
-                  <span className="sr-only">(unsaved changes)</span>
-                </>
-              )}
-            </a>
-          ))}
-        </nav>
+        <SettingsTabs tabs={tabs} active={active} dirty={dirty} onSelect={select} />
 
-        <ProfileSection onSaved={bumpPreview} />
-        <AgentSection onSaved={bumpPreview} />
-        <RegionSection onSaved={bumpPreview} />
-        <KnowledgeSection onSaved={bumpPreview} />
-        <BusinessSettingsSection onSaved={bumpPreview} />
-        <FlowSection version={previewVersion} />
-        <SecuritySection />
+        {mounted("business") && (
+          <TabPanel tab="business" active={active === "business"}>
+            <ProfileSection onSaved={bumpPreview} />
+            <RegionSection onSaved={bumpPreview} />
+            <BusinessSettingsSection onSaved={bumpPreview} />
+          </TabPanel>
+        )}
+        {mounted("agent") && (
+          <TabPanel tab="agent" active={active === "agent"}>
+            <AgentSection onSaved={bumpPreview} />
+            <KnowledgeSection onSaved={bumpPreview} />
+            <FlowSection version={previewVersion} />
+          </TabPanel>
+        )}
+        {mounted("notifications") && (
+          <TabPanel tab="notifications" active={active === "notifications"}>
+            {integrationsBody((data) => (
+              <SmsSection data={data} onSaved={integrations.setData} />
+            ))}
+          </TabPanel>
+        )}
+        {vertical.scheduled && mounted("calendar") && (
+          <TabPanel tab="calendar" active={active === "calendar"}>
+            {integrationsBody((data) => (
+              <CalendarSection data={data} onSaved={integrations.setData} />
+            ))}
+          </TabPanel>
+        )}
+        {mounted("developers") && (
+          <TabPanel tab="developers" active={active === "developers"}>
+            <WebhookSection />
+          </TabPanel>
+        )}
+        {mounted("security") && (
+          <TabPanel tab="security" active={active === "security"}>
+            <SecuritySection />
+          </TabPanel>
+        )}
       </div>
     </DirtyContext.Provider>
+  );
+}
+
+export default function SettingsPage() {
+  // useSearchParams needs a Suspense boundary.
+  return (
+    <Suspense fallback={null}>
+      <SettingsView />
+    </Suspense>
   );
 }

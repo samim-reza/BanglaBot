@@ -7,6 +7,7 @@ import { CircleAlert, CirclePlus, Download, FileSpreadsheet, Pencil, Search, Tra
 import { ApiError } from "@/components/api-error";
 import { useAppToast } from "@/components/app-toast";
 import { EmptyState, PageHeader } from "@/components/page-header";
+import { InfoTip } from "@/components/portal/kit";
 import { SchemaFields, compactValues, defaultValues, validateValues, type FormValues } from "@/components/schema-form";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -236,7 +237,7 @@ function ImportPanel({ plural, onDone, onClose }: { plural: string; onDone: () =
             <FileSpreadsheet className="h-4 w-4 text-primary" aria-hidden="true" />
             Import from CSV
           </CardTitle>
-          <CardDescription>The first row names the columns (use the template). Each further row becomes one item.</CardDescription>
+          <CardDescription>One row per item, with the template&apos;s columns.</CardDescription>
         </div>
         <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" aria-label="Close import" onClick={onClose}>
           <X className="h-4 w-4" />
@@ -270,7 +271,7 @@ function ImportPanel({ plural, onDone, onClose }: { plural: string; onDone: () =
             <input type="checkbox" className="mt-0.5 h-4 w-4 accent-primary" checked={replace} onChange={(event) => setReplace(event.target.checked)} />
             <span>
               Replace existing items
-              <span className="block text-xs text-muted-foreground">Deletes every current item first. Leave off to add to your list.</span>
+              <span className="block text-xs text-muted-foreground">Deletes current items first.</span>
             </span>
           </label>
           <ApiError message={error} />
@@ -357,17 +358,11 @@ export default function CatalogPage() {
   if (!hasCatalog) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Catalog" subtitle="What your agent can offer callers." />
-        <EmptyState title="Your agent doesn't use a catalog">
-          <p>
-            A {t(vertical.label).toLowerCase()} agent works from your {t(vertical.record_label_plural, "records").toLowerCase()}: it reads each{" "}
-            {t(vertical.record_label, "record").toLowerCase()}&apos;s details back to the customer, so there is no list of doctors, listings or services to keep here.
-          </p>
-          <p className="mt-3">
-            <Link href="/orders" className="font-medium text-primary-dark hover:underline">
-              Go to your {t(vertical.record_label_plural, "records").toLowerCase()}
-            </Link>
-          </p>
+        <PageHeader title="Catalog" />
+        <EmptyState title={`Your agent works from your ${t(vertical.record_label_plural, "records").toLowerCase()}, not a catalog.`}>
+          <Link href="/orders" className="font-medium text-primary-dark hover:underline">
+            Open {t(vertical.record_label_plural, "records").toLowerCase()}
+          </Link>
         </EmptyState>
       </div>
     );
@@ -458,7 +453,7 @@ export default function CatalogPage() {
     <div className="space-y-6">
       <PageHeader
         title={plural}
-        subtitle={`Your agent only offers what is on this list. Switch a ${singular.toLowerCase()} off to hide it from callers without deleting it.`}
+        subtitle="Your agent only offers what's listed here."
         actions={
           <>
             <Button variant="outline" onClick={() => void downloadTemplate()} disabled={downloading}>
@@ -489,24 +484,17 @@ export default function CatalogPage() {
       ) : items.length === 0 ? (
         error ? null : (
           <EmptyState title={`No ${plural.toLowerCase()} yet`}>
-            <p>Your agent can only offer and book what is listed here. Add them one by one, or import a CSV.</p>
-            <div className="mt-4 flex flex-wrap justify-center gap-2">
-              <Button onClick={openNew}>
-                <CirclePlus className="h-4 w-4" aria-hidden="true" />
-                Add {singular.toLowerCase()}
-              </Button>
-              <Button variant="outline" onClick={() => setImportOpen(true)}>
-                <Upload className="h-4 w-4" aria-hidden="true" />
-                Import CSV
-              </Button>
-            </div>
+            <Button className="mt-2" onClick={openNew}>
+              <CirclePlus className="h-4 w-4" aria-hidden="true" />
+              Add {singular.toLowerCase()}
+            </Button>
           </EmptyState>
         )
       ) : (
         <div className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {items.length} {items.length === 1 ? singular.toLowerCase() : plural.toLowerCase()} · {activeCount} offered to callers
+              {items.length} {items.length === 1 ? singular.toLowerCase() : plural.toLowerCase()} · {activeCount} offered
             </p>
             {items.length > 5 && (
               <div className="relative sm:w-72">
@@ -535,7 +523,12 @@ export default function CatalogPage() {
                         {column.label}
                       </TableHead>
                     ))}
-                    <TableHead>Offered</TableHead>
+                    <TableHead>
+                      <span className="inline-flex items-center gap-1">
+                        Offered
+                        <InfoTip label="About offered">Switch off to hide it from callers without deleting it.</InfoTip>
+                      </span>
+                    </TableHead>
                     <TableHead className="text-right">
                       <span className="sr-only">Actions</span>
                     </TableHead>
@@ -606,7 +599,6 @@ export default function CatalogPage() {
       {editing && (
         <Dialog
           title={editing.item ? `Edit ${editing.item.name}` : `Add ${singular.toLowerCase()}`}
-          description="Your agent reads these details to callers and books from them."
           onClose={() => (saving ? undefined : setEditing(null))}
         >
           <form className="flex min-h-0 flex-1 flex-col" onSubmit={save} noValidate>

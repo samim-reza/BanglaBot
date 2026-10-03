@@ -23,7 +23,7 @@ export default function SolutionsPage() {
       <PageHero
         eyebrow="Solutions"
         title="Four agents, each built for one kind of business"
-        subtitle="Every agent answers your phone and website chat, books into your records and calls customers back. What it asks, books and refuses to say depends on your business."
+        subtitle="Every agent answers calls and chats, books into your records and calls customers back. What it asks and books depends on your business."
       >
         <Button asChild className="h-11 px-6">
           <Link href={TRIAL_HREF}>Start free trial</Link>
@@ -97,7 +97,7 @@ export default function SolutionsPage() {
           id="platform-title"
           eyebrow="Under every agent"
           title="The same platform, whichever agent you run"
-          subtitle="Phone and chat, recordings and transcripts, campaigns, webhooks and regional settings come with every account."
+          subtitle="Phone and chat channels, recordings, campaigns, webhooks and regional settings, whichever agent you run."
         />
         <div className="mt-14">
           <FeatureGrid />

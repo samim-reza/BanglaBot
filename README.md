@@ -9,8 +9,8 @@ One platform, four ready-made agents. Each account runs one **business engine**,
 | **Home services** (`home_service`) | Takes the job (service, problem, address), checks the service area, books an arrival window with the call-out charge and price range; safety line for gas, sparks or fire | Visit confirmation calls |
 | **E-commerce** (`ecommerce`) | Reception: answers from the knowledge base, takes a message | Cash-on-delivery order confirmation calls |
 
-Every engine also gets:
-- the same agent as a **website chat widget** (one script tag);
+Every engine also gets (some as add-ons — a plan is one product with limits, extras are bought on top):
+- the same agent as a **website chat widget** (one script tag), a **WhatsApp bot** (Twilio) and a **Messenger bot** (Facebook Page);
 - **SMS confirmations and reminders**: a text after the agent books, when a booking moves or is cancelled, and a reminder before it;
 - **calendar sync** for the scheduled engines: two-way Google Calendar (bookings are written there; busy times are never offered), a private iCal booking feed for Outlook / Apple / any app, and iCal busy links (also per doctor);
 - **webhooks** into the business's own systems;
@@ -91,7 +91,25 @@ The demo accounts have the website widget enabled and sample records for outboun
 - **Real inbound calls:** in the admin console, set an account's *inbound number* to your Twilio number. Point the number's voice webhook at `{PUBLIC_BASE_URL}/twilio/inbound`, or set `TWILIO_AUTO_CONFIGURE_INBOUND=true` and the backend does it on startup. `DEFAULT_INBOUND_USERNAME` routes calls to numbers no account has claimed.
 - **SMS:** with `TWILIO_*` set, texts go out from `TWILIO_MESSAGING_SERVICE_SID`, `TWILIO_SMS_FROM` or the calling number. Each account switches texts on in *Add-ons → SMS confirmations* and can send itself a test. A trial Twilio account only texts verified numbers. Delivery receipts need a public `PUBLIC_BASE_URL`.
 - **Google Calendar:** create an OAuth web client (enable the Google Calendar API), set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, and register `{PUBLIC_BASE_URL or http://localhost:8000}/api/integrations/google/callback` as a redirect URI. Then use *Add-ons → Calendar sync → Connect Google Calendar*. While the OAuth app is in "Testing", add your Google account as a test user.
+- **Plans and add-ons:** `backend/app/core/plans.py` (Chat agent; voice Starter / Growth / Pro) and `backend/app/core/addons.py` (catalog + `entitlements()` = what an account may use). Owners request add-ons on the portal's Add-ons page; the admin approves them (Admin → Requests) or edits an account's add-ons directly.
+- **WhatsApp / Messenger:** see the "Chat channels" block in `.env.example`. Both run the same agent as the website chat (`app/services/channel_service.py`).
+- **Jev (optional):** set `TYPESAFE_API_KEY` to settle natural yes/no answers on scripted steps without a full LLM turn (`app/voice/jev.py`); cancellations always need the caller's own words.
 - **Terminal (real model, no database):** `cd backend && venv/bin/python -m scripts.simulate clinic`. Add `--say "..."` for scripted turns, `--direction outbound --record 0` for a reminder call, `--chat` for widget style.
+
+## Hosting (free tier)
+
+| Part | Where | Address |
+|---|---|---|
+| Website + portal + admin | Vercel (Hobby), root directory `frontend`, env `NEXT_BACKEND_URL=https://banglabot-api.onrender.com` | https://www.banglabot.xyz |
+| Backend (FastAPI, calls, jobs) | Render free web service `banglabot-api`, Docker `backend/Dockerfile`, health check `/health`, Singapore | https://api.banglabot.xyz (also https://banglabot-api.onrender.com) |
+| Database | Supabase session pooler (Singapore) | `DATABASE_URL` |
+| DNS | cPanel zone `banglabot.xyz`: `@` A → Vercel, `www` CNAME → Vercel, `api` CNAME → Render; email `MX`/`mail` point at the cPanel server | |
+| Keep-awake | `.github/workflows/keep-awake.yml` pings `/health` every 10 minutes (Render free sleeps after 15 idle minutes) | |
+
+- Backend secrets live in Render → Environment (never in git). `PUBLIC_BASE_URL` is the Render address (Twilio webhooks, calendar feeds); `FRONTEND_ORIGIN` lists the site origins (the first one is used for redirects); `TWILIO_AUTO_CONFIGURE_INBOUND=true` points the Twilio number at the hosted backend on every start.
+- Both Render and Vercel redeploy on every push to `main`.
+- The hosted backend and a local `./scripts/dev.sh` share the Supabase database, and both run the scheduled jobs: don't run them at the same time, or auto-calls and SMS reminders can go out twice. Incoming calls to the Twilio number go to the hosted backend; outbound calls from a local run still work through ngrok.
+- `deploy/docker-compose.yml` + `deploy/Caddyfile` run the whole stack on any single server (VPS) instead.
 
 ## Tests
 

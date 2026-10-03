@@ -9,7 +9,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import MERCHANT_ROLE, get_current_merchant
+from app.core.addons import entitlements
 from app.core.config import get_settings
+from app.core.plans import CHANNEL_WEB_CHAT
 from app.core.regions import regions_json
 from app.core.security import hash_password, sign_token, verify_password
 from app.db.session import get_db
@@ -25,7 +27,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def merchant_out(merchant: Merchant) -> MerchantOut:
-    return MerchantOut.model_validate(merchant)
+    from app.core.addons import quantities
+    from app.services.channel_service import channel_view
+
+    out = MerchantOut.model_validate(merchant)
+    return out.model_copy(update={"addons": quantities(getattr(merchant, "addons", None)), "channels": channel_view(merchant)})
 
 
 def apply_settings(merchant: Merchant, data: MerchantSettingsUpdate) -> None:
@@ -88,6 +94,8 @@ async def workspace(merchant: Merchant = Depends(get_current_merchant), db: Asyn
         "config": vertical.config(merchant),
         "regions": regions_json(),
         "usage": await usage_service.month_usage(db, merchant),
+        # Channels, features and limits from the plan + add-ons.
+        "entitlements": entitlements(merchant).as_json(),
         "public_base_url": settings.public_base_url or "",
         "telephony": {
             "twilio_configured": bool(settings.twilio_account_sid and settings.twilio_auth_token and settings.twilio_from_number),
@@ -102,6 +110,8 @@ async def update_me(
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
+    if data.widget_enabled and not entitlements(merchant).has_channel(CHANNEL_WEB_CHAT):
+        raise HTTPException(status_code=403, detail="The website chatbot is an add-on — request it on the Add-ons page")
     apply_settings(merchant, data)
     await db.commit()
     await db.refresh(merchant)

@@ -12,21 +12,16 @@ import {
   FlaskConical,
   Globe,
   ListChecks,
-  MessageSquare,
-  MonitorSmartphone,
-  Phone,
   PhoneCall,
-  PhoneIncoming,
   PhoneMissed,
-  PhoneOutgoing,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
 
 import { ApiError } from "@/components/api-error";
-import { conversationLength } from "@/components/call-log-list";
-import { UsageBar } from "@/components/merchant-shell";
+import { callerName, channelIcon, conversationLength } from "@/components/call-log-list";
 import { PageHeader } from "@/components/page-header";
+import { UsageMeter } from "@/components/portal/kit";
 import { OrderStatusBadge, OutcomeBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,37 +31,39 @@ import { channelLabel, formatInZone, money, statusLabel, t } from "@/lib/vertica
 import { useWorkspace } from "@/lib/workspace";
 import { callsApi, catalogApi, formatApiError, ordersApi, type CallLog, type Order, type OrderStats, type OrderStatus } from "@/services/api";
 
-const STATUS_TILES: { status: OrderStatus; icon: LucideIcon; accent: string }[] = [
+const STATUS_TILES: { status: OrderStatus; icon: LucideIcon; accent: string; voice?: boolean }[] = [
   { status: "pending", icon: Clock3, accent: "text-[#92400e] dark:text-amber-300" },
-  { status: "calling", icon: PhoneCall, accent: "text-[#1d4ed8] dark:text-blue-300" },
+  { status: "calling", icon: PhoneCall, accent: "text-[#1d4ed8] dark:text-blue-300", voice: true },
   { status: "confirmed", icon: CircleCheck, accent: "text-[#065f46] dark:text-emerald-300" },
   { status: "cancelled", icon: CircleX, accent: "text-destructive" },
-  { status: "no_answer", icon: PhoneMissed, accent: "text-[#5b21b6] dark:text-violet-300" },
+  { status: "no_answer", icon: PhoneMissed, accent: "text-[#5b21b6] dark:text-violet-300", voice: true },
   { status: "needs_review", icon: TriangleAlert, accent: "text-[#9a3412] dark:text-orange-300" },
 ];
 
-const CHANNEL_ICONS: Record<string, LucideIcon> = {
-  inbound: PhoneIncoming,
-  outbound: PhoneOutgoing,
-  widget: Globe,
-  web: MonitorSmartphone,
-  chat: MessageSquare,
-};
+const CHAT_CHANNELS = ["web_chat", "whatsapp", "messenger"] as const;
 
 const fmt = (value: number) => value.toLocaleString("en-US", { maximumFractionDigits: 1 });
 
-function Section({ title, description, action, children }: { title: string; description?: string; action?: React.ReactNode; children: React.ReactNode }) {
+function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <Card>
-      <CardHeader className="flex-row items-start justify-between gap-3 space-y-0 pb-3">
-        <div className="space-y-1">
-          <CardTitle>{title}</CardTitle>
-          {description && <CardDescription>{description}</CardDescription>}
-        </div>
+      <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 pb-3">
+        <CardTitle>{title}</CardTitle>
         {action}
       </CardHeader>
       <CardContent>{children}</CardContent>
     </Card>
+  );
+}
+
+function ViewAll({ href }: { href: string }) {
+  return (
+    <Button asChild variant="ghost" size="sm">
+      <Link href={href}>
+        View all
+        <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+      </Link>
+    </Button>
   );
 }
 
@@ -80,7 +77,7 @@ function SkeletonRows({ rows = 3 }: { rows?: number }) {
   );
 }
 
-type Step = { key: string; done: boolean; title: string; body: string; href: string; cta: string };
+type Step = { key: string; done: boolean; title: string; href: string; cta: string };
 
 function Checklist({ steps }: { steps: Step[] }) {
   const done = steps.filter((step) => step.done).length;
@@ -92,7 +89,7 @@ function Checklist({ steps }: { steps: Step[] }) {
             <ListChecks className="h-4 w-4" />
           </span>
           <div className="space-y-0.5">
-            <CardTitle>Finish setting up your agent</CardTitle>
+            <CardTitle>Finish setup</CardTitle>
             <CardDescription>
               {done} of {steps.length} done
             </CardDescription>
@@ -112,19 +109,13 @@ function Checklist({ steps }: { steps: Step[] }) {
       <CardContent>
         <ol className="grid gap-2 md:grid-cols-2">
           {steps.map((step) => (
-            <li
-              key={step.key}
-              className={cn("flex items-start gap-3 rounded-md border border-border p-3", step.done ? "bg-surface" : "bg-card")}
-            >
+            <li key={step.key} className={cn("flex items-center gap-3 rounded-md border border-border p-3", step.done ? "bg-surface" : "bg-card")}>
               {step.done ? (
-                <CircleCheck className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-label="Done" />
+                <CircleCheck className="h-5 w-5 shrink-0 text-primary" aria-label="Done" />
               ) : (
-                <CircleDashed className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" aria-label="To do" />
+                <CircleDashed className="h-5 w-5 shrink-0 text-muted-foreground" aria-label="To do" />
               )}
-              <div className="min-w-0 flex-1">
-                <p className={cn("text-sm font-medium", step.done && "text-muted-foreground line-through decoration-muted-foreground/50")}>{step.title}</p>
-                {!step.done && <p className="mt-0.5 text-xs text-muted-foreground">{step.body}</p>}
-              </div>
+              <p className={cn("min-w-0 flex-1 text-sm font-medium", step.done && "text-muted-foreground line-through decoration-muted-foreground/50")}>{step.title}</p>
               {!step.done && (
                 <Button asChild size="sm" variant="outline" className="shrink-0">
                   <Link href={step.href}>{step.cta}</Link>
@@ -162,45 +153,41 @@ function RecordRow({ order, scheduled }: { order: Order; scheduled: boolean }) {
 
 function CallRow({ log }: { log: CallLog }) {
   const { merchant } = useWorkspace();
-  const Icon = CHANNEL_ICONS[log.direction] ?? Phone;
-  const name = log.customer_name || log.caller_number || (log.direction === "widget" ? "Website visitor" : "Test");
-  const body = (
-    <>
-      <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground" aria-hidden="true">
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium">{name}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {channelLabel(log.direction)} · {conversationLength(log)} · {formatInZone(log.created_at, merchant.timezone)}
-        </p>
-      </div>
-      <OutcomeBadge outcome={log.outcome} callStatus={log.call_status} className="shrink-0" />
-    </>
-  );
-  const className = "flex items-center gap-3 rounded-md px-2 py-2.5 transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const Icon = channelIcon(log.direction);
   return (
     <li>
-      {log.order_id ? (
-        <Link href={`/orders/${log.order_id}`} className={className}>
-          {body}
-        </Link>
-      ) : (
-        <Link href="/calls" className={className}>
-          {body}
-        </Link>
-      )}
+      <Link
+        href={log.order_id ? `/orders/${log.order_id}` : "/calls"}
+        className="flex items-center gap-3 rounded-md px-2 py-2.5 transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-accent-foreground" aria-hidden="true">
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium">{callerName(log)}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {channelLabel(log.direction)} · {conversationLength(log)} · {formatInZone(log.created_at, merchant.timezone)}
+          </p>
+        </div>
+        <OutcomeBadge outcome={log.outcome} callStatus={log.call_status} className="shrink-0" />
+      </Link>
     </li>
   );
 }
 
 export default function DashboardPage() {
-  const { merchant, vertical, usage } = useWorkspace();
+  const { merchant, vertical, usage, entitlements } = useWorkspace();
   const singular = t(vertical.record_label, "Record");
   const plural = t(vertical.record_label_plural, "Records");
   const catalogSingular = t(vertical.catalog_label, "item");
   const catalogPlural = t(vertical.catalog_label_plural, "catalog");
   const hasCatalog = Boolean(vertical.catalog_kind);
+  const channels = entitlements.channels;
+  // A chat-only plan has no phone agent: no minutes, calls or call statuses.
+  const hasVoice = channels.includes("voice");
+  const hasChat = CHAT_CHANNELS.some((channel) => channels.includes(channel)) || usage.chats > 0;
+  const hasWebChat = channels.includes("web_chat");
+  const limits = usage.limits;
 
   const [stats, setStats] = useState<OrderStats | null>(null);
   const [records, setRecords] = useState<Order[] | null>(null);
@@ -264,7 +251,6 @@ export default function DashboardPage() {
       key: "catalog",
       done: catalogCount > 0,
       title: `Add your ${catalogPlural.toLowerCase()}`,
-      body: "Your agent only offers and books what is on this list.",
       href: "/catalog",
       cta: `Add ${catalogSingular.toLowerCase()}`,
     });
@@ -272,48 +258,42 @@ export default function DashboardPage() {
   steps.push({
     key: "knowledge",
     done: Boolean(merchant.knowledge?.trim()),
-    title: "Teach your agent about your business",
-    body: "Hours, prices, policies and common questions it should answer.",
-    href: "/settings",
-    cta: "Add knowledge",
+    title: "Teach your agent your business",
+    href: "/settings?tab=agent#knowledge",
+    cta: "Add info",
   });
-  steps.push({
-    key: "widget",
-    done: merchant.widget_enabled,
-    title: "Turn on website chat",
-    body: "Let visitors chat with the same agent on your website.",
-    href: "/addons",
-    cta: "Embed chat",
-  });
-  if (vertical.directions.includes("inbound")) {
-    steps.push({
-      key: "number",
-      done: Boolean(merchant.inbound_number),
-      title: "Connect a phone number",
-      body: "Callers reach your agent once a number is connected to your account.",
-      href: "/settings",
-      cta: "Set up",
-    });
+  if (hasWebChat) {
+    steps.push({ key: "widget", done: merchant.widget_enabled, title: "Turn on website chat", href: "/channels#web-chat", cta: "Set up" });
+  }
+  if (hasVoice && vertical.directions.includes("inbound")) {
+    steps.push({ key: "number", done: Boolean(merchant.inbound_number), title: "Connect a phone number", href: "/channels#phone", cta: "Set up" });
   }
   const checklistReady = !hasCatalog || catalogCount !== null;
   const showChecklist = checklistReady && steps.some((step) => !step.done);
 
-  const included = usage.plan.included_minutes;
-  const includedChats = usage.plan.included_chats;
+  const tiles = STATUS_TILES.filter((tile) => hasVoice || !tile.voice);
 
-  const quickActions: { href: string; label: string; hint: string; icon: LucideIcon }[] = [
-    { href: "/test", label: "Test your agent", hint: "Call or chat with it from your browser.", icon: FlaskConical },
-    ...(hasCatalog
-      ? [{ href: "/catalog", label: `Add ${catalogSingular.toLowerCase()}`, hint: `Keep your ${catalogPlural.toLowerCase()} up to date.`, icon: CirclePlus }]
-      : [{ href: "/orders/new", label: `New ${singular.toLowerCase()}`, hint: `Add a ${singular.toLowerCase()} by hand.`, icon: CirclePlus }]),
-    { href: "/addons", label: "Embed website chat", hint: "Copy one snippet into your site.", icon: Globe },
+  const quickActions: { href: string; label: string; icon: LucideIcon }[] = [
+    { href: "/test", label: "Test your agent", icon: FlaskConical },
+    hasCatalog
+      ? { href: "/catalog", label: `Add ${catalogSingular.toLowerCase()}`, icon: CirclePlus }
+      : { href: "/orders/new", label: `New ${singular.toLowerCase()}`, icon: CirclePlus },
+    ...(hasWebChat ? [{ href: "/channels#web-chat", label: "Website chat", icon: Globe }] : []),
   ];
+
+  const minutesLimit = limits.minutes;
+  const minutesNote =
+    minutesLimit === null || minutesLimit <= 0
+      ? null
+      : usage.overage_minutes > 0
+        ? `${fmt(usage.overage_minutes)} min over${usage.plan.overage_per_minute ? ` · ${money(usage.plan.overage_per_minute, "USD")}/min` : ""}`
+        : `${fmt(usage.minutes_left ?? Math.max(0, minutesLimit - usage.minutes))} min left`;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={merchant.business_name}
-        subtitle={`${t(vertical.label)} · here is what your agent has handled.`}
+        subtitle={t(vertical.label)}
         actions={
           <Button asChild>
             <Link href="/orders/new">
@@ -327,8 +307,8 @@ export default function DashboardPage() {
 
       {showChecklist && <Checklist steps={steps} />}
 
-      <section aria-label={`${plural} by status`} className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
-        {STATUS_TILES.map(({ status, icon: Icon, accent }) => (
+      <section aria-label={`${plural} by status`} className={cn("grid grid-cols-2 gap-3 sm:grid-cols-4", hasVoice ? "xl:grid-cols-7" : "xl:grid-cols-5")}>
+        {tiles.map(({ status, icon: Icon, accent }) => (
           <Link
             key={status}
             href={`/orders?status=${status}`}
@@ -343,7 +323,10 @@ export default function DashboardPage() {
         ))}
         <Link
           href="/orders"
-          className="col-span-2 rounded-lg border border-border bg-surface p-4 transition hover:border-tint-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:col-span-2 xl:col-span-1"
+          className={cn(
+            "rounded-lg border border-border bg-surface p-4 transition hover:border-tint-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring xl:col-span-1",
+            hasVoice ? "col-span-2 sm:col-span-2" : "col-span-2 sm:col-span-4",
+          )}
         >
           <span className="text-[13px] font-medium text-muted-foreground">All {plural.toLowerCase()}</span>
           <span className="mt-2 block text-[26px] font-bold leading-tight tabular-nums">{stats ? stats.total : "—"}</span>
@@ -354,22 +337,12 @@ export default function DashboardPage() {
         <div className="space-y-6 lg:col-span-2">
           <Section
             title={vertical.scheduled ? "Upcoming" : `Recent ${plural.toLowerCase()}`}
-            description={vertical.scheduled ? `The next ${plural.toLowerCase()} on your calendar (${merchant.timezone}).` : undefined}
-            action={
-              <Button asChild variant="ghost" size="sm">
-                <Link href={vertical.scheduled ? "/orders?upcoming=1" : "/orders"}>
-                  View all
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </Link>
-              </Button>
-            }
+            action={<ViewAll href={vertical.scheduled ? "/orders?upcoming=1" : "/orders"} />}
           >
             {records === null ? (
               <SkeletonRows />
             ) : records.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                {vertical.scheduled ? `Nothing coming up yet. New ${plural.toLowerCase()} your agent books appear here.` : `No ${plural.toLowerCase()} yet.`}
-              </p>
+              <p className="py-4 text-center text-sm text-muted-foreground">{vertical.scheduled ? "Nothing coming up." : `No ${plural.toLowerCase()} yet.`}</p>
             ) : (
               <ul className="-mx-2 divide-y divide-border">
                 {records.map((order) => (
@@ -379,17 +352,7 @@ export default function DashboardPage() {
             )}
           </Section>
 
-          <Section
-            title="Recent calls & chats"
-            action={
-              <Button asChild variant="ghost" size="sm">
-                <Link href="/calls">
-                  View all
-                  <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-                </Link>
-              </Button>
-            }
-          >
+          <Section title={hasVoice ? "Recent calls & chats" : "Recent chats"} action={<ViewAll href="/calls" />}>
             {calls === null ? (
               <SkeletonRows />
             ) : calls.length === 0 ? (
@@ -397,8 +360,7 @@ export default function DashboardPage() {
                 No conversations yet.{" "}
                 <Link href="/test" className="font-medium text-primary-dark hover:underline">
                   Test your agent
-                </Link>{" "}
-                to see the first one here.
+                </Link>
               </p>
             ) : (
               <ul className="-mx-2 divide-y divide-border">
@@ -420,43 +382,20 @@ export default function DashboardPage() {
               <span className="rounded-full bg-accent px-2.5 py-0.5 text-[12px] font-semibold text-accent-foreground">{usage.plan.name}</span>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-sm text-muted-foreground">Call minutes</span>
-                  <span className="text-sm tabular-nums">
-                    <span className="text-lg font-semibold">{fmt(usage.minutes)}</span>
-                    {included ? <span className="text-muted-foreground"> / {fmt(included)}</span> : null}
-                  </span>
-                </div>
-                <UsageBar usage={usage} className="mt-2" />
-                <p className="mt-1.5 text-xs text-muted-foreground">
-                  {!included
-                    ? "Custom volume plan."
-                    : usage.overage_minutes > 0
-                      ? `${fmt(usage.overage_minutes)} min over your plan${usage.plan.overage_per_minute ? `, billed at ${money(usage.plan.overage_per_minute, "USD")}/min` : ""}.`
-                      : `${fmt(usage.minutes_left ?? Math.max(0, included - usage.minutes))} min left`}
-                </p>
-              </div>
-              <dl className="grid grid-cols-3 gap-3 border-t border-border pt-4">
+              {hasVoice && (
                 <div>
-                  <dt className="text-xs text-muted-foreground">Calls</dt>
+                  <UsageMeter label="Call minutes" used={usage.minutes} included={limits.minutes} unit="min" />
+                  {minutesNote && <p className="mt-1.5 text-xs text-muted-foreground">{minutesNote}</p>}
+                </div>
+              )}
+              {hasChat && <UsageMeter label="Chats" used={usage.chats} included={limits.chats} unit="chats" />}
+              <UsageMeter label="Texts" used={usage.sms ?? 0} included={limits.sms} unit="texts" />
+              {hasVoice && (
+                <dl className="flex items-baseline justify-between gap-3 border-t border-border pt-4 text-sm">
+                  <dt className="text-muted-foreground">Calls</dt>
                   <dd className="text-lg font-semibold tabular-nums">{usage.calls.toLocaleString("en-US")}</dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Chats</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {usage.chats.toLocaleString("en-US")}
-                    {includedChats ? <span className="text-sm font-normal text-muted-foreground"> / {includedChats.toLocaleString("en-US")}</span> : null}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-xs text-muted-foreground">Texts</dt>
-                  <dd className="text-lg font-semibold tabular-nums">
-                    {(usage.sms ?? 0).toLocaleString("en-US")}
-                    {usage.plan.included_sms ? <span className="text-sm font-normal text-muted-foreground"> / {usage.plan.included_sms.toLocaleString("en-US")}</span> : null}
-                  </dd>
-                </div>
-              </dl>
+                </dl>
+              )}
             </CardContent>
           </Card>
 
@@ -466,15 +405,12 @@ export default function DashboardPage() {
                 <li key={action.href + action.label}>
                   <Link
                     href={action.href}
-                    className="flex items-center gap-3 rounded-md px-2 py-2.5 transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    className="flex items-center gap-3 rounded-md px-2 py-2 transition hover:bg-surface focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground" aria-hidden="true">
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-accent text-accent-foreground" aria-hidden="true">
                       <action.icon className="h-4 w-4" />
                     </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-medium">{action.label}</span>
-                      <span className="block truncate text-xs text-muted-foreground">{action.hint}</span>
-                    </span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{action.label}</span>
                     <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                   </Link>
                 </li>

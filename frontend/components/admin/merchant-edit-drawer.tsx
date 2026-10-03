@@ -45,6 +45,7 @@ type EditForm = {
   support_phone: string;
   plan: string;
   inbound_number: string;
+  whatsapp_number: string;
   region: string;
   timezone: string;
   currency: string;
@@ -69,6 +70,7 @@ function formFrom(merchant: Merchant): EditForm {
     support_phone: merchant.support_phone ?? "",
     plan: merchant.plan || "trial",
     inbound_number: merchant.inbound_number ?? "",
+    whatsapp_number: merchant.channels?.whatsapp?.number ?? "",
     region: merchant.region || "INTL",
     timezone: merchant.timezone ?? "",
     currency: merchant.currency ?? "",
@@ -90,6 +92,7 @@ function validate(form: EditForm, initial: EditForm): Errors {
   errors.phone = phoneError(form.phone);
   errors.support_phone = phoneError(form.support_phone);
   errors.inbound_number = phoneError(form.inbound_number);
+  errors.whatsapp_number = phoneError(form.whatsapp_number);
   // Only check locale fields the admin touched, so a legacy value never blocks an unrelated save.
   if (changed("timezone")) errors.timezone = timezoneError(form.timezone);
   if (changed("currency")) errors.currency = currencyError(form.currency);
@@ -108,6 +111,7 @@ function diff(form: EditForm, initial: EditForm): MerchantAdminUpdate {
     "support_phone",
     "plan",
     "inbound_number",
+    "whatsapp_number",
     "region",
     "timezone",
     "currency",
@@ -194,8 +198,10 @@ export function MerchantEditDrawer({
       onSaved(saved);
     } catch (err) {
       const message = formatApiError(err, "Could not update the account.");
-      if (isApiRequestError(err) && err.status === 409 && message.toLowerCase().includes("inbound")) {
-        setErrors((current) => ({ ...current, inbound_number: message }));
+      if (isApiRequestError(err) && err.status === 409) {
+        const lower = message.toLowerCase();
+        if (lower.includes("whatsapp")) setErrors((current) => ({ ...current, whatsapp_number: message }));
+        else if (lower.includes("inbound")) setErrors((current) => ({ ...current, inbound_number: message }));
       }
       setFormError(message);
     } finally {
@@ -267,18 +273,34 @@ export function MerchantEditDrawer({
           </div>
         </FormSection>
 
-        <FormSection title="Plan & phone number">
+        <FormSection title="Plan & numbers">
           <PlanField id="edit-plan" meta={meta} value={form.plan} onChange={(plan) => update({ plan })} />
           <FormField
             id="edit-inbound"
             label="Inbound number"
-            hint="Calls to this Twilio number are answered by this account. Leave blank to detach it."
+            hint="Twilio voice number. Blank detaches it."
             error={errors.inbound_number}
           >
             <Input
               {...fieldProps("edit-inbound", errors.inbound_number, "hint")}
               value={form.inbound_number}
               onChange={text("inbound_number")}
+              inputMode="tel"
+              maxLength={32}
+              autoComplete="off"
+              placeholder="+14155550123"
+            />
+          </FormField>
+          <FormField
+            id="edit-whatsapp"
+            label="WhatsApp number"
+            hint="Twilio WhatsApp sender. Blank detaches it."
+            error={errors.whatsapp_number}
+          >
+            <Input
+              {...fieldProps("edit-whatsapp", errors.whatsapp_number, "hint")}
+              value={form.whatsapp_number}
+              onChange={text("whatsapp_number")}
               inputMode="tel"
               maxLength={32}
               autoComplete="off"

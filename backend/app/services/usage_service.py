@@ -8,12 +8,12 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.plans import get_plan
+from app.core.addons import entitlements
 from app.models import CallLog, Merchant, Message
 
 #: Directions that are billable phone minutes / billable chats.
 VOICE_DIRECTIONS = ("outbound", "inbound")
-CHAT_DIRECTIONS = ("widget",)
+CHAT_DIRECTIONS = ("widget", "whatsapp", "messenger")
 
 
 def month_start(now: datetime | None = None) -> datetime:
@@ -61,17 +61,20 @@ async def month_usage(db: AsyncSession, merchant: Merchant) -> dict[str, Any]:
         )
         or 0
     )
-    plan = get_plan(getattr(merchant, "plan", None))
+    ent = entitlements(merchant)
     minutes = round(seconds / 60.0, 1)
+    included = ent.minutes
     return {
-        "plan": plan.as_json(),
+        "plan": ent.plan.as_json(),
+        # Plan + add-ons; null = no limit.
+        "limits": ent.as_json()["limits"],
         "period_start": start.isoformat(),
         "minutes": minutes,
         "calls": calls,
         "chats": chats,
         "sms": sms,
-        "minutes_left": max(0.0, plan.included_minutes - minutes) if plan.included_minutes else None,
-        "overage_minutes": max(0.0, minutes - plan.included_minutes) if plan.included_minutes else 0.0,
+        "minutes_left": max(0.0, included - minutes) if included else None,
+        "overage_minutes": max(0.0, minutes - included) if included else 0.0,
     }
 
 

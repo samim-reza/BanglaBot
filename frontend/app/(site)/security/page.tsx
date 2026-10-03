@@ -64,7 +64,7 @@ const DATA = [
   {
     icon: Mic,
     title: "Recordings and transcripts",
-    body: "Every call and chat is kept with its transcript and outcome so your team can check what was said. Extended retention keeps recordings for 12 months.",
+    body: "Every call and chat is kept with its transcript and outcome, so your team can check what was said. Pro, or an add-on, keeps recordings for 12 months.",
   },
   {
     icon: KeyRound,

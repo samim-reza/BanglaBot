@@ -135,14 +135,18 @@ export function PlanField({
   error?: string | null;
 }) {
   const plan = planOf(meta, value);
+  const count = (value: number, unit: string) => (value ? `${value.toLocaleString("en-US")} ${unit}` : null);
   const hint = plan
-    ? [
-        plan.included_minutes ? `${plan.included_minutes.toLocaleString("en-US")} call minutes` : "Custom minutes",
-        plan.included_chats ? `${plan.included_chats.toLocaleString("en-US")} chats / month` : null,
-        plan.phone_numbers ? `${plan.phone_numbers} phone number${plan.phone_numbers === 1 ? "" : "s"}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
+    ? plan.key === "enterprise"
+      ? "Custom volume, every channel"
+      : [
+          count(plan.included_minutes, "min"),
+          count(plan.included_chats, "chats"),
+          count(plan.included_sms, "texts"),
+          count(plan.phone_numbers, plan.phone_numbers === 1 ? "number" : "numbers"),
+        ]
+          .filter(Boolean)
+          .join(" · ")
     : undefined;
   return (
     <FormField id={id} label="Plan" hint={hint} error={error}>

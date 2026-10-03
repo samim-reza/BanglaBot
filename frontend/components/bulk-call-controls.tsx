@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlarmClock, LoaderCircle, PhoneForwarded, Square, X } from "lucide-react";
 
 import { useAppToast } from "@/components/app-toast";
+import { InfoTip } from "@/components/portal/kit";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatInZone, fromZonedInput, statusLabel, t, toZonedInput } from "@/lib/vertical";
@@ -159,11 +160,15 @@ export function BulkCallControls({ onOrdersChanged }: { onOrdersChanged: () => v
     <section aria-label="Bulk calling" className="space-y-3 rounded-lg border bg-card p-3 sm:p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 text-sm">
-          <p className="font-medium">Bulk {callName}s</p>
+          <p className="flex items-center gap-1.5 font-medium">
+            Bulk {callName}s
+            <InfoTip label="About bulk calls">
+              Dials every {pendingLabel} or {noAnswerLabel} {singular} with fewer than {status?.max_attempts ?? 3} attempts, up to {status?.max_concurrent ?? 1} at a
+              time. Auto call does the same at a set time.
+            </InfoTip>
+          </p>
           <p className="text-xs text-muted-foreground">
-            {status
-              ? `${count(eligible)} ${eligible === 1 ? "needs" : "need"} a ${callName} (${pendingLabel} or ${noAnswerLabel}, under ${status.max_attempts} attempts).`
-              : "Loading…"}
+            {status ? `${count(eligible)} to call` : "Loading…"}
             {scheduledAt && (
               <>
                 {" "}
@@ -188,7 +193,7 @@ export function BulkCallControls({ onOrdersChanged }: { onOrdersChanged: () => v
               title={eligible === 0 ? `No ${plural} need a call right now` : `Call every ${pendingLabel} or ${noAnswerLabel} ${singular}`}
             >
               <PhoneForwarded className="h-4 w-4" aria-hidden="true" />
-              {busy === "start" ? "Starting…" : `Call all pending ${plural}${status ? ` (${eligible})` : ""}`}
+              {busy === "start" ? "Starting…" : `Call all${status ? ` (${eligible})` : ""}`}
             </Button>
           )}
           <Button variant="outline" onClick={scheduleOpen ? () => setScheduleOpen(false) : openSchedule} aria-expanded={scheduleOpen}>
@@ -201,15 +206,13 @@ export function BulkCallControls({ onOrdersChanged }: { onOrdersChanged: () => v
       {scheduleOpen && (
         <div className="flex flex-col gap-3 rounded-md border bg-surface p-3 sm:flex-row sm:items-end">
           <label className="flex flex-1 flex-col gap-1.5 text-sm">
-            <span className="text-[13.5px] font-semibold text-muted-foreground">Call every pending {singular} at</span>
+            <span className="text-[13.5px] font-semibold text-muted-foreground">Auto call at</span>
             <Input type="datetime-local" value={at} onChange={(event) => setAt(event.target.value)} />
-            <span className="text-xs text-muted-foreground">
-              Time in {timezone}. {t(vertical.record_label_plural, "Records")} still {pendingLabel} or {noAnswerLabel} at that moment are dialed.
-            </span>
+            <span className="text-xs text-muted-foreground">{timezone}</span>
           </label>
           <label className="inline-flex items-center gap-2 text-sm sm:pb-6">
             <input type="checkbox" className="h-4 w-4 accent-primary" checked={repeatDaily} onChange={(event) => setRepeatDaily(event.target.checked)} />
-            Repeat every day
+            Repeat daily
           </label>
           <div className="flex gap-2 sm:pb-6">
             <Button onClick={() => void saveSchedule()} disabled={busy === "schedule"}>

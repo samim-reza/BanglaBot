@@ -16,7 +16,7 @@ import { BRAND } from "@/lib/brand";
 import { ENTERPRISE, HOME_FAQS, SALES_HREF, TRIAL, TRIAL_HREF, usd } from "@/lib/site-content";
 
 const PROMISES = [
-  { icon: Clock, title: "Answers 24/7", body: "Phone and website chat, nights and weekends included." },
+  { icon: Clock, title: "Answers 24/7", body: "Calls and chats, nights and weekends included." },
   { icon: CalendarCheck, title: "Books into your records", body: "Appointments, viewings and visits — read back first." },
   { icon: PhoneOutgoing, title: "Calls customers back", body: "Reminders, confirmations and lead follow-ups." },
   { icon: PhoneForwarded, title: "Hands off to your team", body: "Live transfer the moment a person is needed." },
@@ -41,8 +41,8 @@ export default function HomePage() {
               The AI receptionist that answers, books and calls back.
             </h1>
             <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
-              {BRAND.name} gives your business a ready-made voice and chat agent. It picks up every call around the clock,
-              books straight into your schedule, and phones customers to confirm — answering only from your own data.
+              {BRAND.name} is a ready-made voice and chat agent for your business. It answers every call, books straight into
+              your schedule and calls customers to confirm, using only your own data.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button asChild className="h-11 px-6 text-[15px]">
@@ -94,7 +94,7 @@ export default function HomePage() {
           id="agents-title"
           eyebrow="One platform, four agents"
           title="An agent that already knows your kind of business"
-          subtitle="Pick your business type when you sign up. The agent arrives knowing what to ask, how your bookings work and what it must never say."
+          subtitle="Pick your business type. The agent already knows what to ask, how your bookings work and what it must never say."
         />
         <div className="mt-12">
           <AgentCards />
@@ -107,7 +107,7 @@ export default function HomePage() {
           id="how-title"
           eyebrow="How it works"
           title="Live on your phone line without writing a script"
-          subtitle="No developers, no call-flow diagrams. You fill in what you offer; the agent handles the conversation."
+          subtitle="No developers, no call-flow diagrams. You fill in what you offer; the agent handles the talking."
         />
         <div className="mt-12">
           <Steps />
@@ -126,7 +126,7 @@ export default function HomePage() {
           id="features-title"
           eyebrow="Platform"
           title="Everything a great front desk does on the phone"
-          subtitle="The same agent answers your line, chats on your website and calls customers back — with your rules, in your region."
+          subtitle="One agent for your phone line and chat channels, with your rules, in your region."
         />
         <div className="mt-14">
           <FeatureGrid />
@@ -141,7 +141,7 @@ export default function HomePage() {
           id="pricing-title"
           eyebrow="Pricing"
           title="A month of 24/7 answering for less than a week of receptionist wages"
-          subtitle="Call minutes and website chats included; inbound and outbound share one pool. For comparison, the U.S. median receptionist wage is about $716 a week (BLS)."
+          subtitle="Pick a plan, add what you need. For comparison, the U.S. median receptionist earns about $716 a week (BLS)."
         />
         <div className="mt-10">
           <PricingPlans showEnterprise={false} />

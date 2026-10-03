@@ -122,6 +122,17 @@ async def inbound_call(request: Request):
     return Response(content=twiml, media_type="application/xml")
 
 
+@router.post("/whatsapp")
+async def whatsapp_message(request: Request):
+    """Incoming WhatsApp message on an account's Twilio WhatsApp sender → the agent's reply (TwiML)."""
+    from app.services import channel_service
+
+    values = await _form_dict(request)
+    _validate_signature(request, values)
+    twiml = await channel_service.handle_whatsapp(values)
+    return Response(content=twiml, media_type="application/xml")
+
+
 @router.post("/twiml/{order_id}")
 async def twiml_fallback(order_id: str, request: Request):
     """Same TwiML the call was created with (for a manual redirect / debugging)."""

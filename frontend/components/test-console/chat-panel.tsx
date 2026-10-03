@@ -66,7 +66,7 @@ export function ChatPanel({ chat, onStart, startDisabled, startHint }: { chat: C
         className="h-[26rem]"
         empty={
           <div className="space-y-3">
-            <p>Type as a customer would. The agent follows the same steps as on a call and can book for real.</p>
+            <p>Chat as a customer would. Bookings are real.</p>
             <Button type="button" onClick={onStart} disabled={starting || startDisabled}>
               {starting ? <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden /> : <MessageSquarePlus className="h-4 w-4" aria-hidden />}
               Start chat

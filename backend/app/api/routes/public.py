@@ -11,7 +11,9 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.core.plans import ADDONS, PLANS
+from app.core.addons import entitlements
+from app.core.addons import public_catalog as addon_catalog
+from app.core.plans import CHANNEL_WEB_CHAT, PLANS
 from app.core.ratelimit import limit
 from app.core.redis import redis_health
 from app.core.regions import regions_json
@@ -43,7 +45,7 @@ async def public_catalog():
             for v in VERTICALS.values()
         ],
         "plans": [plan.as_json() for plan in PLANS.values() if plan.public],
-        "addons": list(ADDONS),
+        "addons": addon_catalog(),
         "regions": regions_json(),
         "demo_widget_key": await _demo_widget_key(),
     }
@@ -132,6 +134,8 @@ async def _widget_merchant(key: str) -> Merchant | None:
     async with AsyncSessionLocal() as session:
         merchant = await session.scalar(select(Merchant).where(Merchant.widget_key == key))
     if merchant is None or not merchant.active or not merchant.widget_enabled:
+        return None
+    if not entitlements(merchant).has_channel(CHANNEL_WEB_CHAT):
         return None
     return merchant
 

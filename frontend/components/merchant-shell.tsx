@@ -17,6 +17,7 @@ import {
   MessagesSquare,
   Package,
   Puzzle,
+  Radio,
   Settings,
   ShoppingBag,
   Stethoscope,
@@ -62,6 +63,7 @@ function navFor(vertical: VerticalSpec): NavItem[] {
   items.push(
     { href: "/calls", label: "Calls & chats", icon: MessagesSquare },
     { href: "/test", label: "Test your agent", icon: FlaskConical },
+    { href: "/channels", label: "Channels", icon: Radio },
     { href: "/addons", label: "Add-ons", icon: Puzzle },
     { href: "/settings", label: "Settings", icon: Settings },
   );
@@ -100,27 +102,30 @@ function NavList({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => v
   );
 }
 
-/** Share of the plan's included minutes used this month (null when the plan has no cap). */
-export function usageShare(usage: Usage): number | null {
-  const included = usage.plan.included_minutes;
-  if (!included) return null;
-  return Math.min(1, Math.max(0, usage.minutes / included));
+/** Minutes allowed this month (plan + add-ons); null or 0 when there is no cap. */
+function minuteLimit(usage: Usage): number | null {
+  return usage.limits ? usage.limits.minutes : usage.plan.included_minutes;
 }
 
-/** Thin meter for "minutes used of included"; turns amber past 80% and red past 100%. */
-export function UsageBar({ usage, className, label = "Call minutes used this month" }: { usage: Usage; className?: string; label?: string }) {
-  const share = usageShare(usage);
-  if (share === null) return null;
-  const over = usage.overage_minutes > 0;
-  const tone = over ? "bg-destructive" : share >= 0.8 ? "bg-amber-500" : "bg-primary";
+/** Share of the month's minute allowance used (null when there is no cap). */
+export function usageShare(usage: Usage): number | null {
+  const limit = minuteLimit(usage);
+  if (!limit) return null;
+  return Math.min(1, Math.max(0, usage.minutes / limit));
+}
+
+/** Thin "used of allowed" meter; turns amber past 80% and red past 100%. */
+function ShareBar({ used, limit, label, className }: { used: number; limit: number; label: string; className?: string }) {
+  const share = Math.min(1, Math.max(0, used / limit));
+  const tone = used > limit ? "bg-destructive" : share >= 0.8 ? "bg-amber-500" : "bg-primary";
   return (
     <div
       role="meter"
       aria-label={label}
       aria-valuemin={0}
-      aria-valuemax={usage.plan.included_minutes}
-      aria-valuenow={Math.min(usage.minutes, usage.plan.included_minutes)}
-      aria-valuetext={`${usage.minutes} of ${usage.plan.included_minutes} minutes`}
+      aria-valuemax={limit}
+      aria-valuenow={Math.min(used, limit)}
+      aria-valuetext={`${used} of ${limit}`}
       className={cn("h-1.5 w-full overflow-hidden rounded-full bg-secondary", className)}
     >
       <div className={cn("h-full rounded-full transition-[width]", tone)} style={{ width: `${Math.max(share * 100, share > 0 ? 3 : 0)}%` }} />
@@ -128,14 +133,25 @@ export function UsageBar({ usage, className, label = "Call minutes used this mon
   );
 }
 
+/** Minutes used of this month's allowance (nothing when there is no cap). */
+export function UsageBar({ usage, className, label = "Call minutes used this month" }: { usage: Usage; className?: string; label?: string }) {
+  const limit = minuteLimit(usage);
+  if (!limit) return null;
+  return <ShareBar used={usage.minutes} limit={limit} label={label} className={className} />;
+}
+
 function minutes(value: number): string {
   return value.toLocaleString("en-US", { maximumFractionDigits: 1 });
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { merchant, vertical, usage } = useWorkspace();
+  const { merchant, vertical, usage, entitlements } = useWorkspace();
   const items = navFor(vertical);
-  const included = usage.plan.included_minutes;
+  // Voice plans track minutes; the chat plan tracks chats.
+  const voice = entitlements.channels.includes("voice");
+  const used = voice ? usage.minutes : usage.chats;
+  const limit = (voice ? usage.limits?.minutes : usage.limits?.chats) ?? null;
+  const unit = voice ? "min" : "chats";
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="rounded-lg border border-border bg-surface px-3 py-3">
@@ -154,17 +170,16 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
           <span className="text-muted-foreground">Plan</span>
           <span className="truncate font-semibold text-foreground">{usage.plan.name}</span>
         </div>
-        {included ? (
+        {limit ? (
           <>
-            <UsageBar usage={usage} className="mt-2" />
+            <ShareBar used={used} limit={limit} label={voice ? "Call minutes used this month" : "Chats used this month"} className="mt-2" />
             <p className="mt-1.5 text-muted-foreground">
-              <span className="tabular-nums text-foreground">{minutes(usage.minutes)}</span> of{" "}
-              <span className="tabular-nums">{minutes(included)}</span> min used
+              <span className="tabular-nums text-foreground">{minutes(used)}</span> of <span className="tabular-nums">{minutes(limit)}</span> {unit} used
             </p>
           </>
         ) : (
           <p className="mt-1.5 text-muted-foreground">
-            <span className="tabular-nums text-foreground">{minutes(usage.minutes)}</span> min used this month
+            <span className="tabular-nums text-foreground">{minutes(used)}</span> {unit} used this month
           </p>
         )}
       </div>

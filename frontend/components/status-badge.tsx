@@ -123,6 +123,9 @@ const SOURCE_LABELS: Record<string, string> = {
   inbound_call: "Inbound call",
   outbound_call: "Outbound call",
   website_chat: "Website chat",
+  widget: "Website chat",
+  whatsapp: "WhatsApp",
+  messenger: "Messenger",
   test: "Test",
   import: "Import",
 };
@@ -132,14 +135,22 @@ export function sourceLabel(source: string | null | undefined): string {
   return SOURCE_LABELS[source] ?? source.replace(/_/g, " ");
 }
 
-/** Where a record came from (manual entry, a call, the website chat, a test). */
+/** Where a record came from (manual entry, a call, website chat, WhatsApp, Messenger, a test). */
 export function SourceBadge({ source, className }: { source: string | null | undefined; className?: string }) {
   const style = source === "test" ? AMBER : source === "manual" || !source ? NEUTRAL : "bg-accent text-accent-foreground";
   return <span className={cn(BADGE_BASE, "font-medium", style, className)}>{sourceLabel(source)}</span>;
 }
 
-/** Call / chat channel chip (inbound, outbound, website chat, browser test, chat test). */
+const CHANNEL_STYLES: Record<string, string> = {
+  web: AMBER,
+  chat: AMBER,
+  widget: CYAN,
+  whatsapp: GREEN,
+  messenger: BLUE,
+};
+
+/** Call / chat channel chip (inbound, outbound, website chat, WhatsApp, Messenger, browser test, chat test). */
 export function ChannelBadge({ direction, className }: { direction: string | null | undefined; className?: string }) {
-  const style = direction === "web" || direction === "chat" ? AMBER : direction === "widget" ? CYAN : "bg-accent text-accent-foreground";
+  const style = CHANNEL_STYLES[direction ?? ""] ?? "bg-accent text-accent-foreground";
   return <span className={cn(BADGE_BASE, "font-medium", style, className)}>{channelLabel(direction)}</span>;
 }

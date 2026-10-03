@@ -24,6 +24,7 @@ export { callsApi } from "./calls";
 export type { CallListParams } from "./calls";
 export { agentApi } from "./agent";
 export { integrationsApi } from "./integrations";
+export { addonsApi, channelsApi } from "./addons";
 export { publicApi } from "./public";
 export { adminApi } from "./admin";
 export type { AdminCallParams, AdminInquiryParams, AdminOrderParams } from "./admin";

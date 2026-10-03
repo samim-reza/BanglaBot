@@ -145,11 +145,10 @@ export function RecordForm({
         <div className="flex items-start gap-2.5 rounded-md border border-border bg-surface p-3 text-sm">
           <CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
           <p className="text-muted-foreground">
-            You have no {catalogPlural} yet{catalogRequired ? ", and this form needs one" : ""}.{" "}
+            No {catalogPlural} yet{catalogRequired ? " — this form needs one" : ""}.{" "}
             <Link href="/catalog" className="font-medium text-primary-dark underline-offset-2 hover:underline">
-              Add your {catalogPlural}
-            </Link>{" "}
-            first.
+              Add {catalogPlural}
+            </Link>
           </p>
         </div>
       )}

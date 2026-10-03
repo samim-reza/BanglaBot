@@ -18,7 +18,8 @@ Our call stack: Twilio Programmable Voice with a bidirectional media stream, Ope
 
 - Outbound to US/Canada mobiles adds $0.014/min and answering-machine detection $0.0075 per call. A 1.5-minute confirmation call costs about **$0.054**.
 - The phone number is $1.15/month in the US. Planning cost, with 30% on top for infrastructure, retries and failed calls: **$0.04/min in the US and Canada, about $0.07/min for UK outbound.**
-- A website chat (8 turns, text only) costs about **$0.01**.
+- A website chat (8 turns, text only) costs about **$0.01**. Messenger is the same (Meta charges nothing per message).
+- A **WhatsApp** chat also pays Twilio ≈ $0.005 per message, in and out. 8 turns ≈ 16 messages ≈ $0.08, so **≈ $0.09 per chat**. Meta's own WhatsApp fees (template messages outside the 24-hour service window) are passed through to the customer at cost.
 - **Telephony is 55–95% of the cost.** Caching, plus answering yes/no steps without the model, keeps model and voice costs small; destination pricing is what moves margins.
 
 Outbound to mobiles by country (Twilio list price per minute): US/CA $0.014, UK $0.0305, India $0.0496, Bangladesh $0.060, Australia $0.075, UAE $0.2995. Australia, India, Bangladesh and the UAE need minute multipliers or a local carrier (section 4).
@@ -40,35 +41,56 @@ How the product keeps cost and latency down (all built in):
 | Human answering | Ruby ($250 for 50 min ≈ $5/min), Smith.ai (~$10/call) | $3.45–5/min |
 | A receptionist | US median $37,230/year (BLS) | ≈ $3,100/month in wages for one shift |
 
-**Our position:** ready-made vertical agents (not a toolkit) at small-business prices. They answer and call out, include a website chat, and work in multiple regions. Our differentiators are outbound (reminders, follow-ups, cash-on-delivery confirmations) and price.
+**Our position:** ready-made vertical agents (not a toolkit) at small-business prices. They answer and call out, add website, WhatsApp and Messenger chat when the customer wants it, and work in multiple regions. Our differentiators are outbound (reminders, follow-ups, cash-on-delivery confirmations) and price.
 
-## 3. Our price list (live in `backend/app/core/plans.py` and on the website)
+## 3. Our price list (live in `backend/app/core/plans.py`, `backend/app/core/addons.py` and on the website)
+
+One base plan per account; everything else is an add-on (section 3a). Voice plans no longer include website chats.
 
 | Plan | Price | Minutes | Chats | Texts | Numbers | Overage | Our cost at full use | Gross margin |
 |---|---|---|---|---|---|---|---|---|
-| Starter | $49/mo | 150 | 100 | 100 | 1 | $0.30/min | ≈ $11 | ≈ 77% |
-| Growth (featured) | $149/mo | 600 | 500 | 500 | 2 | $0.22/min | ≈ $44 | ≈ 70% |
-| Pro | $349/mo | 1,800 | 2,000 | 2,000 | 3 | $0.16/min | ≈ $140 | ≈ 60% |
-| Enterprise | from $999/mo | custom | — | custom | — | from $0.10/min | — | — |
+| Chat agent (website chat only) | $29/mo | — | 1,000 | 100 | — | — | ≈ $11 | ≈ 61% (≈ 65% before texts) |
+| Starter | $49/mo | 150 | add-on | 100 | 1 | $0.30/min | ≈ $10 | ≈ 80% |
+| Growth (featured) | $149/mo | 600 | add-on | 500 | 2 | $0.22/min | ≈ $38 | ≈ 74% |
+| Pro | $349/mo | 1,800 | add-on | 2,000 | 3 | $0.16/min | ≈ $117 | ≈ 66% |
+| Enterprise | from $999/mo | custom | every channel | custom | — | from $0.10/min | — | — |
 
-- Free trial: 14 days, 50 minutes, 50 texts.
+- Full-use cost = minutes at ≈ $0.05 all-in + $1.15 per number + ≈ $0.012 per text + ≈ $0.01 per chat.
+- What each plan includes: **Chat agent** — website chatbot, calendar feed. **Starter** — booking + recordings, calendar feed, email support. **Growth** — adds reminder calls, two-way Google Calendar, webhooks + live transfer. **Pro** — adds bulk and scheduled campaigns, 12-month recordings, priority support. **Enterprise** — every channel and feature.
+- Free trial: 14 days, 50 minutes, 100 chats, 50 texts, every channel and feature switched on.
 - **Texts (SMS).** A US text costs us about $0.011–0.013 all-in: Twilio's ≈ $0.0083 per segment plus 10DLC carrier fees. Check Twilio's current price list; these figures aren't verified. Full use of the included texts adds ≈ $1 / $6 / $24 a month. Real use is about one to two texts per booking, far below the cap. English templates stay within one 160-character GSM-7 segment. Bangla is Unicode, so each segment holds 70 characters and a text costs about double.
-- **Calendar sync** costs us nothing per use. The Google Calendar API is free within quota, and iCal feeds are cached. Starter gets the feed and iCal busy links. Two-way Google sync is a Growth feature that drives upgrades.
+- **Calendar sync** costs us nothing per use. The Google Calendar API is free within quota, and iCal feeds are cached. Every plan gets the feed and iCal busy links. Two-way Google sync is included in Growth and Pro (an upgrade driver) and a $9 add-on otherwise.
 - Annual billing: 2 months free.
-- Unused minutes push blended margin to about 75%.
+- Unused minutes push blended margin higher still.
 
-**Add-ons:**
+## 3a. Add-ons (`backend/app/core/addons.py`)
 
-| Add-on | Price |
-|---|---|
-| Extra number | $5/mo (US/CA), $10 (UK/AU) |
-| Extra location or agent | $49/mo |
-| Extra language | $19/mo |
-| Chat-only plan | $29/mo for 500 conversations |
-| 12-month recording retention | $10/mo |
-| Extra texts | $10 per 500 (cost ≈ $6) |
-| Done-for-you setup | $299 one-off |
-| Cash-on-delivery confirmation | $0.20 per answered call (US/UK/CA) |
+| Add-on | Price | Gives | Our cost | Gross margin | Notes |
+|---|---|---|---|---|---|
+| Website chatbot | $29/mo | 1,000 chats | ≈ $10 | ≈ 65% | Included in the Chat agent plan |
+| WhatsApp bot | $49/mo | 300 chats | ≈ $0.09/chat → ≈ $27 at full use | ≈ 45% | Twilio ≈ $0.005/message in and out. Meta conversation fees passed through at cost |
+| Messenger bot | $29/mo | 1,000 chats | ≈ $10 | ≈ 65% | No per-message fee from Meta |
+| Extra 100 minutes | $25/mo, stacks | +100 minutes | ≈ $5 | ≈ 80% | Voice plans only. $0.25/min: cheaper than Starter overage, dearer than Growth/Pro overage |
+| Extra 500 texts | $10/mo, stacks | +500 texts | ≈ $6 | ≈ 40% | |
+| Extra phone number | $5/mo, stacks | +1 number | $1.15 (US) | ≈ 77% | Voice plans only. Charge $10 in the UK / Australia |
+| Two-way Google Calendar | $9/mo | feature | ≈ $0 | ≈ 100% | Included in Growth and Pro |
+| Extra language | $19/mo | feature | ≈ $0 fixed | ≈ 100% | Bangla texts and speech cost more per use |
+| 12-month recordings | $10/mo | feature | ≈ $1 (storage $0.0005/min-month) | ≈ 90% | Voice plans only. Included in Pro |
+| Done-for-you setup | $299 once | service | 2–3 hours of our time | — | |
+
+**WhatsApp pricing.** At ≈ $0.09 a chat through Twilio, a 1,000-chat bundle would lose money, so the add-on is $49 with 300 chats (≈ 45% margin at full use). Next step to cut cost: move WhatsApp to Meta's Cloud API directly, where replies inside the 24-hour service window carry no per-message fee (unverified) and a chat costs ≈ $0.01 like the others — then raise the bundle.
+
+No longer on the public price list (quote case by case): extra location or agent ($49/mo) and cash-on-delivery confirmation ($0.20 per answered call).
+
+### Add-on model
+
+- An account buys **one base plan**: the voice agent (Starter / Growth / Pro) or the chat agent. Extras are add-ons on top.
+- Add-ons are stored per account as `{key: quantity}` (`merchants.addons`). Limits = plan allowance + add-on grants; channels and features = the plan's plus the add-ons'. Enterprise has no limits.
+- Channels and features are on or off; minute packs, text packs and numbers stack (up to 50).
+- An add-on the plan already includes is not sold (Google Calendar on Growth, the website chatbot on the Chat agent plan). Minute packs, numbers and 12-month recordings are voice-only.
+- Chats on the website, WhatsApp and Messenger share one monthly allowance.
+- **No online payment yet.** The owner clicks Request in the portal; the platform admin approves it (which switches it on) or edits the account's add-ons directly. Billing is manual until Stripe (section 6).
+- Removing the website chatbot switches the account's widget off.
 
 ## 4. Regional pricing
 
@@ -99,7 +121,7 @@ Channels:
 
 Shipped: **calendar sync** (two-way Google, iCal feed, iCal busy links) and **SMS confirmations and reminders** (Twilio Messaging, delivery receipts, per-account settings).
 
-1. **Self-serve signup + Stripe billing** (plans, metered overage for minutes and texts). Today the admin creates accounts and sets plans.
+1. **Self-serve signup + Stripe billing** (plans, add-ons as subscription items, metered overage for minutes and texts). Today the admin creates accounts, sets plans and approves add-on requests by hand.
 2. **Outlook / Microsoft 365 two-way sync** (Graph API). Today Outlook uses the iCal feed and busy links.
 3. **Two-way SMS**: the customer replies C to confirm or R to reschedule, and a reschedule reply triggers a call-back.
 4. **Local carriers** for India / Bangladesh, and a Bangla-optimized speech-to-text option (Soniox or Sarvam benchmark far better on Bengali than OpenAI's models).

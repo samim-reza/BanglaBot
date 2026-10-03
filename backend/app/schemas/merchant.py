@@ -44,6 +44,10 @@ class MerchantOut(BaseModel):
     webhook_secret: str = ""
     auto_call_at: datetime | None = None
     auto_call_repeat_daily: bool = False
+    #: Add-ons on top of the plan: {key: quantity}.
+    addons: dict[str, int] = {}
+    #: Chat channel setup (WhatsApp number, connected Facebook Page) — never tokens.
+    channels: dict[str, Any] = {}
     created_at: datetime | None = None
 
 

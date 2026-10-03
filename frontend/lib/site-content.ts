@@ -1,6 +1,6 @@
 /** Static copy for the public website: agents, features, plans, add-ons, FAQs.
  *
- * Plan and add-on numbers mirror backend/app/core/plans.py — change both together.
+ * Plan and add-on numbers mirror backend/app/core/plans.py and addons.py — change both together.
  * The product name always comes from BRAND (lib/brand.ts).
  */
 
@@ -82,8 +82,8 @@ export const AGENTS: AgentSolution[] = [
     forWho: "Family practices, specialist chambers, dental and physio clinics",
     tagline: "Books, moves and reminds — straight from your doctor list.",
     summary:
-      "Answers the clinic phone and website chat around the clock. It books appointments from your doctor list, moves or cancels them for callers by their phone number, answers questions about doctors, hours, fees and insurance, and calls patients the day before to confirm.",
-    directions: "Inbound calls, website chat and reminder calls",
+      "Answers your clinic's phone around the clock. It books from your doctor list, moves or cancels appointments by the caller's number, answers questions on doctors, hours, fees and insurance, and calls patients the day before to confirm.",
+    directions: "Inbound calls, chats and reminder calls",
     capabilities: [
       "Books appointments from each doctor's days, hours and minutes per patient",
       "Finds a caller's existing appointment by phone number to move or cancel it",
@@ -135,8 +135,8 @@ export const AGENTS: AgentSolution[] = [
     forWho: "Sales and rental agencies, brokers, property managers",
     tagline: "Qualifies every caller, books viewings and scores the lead.",
     summary:
-      "Picks up for buyers, renters and sellers. It asks what they need — budget, area, property type, timeline — presents up to two matching listings from your inventory, books a viewing and scores every lead hot, warm or cold so your agents call the right people first.",
-    directions: "Inbound calls, website chat and lead follow-up calls",
+      "Picks up for buyers, renters and sellers. It asks their budget, area, property type and timeline, presents up to two matching listings, books a viewing and scores every lead hot, warm or cold, so your agents call the right people first.",
+    directions: "Inbound calls, chats and lead follow-up calls",
     capabilities: [
       "Qualifies buyers, renters and sellers: budget, area, type, bedrooms, timeline",
       "Presents up to two matching listings from your own inventory",
@@ -187,8 +187,8 @@ export const AGENTS: AgentSolution[] = [
     forWho: "Plumbing, electrical, HVAC / AC, cleaning and appliance repair",
     tagline: "Takes the job, checks the area and books an arrival window.",
     summary:
-      "Answers your service line while your crews are on the job. It takes the service, the problem and the address, checks you cover the area, quotes the call-out charge and usual price range, and books an arrival window your teams can actually make. The day before, it calls to confirm.",
-    directions: "Inbound calls, website chat and visit confirmation calls",
+      "Answers your service line while your crews are on the job. It takes the problem and the address, checks you cover the area, quotes your call-out charge and usual price range, and books an arrival window your teams can make. The day before, it calls to confirm.",
+    directions: "Inbound calls, chats and visit confirmation calls",
     capabilities: [
       "Takes the job: service, problem description and address",
       "Checks the address against your service areas",
@@ -238,7 +238,7 @@ export const AGENTS: AgentSolution[] = [
     forWho: "Online stores shipping cash-on-delivery orders",
     tagline: "Confirms cash-on-delivery orders before they ship.",
     summary:
-      "Calls every cash-on-delivery customer before dispatch. It checks it's speaking to the right person, reads the order back, optionally confirms the delivery address, and marks the order confirmed or cancelled — so you stop paying to ship parcels nobody accepts.",
+      "Calls every cash-on-delivery customer before dispatch. It checks it has the right person, reads the order back, optionally confirms the address, and marks the order confirmed or cancelled, so you stop shipping parcels nobody accepts.",
     directions: "Outbound confirmation calls, in bulk or on a schedule",
     capabilities: [
       "Calls customers to confirm or cancel COD orders before dispatch",
@@ -291,42 +291,42 @@ export const FEATURES: Feature[] = [
   {
     icon: PhoneCall,
     title: "A real phone number, both ways",
-    body: "Your agent answers inbound calls and places outbound ones on a real number. Use ours, or forward your existing line to it.",
+    body: "Answers inbound calls and places outbound ones on a real number. Use ours, or forward your existing line.",
   },
   {
     icon: MessageSquare,
-    title: "Website chat with one script tag",
-    body: "The same agent, typed. Paste one line into your site and visitors can book from the chat bubble.",
+    title: "Website, WhatsApp & Messenger",
+    body: "The same agent, typed: a chat bubble on your site, your WhatsApp number or your Facebook Page.",
   },
   {
     icon: BookOpen,
     title: "Answers only from your data",
-    body: "Replies come from your catalog and knowledge base. If the answer isn't there, the agent says so instead of guessing.",
+    body: "Replies come from your catalog and knowledge base. If the answer isn't there, the agent says so.",
   },
   {
     icon: ListChecks,
     title: "Read-back before every booking",
-    body: "Name, time, price and details are read back and confirmed before anything is written to your records.",
+    body: "Name, time, price and details are confirmed before anything is saved.",
   },
   {
     icon: CalendarCheck,
     title: "No double bookings",
-    body: "Slots are checked against your schedule, capacity and your own calendar at the moment of booking, across phone and chat.",
+    body: "Slots are checked against your schedule, capacity and calendar at the moment of booking, across every channel.",
   },
   {
     icon: MessageSquareText,
     title: "Text confirmations & reminders",
-    body: "Callers get an SMS with the date, time and details as soon as they book, another if it changes, and a reminder before — fewer no-shows.",
+    body: "A text when they book, another if it changes, and a reminder before. Fewer no-shows.",
   },
   {
     icon: CalendarSync,
     title: "Syncs with your calendar",
-    body: "Bookings appear in Google Calendar the moment they're made, or in Outlook and Apple via a private feed. Busy times there are never offered.",
+    body: "Bookings land in Google Calendar instantly, or in Outlook and Apple via a private feed. Busy times are never offered.",
   },
   {
     icon: PhoneForwarded,
     title: "Live transfer to your team",
-    body: "When a caller asks for a person — or the agent shouldn't handle it — the call goes straight to your staff.",
+    body: "When a caller asks for a person, or the agent shouldn't handle it, the call goes straight to your staff.",
   },
   {
     icon: AudioLines,
@@ -336,27 +336,27 @@ export const FEATURES: Feature[] = [
   {
     icon: CalendarClock,
     title: "Bulk & scheduled campaigns",
-    body: "Call a whole list at once or every day at a set time — reminders, confirmations and lead follow-ups.",
+    body: "Call a whole list at once or daily at a set time: reminders, confirmations, follow-ups.",
   },
   {
     icon: Webhook,
     title: "Webhooks into your systems",
-    body: "Every booking and outcome can be pushed to your practice software, CRM or spreadsheet automation.",
+    body: "Push every booking and outcome to your practice software, CRM or spreadsheet.",
   },
   {
     icon: Globe,
     title: "Your region, your language",
-    body: "Currency, time zone, emergency number, phone format and English accent per account. English today, Bangla available.",
+    body: "Currency, time zone, emergency number and accent per account. English today, Bangla available.",
   },
   {
     icon: Zap,
     title: "Fast, natural turns",
-    body: "Scripted lines play from a voice cache and each turn takes a single AI round-trip, so callers aren't left waiting.",
+    body: "Scripted lines play from a voice cache and each turn takes one AI round-trip, so callers aren't left waiting.",
   },
   {
     icon: MonitorPlay,
     title: "Test console",
-    body: "Call your agent from the browser or chat with it before going live. See exactly what it would book.",
+    body: "Call or chat with your agent in the browser before going live, and see exactly what it would book.",
   },
 ];
 
@@ -365,7 +365,7 @@ export type Step = { title: string; body: string; points: string[] };
 export const STEPS: Step[] = [
   {
     title: "Pick your business type",
-    body: "Clinic, real estate, home services or e-commerce. Your agent arrives with its conversation flow, booking rules and safety rules already built.",
+    body: "Clinic, real estate, home services or e-commerce. Your agent comes with its conversation flow, booking rules and safety rules built in.",
     points: ["Set once, when your account is created", "Region sets currency, time zone and emergency number"],
   },
   {
@@ -375,22 +375,24 @@ export const STEPS: Step[] = [
   },
   {
     title: "Test it in your browser",
-    body: "Call your agent from the test console or chat with it. Every test call is transcribed, so you see exactly what it said and booked.",
+    body: "Call or chat with your agent from the test console. Every test is transcribed, so you see exactly what it said and booked.",
     points: ["No phone needed to try it", "Tweak your greeting and knowledge, test again"],
   },
   {
-    title: "Go live on your number and website",
-    body: "Point calls at your agent's number and paste one script tag for the chat widget. Bookings start landing in your portal.",
+    title: "Go live",
+    body: "Point calls at your agent's number, and add chat to your site with one script tag. Bookings start landing in your portal.",
     points: ["Forward after hours or around the clock", "Reminder and follow-up calls on your schedule"],
   },
 ];
 
 /* ------------------------------------------------------------------ pricing */
 
-export const TRIAL = { days: 14, minutes: 50 } as const;
+export const TRIAL = { days: 14, minutes: 50, texts: 50 } as const;
 
 export type SitePlan = {
-  key: "starter" | "growth" | "pro";
+  key: "chat" | "starter" | "growth" | "pro";
+  /** Which product the plan is: the website chat agent or the voice agent. */
+  product: "chat" | "voice";
   name: string;
   price: number;
   minutes: number;
@@ -398,6 +400,7 @@ export type SitePlan = {
   /** Texts (SMS confirmations + reminders) included each month. */
   sms: number;
   numbers: number;
+  /** Per extra call minute; 0 for the chat plan. */
   overage: number;
   tagline: string;
   features: string[];
@@ -406,22 +409,41 @@ export type SitePlan = {
 
 export const PLANS: SitePlan[] = [
   {
+    key: "chat",
+    product: "chat",
+    name: "Chat agent",
+    price: 29,
+    minutes: 0,
+    chats: 1000,
+    sms: 100,
+    numbers: 0,
+    overage: 0,
+    tagline: "A chatbot for your website. No phone line.",
+    features: [
+      "Website chatbot (one script tag)",
+      "1,000 chats / month",
+      "100 texts / month",
+      "Bookings, leads and transcripts",
+      "Calendar feed (Google, Outlook, Apple)",
+    ],
+    highlight: false,
+  },
+  {
     key: "starter",
+    product: "voice",
     name: "Starter",
     price: 49,
     minutes: 150,
-    chats: 100,
+    chats: 0,
     sms: 100,
     numbers: 1,
     overage: 0.3,
-    tagline: "Never miss a call again — for a single practice, shop or crew.",
+    tagline: "One number. Never miss a call.",
     features: [
       "1 phone number",
-      "150 call minutes / month (inbound + outbound)",
-      "100 website chats / month",
-      "Booking, leads and call recordings",
-      "Doctor / listing / service catalog",
-      "100 SMS confirmations & reminders",
+      "150 call minutes / month",
+      "100 texts / month",
+      "Bookings, leads and call recordings",
       "Calendar feed (Google, Outlook, Apple)",
       "Email support",
     ],
@@ -429,55 +451,58 @@ export const PLANS: SitePlan[] = [
   },
   {
     key: "growth",
+    product: "voice",
     name: "Growth",
     price: 149,
     minutes: 600,
-    chats: 500,
+    chats: 0,
     sms: 500,
     numbers: 2,
     overage: 0.22,
-    tagline: "For busy front desks: answers, books and calls back.",
+    tagline: "For busy front desks.",
     features: [
       "Everything in Starter",
       "2 phone numbers",
       "600 call minutes / month",
-      "500 website chats / month",
+      "500 texts / month",
       "Reminder & confirmation calls",
-      "500 SMS confirmations & reminders",
-      "Two-way Google Calendar sync",
-      "Webhooks into your systems",
-      "Live transfer to your team",
+      "Two-way Google Calendar",
+      "Webhooks + live transfer",
     ],
     highlight: true,
   },
   {
     key: "pro",
+    product: "voice",
     name: "Pro",
     price: 349,
     minutes: 1800,
-    chats: 2000,
+    chats: 0,
     sms: 2000,
     numbers: 3,
     overage: 0.16,
-    tagline: "For multi-location clinics, agencies and service fleets.",
+    tagline: "For multi-location teams.",
     features: [
       "Everything in Growth",
       "3 phone numbers",
       "1,800 call minutes / month",
-      "2,000 website chats / month",
-      "Bulk & scheduled outbound campaigns",
-      "2,000 SMS confirmations & reminders",
-      "Priority support and onboarding",
+      "2,000 texts / month",
+      "Bulk & scheduled campaigns",
+      "12-month recordings",
+      "Priority support",
     ],
     highlight: false,
   },
 ];
 
+/** The voice agent plans (phone minutes) — what the ROI calculator compares against. */
+export const VOICE_PLANS = PLANS.filter((plan) => plan.product === "voice");
+
 export const ENTERPRISE = {
   name: "Enterprise",
   priceFrom: 999,
   tagline: "Custom volume, locations, SLAs and integrations.",
-  features: ["Volume minutes from $0.10", "Unlimited locations", "Custom integrations & SSO", "Dedicated success manager"],
+  features: ["Every channel and feature", "Volume minutes from $0.10", "Custom integrations & SSO", "Dedicated success manager"],
 } as const;
 
 /** Annual billing = 2 months free: pay 10 months, get 12. */
@@ -498,16 +523,58 @@ export function usd(value: number, decimals = 0): string {
   });
 }
 
-export const ADDONS = [
-  { key: "number", name: "Extra phone number", price: "$5 / mo", note: "US & Canada; $10 UK / Australia" },
-  { key: "location", name: "Extra location or agent", price: "$49 / mo", note: "A second clinic, office or brand" },
-  { key: "language", name: "Extra language", price: "$19 / mo", note: "Bangla today; more coming" },
-  { key: "chat", name: "Chat-only plan", price: "$29 / mo", note: "Website chat widget, 500 conversations" },
-  { key: "recording", name: "Extended recording retention", price: "$10 / mo", note: "Keep call recordings for 12 months" },
-  { key: "sms", name: "Extra texts", price: "$10 / 500", note: "SMS beyond your plan's included texts (US & Canada)" },
-  { key: "setup", name: "Done-for-you setup", price: "$299 once", note: "We load your catalog, script and number" },
-  { key: "cod", name: "COD order confirmation", price: "$0.20 / answered call", note: "E-commerce, US / UK / Canada" },
-] as const;
+/** Mirrors the add-on catalog in backend/app/core/addons.py. */
+export type AddonGroup = "channels" | "capacity" | "extras";
+
+export type SiteAddon = {
+  key: string;
+  group: AddonGroup;
+  name: string;
+  price: string;
+  summary: string;
+  /** Short tag: where it's already included, or which plans it's for. */
+  note?: string;
+};
+
+export const ADDON_GROUPS: { key: AddonGroup; label: string }[] = [
+  { key: "channels", label: "Chat channels" },
+  { key: "capacity", label: "More capacity" },
+  { key: "extras", label: "Features & setup" },
+];
+
+export const ADDONS: SiteAddon[] = [
+  {
+    key: "web_chat",
+    group: "channels",
+    name: "Website chatbot",
+    price: "$29 / mo",
+    summary: "Your agent as a chat bubble on your site. 1,000 chats / mo.",
+    note: "In the Chat agent plan",
+  },
+  { key: "whatsapp", group: "channels", name: "WhatsApp bot", price: "$49 / mo", summary: "Customers chat and book on WhatsApp. 300 chats / mo." },
+  { key: "messenger", group: "channels", name: "Messenger bot", price: "$29 / mo", summary: "Answers your Facebook Page messages. 1,000 chats / mo." },
+  { key: "minutes", group: "capacity", name: "Extra 100 minutes", price: "$25 / mo", summary: "More call minutes every month.", note: "Voice plans" },
+  { key: "sms", group: "capacity", name: "Extra 500 texts", price: "$10 / mo", summary: "More SMS confirmations and reminders." },
+  { key: "number", group: "capacity", name: "Extra phone number", price: "$5 / mo", summary: "Another line for a branch or campaign.", note: "Voice plans" },
+  {
+    key: "google_calendar",
+    group: "extras",
+    name: "Two-way Google Calendar",
+    price: "$9 / mo",
+    summary: "Bookings sync both ways with Google.",
+    note: "Included in Growth & Pro",
+  },
+  { key: "extra_language", group: "extras", name: "Extra language", price: "$19 / mo", summary: "Serve customers in a second language. Bangla today." },
+  {
+    key: "recording_retention",
+    group: "extras",
+    name: "12-month recordings",
+    price: "$10 / mo",
+    summary: "Keep call recordings for a year.",
+    note: "Included in Pro",
+  },
+  { key: "setup", group: "extras", name: "Done-for-you setup", price: "$299 once", summary: "We load your catalog, script and number." },
+];
 
 export const COMPARISON = [
   {
@@ -528,14 +595,14 @@ export const COMPARISON = [
     option: "Developer voice platforms",
     cost: "$0.07–$0.31 / minute",
     unit: "plus engineering",
-    detail: "You build the flows, booking logic, telephony and safety rules yourself — and maintain them.",
+    detail: "You build and maintain the flows, booking logic, telephony and safety rules yourself.",
     ours: false,
   },
   {
     option: `${BRAND.name} Growth`,
     cost: "≈ $0.25 / minute",
     unit: "$149 for 600 minutes",
-    detail: "Ready-made agent that answers 24/7, books into your records and calls back.",
+    detail: "A ready-made agent that answers 24/7, books into your records and calls back.",
     ours: true,
   },
 ] as const;
@@ -550,19 +617,23 @@ export type Faq = { q: string; a: string };
 export const HOME_FAQS: Faq[] = [
   {
     q: "Where does the agent get its answers?",
-    a: "Only from what you give it: your doctor, listing or service catalog and your knowledge base. If a caller asks something that isn't covered, the agent says it doesn't know, offers to take a message or transfers the call — it doesn't make things up.",
+    a: "Only from what you give it: your catalog and your knowledge base. If something isn't covered, it says so, takes a message or transfers the call. It doesn't make things up.",
   },
   {
     q: "Can I keep my existing phone number?",
-    a: "Yes. You get a real number for your agent; forward your existing line to it around the clock, after hours only, or when your team doesn't pick up.",
+    a: "Yes. Forward your line to your agent's number around the clock, after hours only, or when your team doesn't pick up.",
+  },
+  {
+    q: "Can it answer chats as well as calls?",
+    a: "Yes. Add the website chatbot ($29/mo), WhatsApp ($49/mo) or Messenger ($29/mo) to any voice plan. Only need website chat? The Chat agent plan is $29 a month.",
   },
   {
     q: "Where do bookings go?",
-    a: "Straight into your records in the portal — appointments, viewings or service visits — with double-booking protection. On Growth and above, webhooks push every booking and outcome into your own systems.",
+    a: "Straight into your records in the portal, with double-booking protection. On Growth and Pro, webhooks also push them into your own systems.",
   },
   {
     q: "What happens when a caller needs a real person?",
-    a: "On Growth and above the agent transfers the call live to your team. Otherwise it takes the details and marks the call for follow-up so nobody slips through.",
+    a: "On Growth and Pro the agent transfers the call live to your team. Otherwise it takes the details and flags the call for follow-up.",
   },
   {
     q: "Which languages does it speak?",
@@ -570,50 +641,58 @@ export const HOME_FAQS: Faq[] = [
   },
   {
     q: "How much work is setup?",
-    a: "Add your doctors, listings or services, paste your FAQs, and test in the browser. Prefer not to? Our done-for-you setup loads your catalog, script and number for a one-time $299.",
+    a: "Add your doctors, listings or services, paste your FAQs and test in the browser. Or let us do it: done-for-you setup is $299 once.",
   },
   {
     q: "Is there a free trial?",
-    a: `Yes — ${TRIAL.days} days with ${TRIAL.minutes} call minutes, the browser test console and the website chat widget included.`,
+    a: `Yes: ${TRIAL.days} days with ${TRIAL.minutes} call minutes, ${TRIAL.texts} texts and every channel switched on.`,
   },
 ];
 
 export const PRICING_FAQS: Faq[] = [
   {
-    q: "What counts as a call minute?",
-    a: "Connected call time — the time a caller is actually on the line with your agent. Inbound and outbound minutes come from the same pool.",
+    q: "Do voice plans include website chat?",
+    a: "No. Voice plans cover your phone line. Add the website chatbot for $29 a month (1,000 chats), or choose the Chat agent plan if chat is all you need.",
   },
   {
-    q: "What counts as a website chat?",
-    a: "A conversation in which the visitor wrote at least one message. Opening the chat bubble and closing it again doesn't count.",
+    q: "What counts as a call minute?",
+    a: "Connected call time: the time a caller is on the line with your agent. Inbound and outbound minutes come from the same pool.",
   },
   {
     q: "What happens if I go over my minutes?",
-    a: "Your agent keeps answering. Extra minutes are billed per minute at your plan's overage rate: $0.30 on Starter, $0.22 on Growth, $0.16 on Pro.",
+    a: "Your agent keeps answering. Extra minutes are billed at your plan's rate: $0.30 on Starter, $0.22 on Growth, $0.16 on Pro. On Starter, a 100-minute add-on ($25/mo) works out cheaper.",
+  },
+  {
+    q: "What counts as a chat?",
+    a: "A conversation in which the customer sent at least one message, on your website, WhatsApp or Messenger. Chats on every channel share one monthly allowance.",
+  },
+  {
+    q: "What do WhatsApp and Messenger cost?",
+    a: "The WhatsApp bot is $49 a month with 300 chats; the Messenger bot is $29 with 1,000 chats. Any WhatsApp fees Meta charges are passed through at cost.",
   },
   {
     q: "Are text messages included?",
-    a: "Yes. Every plan includes SMS confirmations and reminders: 100 a month on Starter, 500 on Growth and 2,000 on Pro. Extra texts are $10 per 500. A long message can use more than one text.",
+    a: "Yes. SMS confirmations and reminders: 100 a month on Chat agent and Starter, 500 on Growth, 2,000 on Pro. Extra texts are $10 per 500 a month. A long message can use more than one text.",
+  },
+  {
+    q: "How do add-ons work?",
+    a: "Request one in your portal and we switch it on for your account. Monthly add-ons are billed with your plan, and you can drop them anytime.",
   },
   {
     q: "Which calendars do you work with?",
-    a: "Google Calendar connects both ways on Growth and Pro: bookings appear instantly and your busy times are never offered. Outlook, Apple and any other calendar can subscribe to your private booking feed and share their busy times through an iCal link.",
+    a: "Two-way Google Calendar is included in Growth and Pro, and $9 a month on other plans. Outlook, Apple and other calendars subscribe to your private booking feed and share busy times through an iCal link.",
   },
   {
     q: "Do international calls cost more?",
-    a: "Outbound calls to international numbers can use more than one included minute per minute on expensive routes. If you call abroad often, talk to sales about volume rates.",
+    a: "Outbound calls on expensive international routes can use more than one included minute per minute. If you call abroad often, ask sales about volume rates.",
   },
   {
-    q: "How does annual billing work?",
-    a: "Pay for 10 months and get 12 — two months free. The monthly equivalent is shown when you switch the toggle to Annual.",
-  },
-  {
-    q: "Can I cancel anytime?",
-    a: "Yes. Monthly plans have no long-term contract — cancel whenever you like.",
+    q: "Can I cancel, or pay yearly?",
+    a: "Monthly plans have no contract; cancel anytime. Pay yearly and you get 12 months for the price of 10.",
   },
   {
     q: "What's included in the free trial?",
-    a: `${TRIAL.days} days and ${TRIAL.minutes} call minutes with every agent unlocked, the browser test console, the website chat widget and 50 texts.`,
+    a: `${TRIAL.days} days, ${TRIAL.minutes} call minutes and ${TRIAL.texts} texts, with every channel and feature switched on, plus the browser test console.`,
   },
 ];
 
@@ -636,6 +715,7 @@ export const MONTHLY_CALLS = [
 
 export const INTERESTS = [
   { value: "trial", label: `${TRIAL.days}-day free trial` },
+  { value: "chat", label: "Chat agent plan" },
   { value: "starter", label: "Starter plan" },
   { value: "growth", label: "Growth plan" },
   { value: "pro", label: "Pro plan" },

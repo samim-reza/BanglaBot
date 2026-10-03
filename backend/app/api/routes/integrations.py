@@ -12,7 +12,9 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_merchant
+from app.core.addons import entitlements
 from app.core.config import get_settings
+from app.core.plans import FEATURE_GOOGLE_CALENDAR
 from app.db.session import get_db
 from app.models import CatalogItem, Merchant, Message, Order
 from app.services import calendar_service, sms_service
@@ -91,6 +93,7 @@ async def _summary(request: Request, merchant: Merchant, db: AsyncSession) -> di
             "items": items,
             "google": {
                 "available": calendar_service.google_available(),
+                "included": entitlements(merchant).has_feature(FEATURE_GOOGLE_CALENDAR),
                 "connected": bool(google.get("refresh_token_enc")),
                 "email": google.get("email", ""),
                 "calendar_id": google.get("calendar_id", "primary"),
@@ -274,12 +277,14 @@ async def item_calendar(
 async def google_connect(merchant: Merchant = Depends(get_current_merchant)):
     if not calendar_service.google_available():
         raise HTTPException(status_code=503, detail="Google Calendar is not set up on this server (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET)")
+    if not entitlements(merchant).has_feature(FEATURE_GOOGLE_CALENDAR):
+        raise HTTPException(status_code=403, detail="Two-way Google Calendar is on Growth and Pro, or as an add-on")
     return {"url": calendar_service.auth_url(merchant.id)}
 
 
 def _portal(status: str) -> RedirectResponse:
     origin = (get_settings().frontend_origin.split(",")[0] or "http://localhost:3000").strip().rstrip("/")
-    return RedirectResponse(f"{origin}/addons?google={status}#calendar", status_code=302)
+    return RedirectResponse(f"{origin}/settings?tab=calendar&google={status}", status_code=302)
 
 
 @router.get("/google/callback")

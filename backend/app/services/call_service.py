@@ -17,8 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from twilio.base.exceptions import TwilioRestException
 from twilio.rest import Client as TwilioClient
 
+from app.core.addons import entitlements
 from app.core.config import get_settings
 from app.core.datetime_utils import utcnow
+from app.core.plans import CHANNEL_VOICE
 from app.core.regions import Region, normalize_phone, region_of
 from app.db.session import AsyncSessionLocal
 from app.flows.base import OUTCOME_STATUS, OUTCOME_VOICEMAIL, UNANSWERED_OUTCOMES, CommitAction, CommitResult
@@ -70,8 +72,15 @@ def twilio_client() -> TwilioClient:
 
 
 # ------------------------------------------------------------- outbound
+def require_voice(merchant: Merchant) -> None:
+    """Phone calls need a voice plan (a chat-only plan has no phone agent)."""
+    if not entitlements(merchant).has_channel(CHANNEL_VOICE):
+        raise HTTPException(status_code=403, detail="Phone calls aren't in your plan — upgrade to a voice plan")
+
+
 async def start_outbound_call(db: AsyncSession, order: Order, merchant: Merchant) -> CallLog:
     settings = get_settings()
+    require_voice(merchant)
     if order.status == OrderStatus.calling:
         raise HTTPException(status_code=409, detail="A call is already in progress for this record")
     if order.status in (OrderStatus.confirmed, OrderStatus.cancelled) and order.kind == "order":
@@ -221,6 +230,9 @@ async def answer_inbound_call(db: AsyncSession, *, to_number: str, from_number: 
     if merchant is None:
         await logger.awarning("inbound_call_unrouted", to=to_number, call_sid=call_sid)
         return say_twiml("Sorry, this number is not in service.")
+    if not entitlements(merchant).has_channel(CHANNEL_VOICE):
+        await logger.ainfo("inbound_call_not_entitled", merchant=merchant.id, call_sid=call_sid)
+        return say_twiml("Sorry, this line is not taking calls right now.")
     flow = flow_for(merchant, DIRECTION_INBOUND)
     log = CallLog(
         order_id=None,

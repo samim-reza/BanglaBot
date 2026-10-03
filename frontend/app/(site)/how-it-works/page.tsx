@@ -25,11 +25,11 @@ import { SALES_HREF, TRIAL_HREF } from "@/lib/site-content";
 export const metadata: Metadata = {
   title: "How it works",
   description:
-    "Pick your business type, add your doctors, listings or services, test the agent in your browser, then go live on your phone number and website. Here's what happens on every call.",
+    "Pick your business type, add your doctors, listings or services, test the agent in your browser, then go live. Here's what happens on every call.",
 };
 
 const PIPELINE = [
-  { icon: Mic, title: "Caller speaks", body: "On your number, or typed in the website chat." },
+  { icon: Mic, title: "Caller speaks", body: "On your number, or typed in a chat." },
   { icon: AudioLines, title: "Speech becomes text", body: "The caller's words are transcribed in the account's language." },
   { icon: BookOpen, title: "One AI turn, your data", body: "The next step is decided against your catalog, knowledge and schedule." },
   { icon: Volume2, title: "Reply is spoken", body: "Scripted lines play from a voice cache; the rest is synthesised." },
@@ -131,7 +131,7 @@ export default function HowItWorksPage() {
             <ul className="mt-6 space-y-2.5 text-sm">
               {[
                 "Browser test calls — no phone or number needed",
-                "Chat tests with the same agent as the website widget",
+                "Chat tests with the same agent your chat channels use",
                 "Every test transcribed with its outcome",
               ].map((item) => (
                 <li key={item} className="flex gap-2.5 text-foreground">

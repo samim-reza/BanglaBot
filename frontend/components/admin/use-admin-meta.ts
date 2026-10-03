@@ -3,7 +3,17 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { t } from "@/lib/vertical";
-import { adminApi, formatApiError, type AdminMeta, type Merchant, type Plan, type Region, type VerticalSpec } from "@/services/api";
+import {
+  adminApi,
+  formatApiError,
+  publicApi,
+  type AddonItem,
+  type AdminMeta,
+  type Merchant,
+  type Plan,
+  type Region,
+  type VerticalSpec,
+} from "@/services/api";
 
 /**
  * Form choices (business engines, regions, plans, languages) are static per
@@ -44,6 +54,39 @@ export function useAdminMeta() {
   }, []);
 
   return { meta, error };
+}
+
+/** The add-on catalog (static per deploy, like meta), from the public catalog endpoint. */
+let addonsPromise: Promise<AddonItem[]> | null = null;
+
+function loadAddons(): Promise<AddonItem[]> {
+  if (!addonsPromise) {
+    addonsPromise = publicApi
+      .catalog()
+      .then((catalog) => catalog.addons ?? [])
+      .catch((err) => {
+        addonsPromise = null;
+        throw err;
+      });
+  }
+  return addonsPromise;
+}
+
+export function useAddonCatalog() {
+  const [addons, setAddons] = useState<AddonItem[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAddons()
+      .then((data) => !cancelled && setAddons(data))
+      .catch((err) => !cancelled && setError(formatApiError(err, "Could not load the add-on catalog.")));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return { addons, error };
 }
 
 /** Every account, for filters and look-ups. Reloads on each mount (accounts change). */

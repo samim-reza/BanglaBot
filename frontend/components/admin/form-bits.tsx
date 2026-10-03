@@ -114,6 +114,39 @@ export function Switch({
   );
 }
 
+/** A bare on/off switch for list rows; `label` is announced but not shown. */
+export function MiniSwitch({
+  checked,
+  onChange,
+  label,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  label: string;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50",
+        checked ? "bg-primary" : "bg-border",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cn("inline-block h-5 w-5 rounded-full bg-white shadow transition-transform", checked ? "translate-x-[22px]" : "translate-x-0.5")}
+      />
+    </button>
+  );
+}
+
 /** After a failed submit, move focus to the first field marked invalid in the form. */
 export function focusFirstInvalid(formId: string) {
   window.requestAnimationFrame(() => {

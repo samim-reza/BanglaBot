@@ -1,6 +1,20 @@
 "use client";
 
-import { Bot, Clock3, Languages, MessageSquare, UserRound } from "lucide-react";
+import {
+  Bot,
+  Clock3,
+  Globe,
+  Languages,
+  MessageCircle,
+  MessageCircleMore,
+  MessageSquare,
+  MonitorSmartphone,
+  Phone,
+  PhoneIncoming,
+  PhoneOutgoing,
+  UserRound,
+  type LucideIcon,
+} from "lucide-react";
 
 import { RecordingPlayer, type RecordingLoader } from "@/components/recording-player";
 import { ChannelBadge, OutcomeBadge } from "@/components/status-badge";
@@ -10,10 +24,38 @@ import { formatInZone } from "@/lib/vertical";
 import type { CallLog } from "@/services/api";
 
 /** Text channels (no audio, no meaningful duration). */
-export const CHAT_CHANNELS = new Set(["widget", "chat"]);
+export const CHAT_CHANNELS = new Set(["widget", "chat", "whatsapp", "messenger"]);
 
 export function isChatLog(log: Pick<CallLog, "direction">): boolean {
   return CHAT_CHANNELS.has(log.direction);
+}
+
+const CHANNEL_ICONS: Record<string, LucideIcon> = {
+  inbound: PhoneIncoming,
+  outbound: PhoneOutgoing,
+  widget: Globe,
+  web: MonitorSmartphone,
+  chat: MessageSquare,
+  whatsapp: MessageCircle,
+  messenger: MessageCircleMore,
+};
+
+/** Icon for a call / chat channel (inbound, outbound, website chat, WhatsApp, Messenger, tests). */
+export function channelIcon(direction: string | null | undefined): LucideIcon {
+  return CHANNEL_ICONS[direction ?? ""] ?? Phone;
+}
+
+const ANONYMOUS: Record<string, string> = {
+  widget: "Website visitor",
+  whatsapp: "WhatsApp user",
+  messenger: "Messenger user",
+  web: "Test",
+  chat: "Test",
+};
+
+/** Who the conversation was with: the record's customer, the number, or the channel's visitor. */
+export function callerName(log: Pick<CallLog, "direction" | "caller_number" | "customer_name">): string {
+  return log.customer_name || log.caller_number || ANONYMOUS[log.direction] || "Unknown caller";
 }
 
 type Turn = { role: "agent" | "customer" | "note"; text: string };
@@ -113,7 +155,7 @@ export function CallLogList({
   logs,
   withRecordings = true,
   timezone,
-  emptyText = "No calls or chats about this record yet.",
+  emptyText = "No calls or chats yet.",
   loadRecording,
 }: {
   logs: CallLog[];

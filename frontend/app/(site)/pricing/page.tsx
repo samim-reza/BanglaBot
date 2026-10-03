@@ -11,7 +11,7 @@ import { PRICING_FAQS, TRIAL } from "@/lib/site-content";
 
 export const metadata: Metadata = {
   title: "Pricing",
-  description: `Plans from $49 a month with call minutes and website chats included. ${TRIAL.days}-day free trial with ${TRIAL.minutes} minutes, annual billing with 2 months free, and an ROI calculator.`,
+  description: `Voice agent plans from $49 a month, or a website chat agent for $29. Add WhatsApp, Messenger, extra minutes and more. ${TRIAL.days}-day free trial, annual billing with 2 months free.`,
 };
 
 export default function PricingPage() {
@@ -19,25 +19,20 @@ export default function PricingPage() {
     <>
       <PageHero
         eyebrow="Pricing"
-        title="Pay for minutes, not headcount"
-        subtitle="Every plan includes your agent on the phone and in website chat, recordings and transcripts, and the browser test console. Inbound and outbound minutes share one pool."
+        title="Pick a plan, add what you need"
+        subtitle="A voice agent for your phone line, or a chat agent for your website. Add channels and capacity whenever you need them."
       />
 
       <Section labelledBy="plans-title" className="pt-12 sm:pt-14">
         <h2 id="plans-title" className="sr-only">
           Plans
         </h2>
-        <PricingPlans />
+        <PricingPlans addonsHref="#addons" />
       </Section>
 
-      <Section tone="muted" labelledBy="addons-title">
-        <SectionHeading
-          id="addons-title"
-          eyebrow="Add-ons"
-          title="Add only what you need"
-          subtitle="Available on any plan, billed monthly unless stated."
-        />
-        <div className="mx-auto mt-10 max-w-4xl">
+      <Section id="addons" tone="muted" labelledBy="addons-title">
+        <SectionHeading id="addons-title" eyebrow="Add-ons" title="Add what you need" subtitle="On top of any plan. Monthly unless marked once." />
+        <div className="mt-10">
           <AddonList />
         </div>
       </Section>
@@ -47,7 +42,7 @@ export default function PricingPage() {
           id="compare-title"
           eyebrow="Compare"
           title="What answering the phone costs today"
-          subtitle="Growth covers 600 minutes for $149 — about $0.25 a minute, answering 24/7, with booking and call-backs built in."
+          subtitle="Growth covers 600 minutes for $149: about $0.25 a minute, answering 24/7, with booking and call-backs built in."
         />
         <div className="mt-12">
           <Comparison />
@@ -59,7 +54,7 @@ export default function PricingPage() {
           id="roi-title"
           eyebrow="ROI calculator"
           title="What are missed calls costing you?"
-          subtitle="Plug in your own numbers. Every step of the math is shown — no hidden multipliers."
+          subtitle="Plug in your own numbers. Every step of the math is shown."
         />
         <div className="mx-auto mt-12 max-w-5xl">
           <RoiCalculator />
@@ -75,7 +70,7 @@ export default function PricingPage() {
 
       <CtaBand
         title="Try it on your own calls first"
-        subtitle={`${TRIAL.days} days, ${TRIAL.minutes} call minutes, every agent unlocked. Or talk to sales about volume pricing.`}
+        subtitle={`${TRIAL.days} days, ${TRIAL.minutes} call minutes, every channel switched on. Or talk to sales about volume pricing.`}
       />
     </>
   );

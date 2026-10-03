@@ -51,11 +51,12 @@ export default function RecordDetailPage() {
   const id = params.id;
   const router = useRouter();
   const toast = useAppToast();
-  const { vertical, merchant } = useWorkspace();
+  const { vertical, merchant, entitlements } = useWorkspace();
   const timezone = merchant.timezone;
   const singular = t(vertical.record_label, "Record");
   const plural = t(vertical.record_label_plural, "Records");
-  const canCall = vertical.directions.includes("outbound");
+  // Outbound calls need a voice plan.
+  const canCall = vertical.directions.includes("outbound") && entitlements.channels.includes("voice");
   const callName = t(vertical.outbound_label, "Call");
   const specs = vertical.record_fields;
 
@@ -266,8 +267,8 @@ export default function RecordDetailPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Collected on the call</CardTitle>
-              <CardDescription>What the customer told your agent on the most recent call or chat.</CardDescription>
+              <CardTitle>Collected by the agent</CardTitle>
+              <CardDescription>From the latest call or chat.</CardDescription>
             </CardHeader>
             <CardContent>
               {flowEntries.length ? (
@@ -281,7 +282,7 @@ export default function RecordDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle>Status</CardTitle>
-              <CardDescription>Your agent sets this after each call. Change it by hand when you settle things yourself.</CardDescription>
+              <CardDescription>Set by your agent; change it anytime.</CardDescription>
             </CardHeader>
             <CardContent>
               <label className="flex flex-col gap-1.5 text-sm sm:max-w-xs">
@@ -302,7 +303,7 @@ export default function RecordDetailPage() {
                     </option>
                   ))}
                 </Select>
-                {order.status === "calling" && <span className="text-xs text-muted-foreground">A call is in progress; the status updates when it ends.</span>}
+                {order.status === "calling" && <span className="text-xs text-muted-foreground">Call in progress.</span>}
               </label>
             </CardContent>
           </Card>
@@ -312,7 +313,7 @@ export default function RecordDetailPage() {
               <CardTitle>Delete {singular.toLowerCase()}</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">Removes this {singular.toLowerCase()} permanently. Its calls and chats stay in your log.</p>
+              <p className="text-sm text-muted-foreground">Its calls and chats stay in your log.</p>
               <Button variant="destructive" size="sm" onClick={() => void remove()} disabled={busy || order.status === "calling"}>
                 <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                 Delete
@@ -325,10 +326,9 @@ export default function RecordDetailPage() {
           <Card className="h-fit">
             <CardHeader>
               <CardTitle>Calls &amp; chats</CardTitle>
-              <CardDescription>Every conversation about this {singular.toLowerCase()}, newest first.</CardDescription>
             </CardHeader>
             <CardContent>
-              <CallLogList logs={order.call_logs ?? []} timezone={timezone} emptyText={`No calls or chats about this ${singular.toLowerCase()} yet.`} />
+              <CallLogList logs={order.call_logs ?? []} timezone={timezone} />
             </CardContent>
           </Card>
           <RecordSmsCard

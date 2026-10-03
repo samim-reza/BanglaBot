@@ -12,10 +12,12 @@ import {
   LogOut,
   Menu,
   MessagesSquare,
+  Puzzle,
   X,
   type LucideIcon,
 } from "lucide-react";
 
+import { ADDON_REQUESTS_CHANGED_EVENT } from "@/components/admin/addon-requests";
 import { useAppToast } from "@/components/app-toast";
 import { BanglaBotBrand, BanglaBotMark } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -23,11 +25,12 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { adminApi, adminToken, clearAdminSession } from "@/services/api";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; badge?: "inquiries" };
+type NavItem = { href: string; label: string; icon: LucideIcon; badge?: "inquiries" | "requests" };
 
 const NAV: NavItem[] = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/merchants", label: "Accounts", icon: Building2 },
+  { href: "/admin/requests", label: "Add-on requests", icon: Puzzle, badge: "requests" },
   { href: "/admin/orders", label: "Records", icon: ClipboardList },
   { href: "/admin/calls", label: "Calls & chats", icon: MessagesSquare },
   { href: "/admin/inquiries", label: "Sales inquiries", icon: Inbox, badge: "inquiries" },
@@ -96,12 +99,43 @@ function useNewInquiries(enabled: boolean, pathname: string): number {
   return enabled ? count : 0;
 }
 
-function NavList({ pathname, newInquiries, onNavigate }: { pathname: string; newInquiries: number; onNavigate?: () => void }) {
+/** Pending add-on requests for the nav badge; refreshed on navigation and after approve / decline. */
+function usePendingRequests(enabled: boolean, pathname: string): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    if (!enabled || !adminToken()) return;
+    let cancelled = false;
+    const load = () =>
+      adminApi
+        .addonRequests("pending")
+        .then((result) => !cancelled && setCount(result.items.length))
+        .catch(() => undefined);
+    void load();
+    window.addEventListener(ADDON_REQUESTS_CHANGED_EVENT, load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(ADDON_REQUESTS_CHANGED_EVENT, load);
+    };
+  }, [enabled, pathname]);
+  return enabled ? count : 0;
+}
+
+function NavList({
+  pathname,
+  newInquiries,
+  pendingRequests,
+  onNavigate,
+}: {
+  pathname: string;
+  newInquiries: number;
+  pendingRequests: number;
+  onNavigate?: () => void;
+}) {
   return (
     <nav aria-label="Admin console" className="flex flex-col gap-1">
       {NAV.map((item) => {
         const active = item.href === "/admin" ? pathname === "/admin" : pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const count = item.badge === "inquiries" ? newInquiries : 0;
+        const count = item.badge === "inquiries" ? newInquiries : item.badge === "requests" ? pendingRequests : 0;
         return (
           <Link
             key={item.href}
@@ -118,7 +152,7 @@ function NavList({ pathname, newInquiries, onNavigate }: { pathname: string; new
             {count > 0 && (
               <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold leading-none text-primary-foreground">
                 {count > 99 ? "99+" : count}
-                <span className="sr-only"> new</span>
+                <span className="sr-only">{item.badge === "requests" ? " pending" : " new"}</span>
               </span>
             )}
           </Link>
@@ -152,6 +186,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   const isLogin = pathname.startsWith("/admin/login");
   const [menuOpen, setMenuOpen] = useState(false);
   const newInquiries = useNewInquiries(!isLogin, pathname);
+  const pendingRequests = usePendingRequests(!isLogin, pathname);
 
   useEffect(() => setMenuOpen(false), [pathname]);
 
@@ -217,7 +252,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <aside className="hidden w-60 shrink-0 border-r border-border bg-card lg:block">
             <div className="sticky top-[57px] flex h-[calc(100vh-57px)] flex-col overflow-y-auto p-3">
               <p className="mb-2 px-3 text-[12px] font-semibold text-muted-foreground">Console</p>
-              <NavList pathname={pathname} newInquiries={newInquiries} />
+              <NavList pathname={pathname} newInquiries={newInquiries} pendingRequests={pendingRequests} />
               <div className="mt-auto border-t border-border pt-3">
                 <WebsiteLink />
               </div>
@@ -252,7 +287,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <div className="flex flex-1 flex-col overflow-y-auto p-3">
-              <NavList pathname={pathname} newInquiries={newInquiries} onNavigate={() => setMenuOpen(false)} />
+              <NavList pathname={pathname} newInquiries={newInquiries} pendingRequests={pendingRequests} onNavigate={() => setMenuOpen(false)} />
               <div className="mt-auto border-t border-border pt-3">
                 <WebsiteLink onNavigate={() => setMenuOpen(false)} />
               </div>

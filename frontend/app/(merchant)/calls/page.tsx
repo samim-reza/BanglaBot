@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { ChevronDown, ExternalLink, Globe, MessageSquare, MonitorSmartphone, PhoneIncoming, PhoneOutgoing, type LucideIcon } from "lucide-react";
+import { ChevronDown, ExternalLink } from "lucide-react";
 
 import { ApiError } from "@/components/api-error";
-import { CallTechStats, ConversationTranscript, conversationLength } from "@/components/call-log-list";
+import { CallTechStats, ConversationTranscript, callerName, channelIcon, conversationLength } from "@/components/call-log-list";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { Pagination } from "@/components/pagination";
 import { RecordingPlayer } from "@/components/recording-player";
@@ -15,26 +15,21 @@ import { languageLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { channelLabel, formatInZone, outcomeLabel, t } from "@/lib/vertical";
 import { useWorkspace } from "@/lib/workspace";
-import { callsApi, formatApiError, type CallChannel, type CallLog } from "@/services/api";
+import { callsApi, formatApiError, type CallChannel, type CallLog, type ChannelKey } from "@/services/api";
 
 const PAGE_SIZE = 20;
 
-const CHANNELS: { value: CallChannel | ""; label: string }[] = [
+/** Filter chips; `channel` = the plan channel the chip needs (tests are always shown). */
+const CHANNELS: { value: CallChannel | ""; label: string; channel?: ChannelKey }[] = [
   { value: "", label: "All" },
-  { value: "inbound", label: "Inbound calls" },
-  { value: "outbound", label: "Outbound calls" },
-  { value: "widget", label: "Website chat" },
+  { value: "inbound", label: "Inbound calls", channel: "voice" },
+  { value: "outbound", label: "Outbound calls", channel: "voice" },
+  { value: "widget", label: "Website chat", channel: "web_chat" },
+  { value: "whatsapp", label: "WhatsApp", channel: "whatsapp" },
+  { value: "messenger", label: "Messenger", channel: "messenger" },
   { value: "web", label: "Browser tests" },
   { value: "chat", label: "Chat tests" },
 ];
-
-const CHANNEL_ICONS: Record<string, LucideIcon> = {
-  inbound: PhoneIncoming,
-  outbound: PhoneOutgoing,
-  widget: Globe,
-  web: MonitorSmartphone,
-  chat: MessageSquare,
-};
 
 /** Outcomes the agent records, for the filter (labels come from the shared helper). */
 const OUTCOMES = [
@@ -55,17 +50,9 @@ const OUTCOMES = [
   "auto_dropped",
 ];
 
-function who(log: CallLog): string {
-  if (log.customer_name) return log.customer_name;
-  if (log.caller_number) return log.caller_number;
-  if (log.direction === "widget") return "Website visitor";
-  if (log.direction === "web" || log.direction === "chat") return "Test";
-  return "Unknown caller";
-}
-
 function CallRow({ log, timezone, recordLabel }: { log: CallLog; timezone: string; recordLabel: string }) {
   const [open, setOpen] = useState(false);
-  const Icon = CHANNEL_ICONS[log.direction] ?? PhoneIncoming;
+  const Icon = channelIcon(log.direction);
   const panelId = `call-${log.id}`;
   return (
     <li className="rounded-lg border border-border bg-card">
@@ -81,7 +68,7 @@ function CallRow({ log, timezone, recordLabel }: { log: CallLog; timezone: strin
         </span>
         <span className="grid min-w-0 flex-1 gap-1 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center sm:gap-4">
           <span className="min-w-0">
-            <span className="block truncate text-sm font-medium">{who(log)}</span>
+            <span className="block truncate text-sm font-medium">{callerName(log)}</span>
             <span className="block truncate text-xs text-muted-foreground">
               {channelLabel(log.direction)}
               {log.customer_name && log.caller_number ? ` · ${log.caller_number}` : ""}
@@ -120,7 +107,7 @@ function CallRow({ log, timezone, recordLabel }: { log: CallLog; timezone: strin
 }
 
 export default function CallsPage() {
-  const { vertical, merchant } = useWorkspace();
+  const { vertical, merchant, entitlements } = useWorkspace();
   const recordLabel = t(vertical.record_label, "Record");
   const [items, setItems] = useState<CallLog[]>([]);
   const [total, setTotal] = useState(0);
@@ -148,15 +135,17 @@ export default function CallsPage() {
     void load();
   }, [load]);
 
-  // Phone channels the account doesn't run are hidden from the filter.
-  const channels = CHANNELS.filter(
-    (channel) => !(channel.value === "inbound" || channel.value === "outbound") || vertical.directions.includes(channel.value),
-  );
+  // Channels the account doesn't run are hidden from the filter (the selected one always stays).
+  const channels = CHANNELS.filter((channel) => {
+    if (channel.value === direction) return true;
+    if (channel.channel && !entitlements.channels.includes(channel.channel)) return false;
+    return !(channel.value === "inbound" || channel.value === "outbound") || vertical.directions.includes(channel.value);
+  });
   const filtered = Boolean(direction || outcome);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Calls & chats" subtitle="Every conversation your agent has had: phone calls, website chats and your own tests." />
+      <PageHeader title="Calls & chats" subtitle="Every conversation your agent has had." />
       <ApiError message={error} />
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -210,15 +199,21 @@ export default function CallsPage() {
         error ? null : (
           <EmptyState title={filtered ? "Nothing matches these filters" : "No calls or chats yet"}>
             {filtered ? (
-              "Try another channel or outcome."
+              <button
+                type="button"
+                className="font-medium text-primary-dark hover:underline"
+                onClick={() => {
+                  setDirection("");
+                  setOutcome("");
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </button>
             ) : (
-              <>
-                Conversations show up here as soon as your agent answers one.{" "}
-                <Link href="/test" className="font-medium text-primary-dark hover:underline">
-                  Test your agent
-                </Link>{" "}
-                to see your first.
-              </>
+              <Link href="/test" className="font-medium text-primary-dark hover:underline">
+                Test your agent
+              </Link>
             )}
           </EmptyState>
         )

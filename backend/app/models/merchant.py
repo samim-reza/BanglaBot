@@ -72,6 +72,10 @@ class Merchant(Base):
     calendar_token: Mapped[str] = mapped_column(String(48), default="", index=True)
     # {"busy_ics_urls": [...], "google": {"email", "calendar_id", "refresh_token_enc", ...}}
     calendar_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Add-ons on top of the plan: {"_v": 1, "<addon key>": quantity} (see app.core.addons).
+    addons: Mapped[dict] = mapped_column(JSONB, default=lambda: {"_v": 1})
+    # Chat channels: {"whatsapp": {"number"}, "messenger": {"page_id", "page_name", "token_enc"}}.
+    channel_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Scheduled "call everyone who needs a call" run (UTC); NULL = nothing scheduled.
     auto_call_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Re-arm the schedule for the same time the next day after it fires.
