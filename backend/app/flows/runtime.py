@@ -84,6 +84,13 @@ class FlowRuntime:
 
     def known_fields(self, fields: dict[str, Any] | None) -> dict[str, Any]:
         known = self.flow.slot_properties()
+        aliases = getattr(self.flow, "slot_aliases", None)
+        if callable(aliases) and fields:
+            # Small models invent obvious keys ("name" for customer_name): map them onto real slots.
+            fields = dict(fields)
+            for alias, target in aliases().items():
+                if alias in fields and alias not in known and target in known and target not in fields:
+                    fields[target] = fields.pop(alias)
         return {
             key: value
             for key, value in (fields or {}).items()
@@ -109,6 +116,12 @@ class FlowRuntime:
         if rejected:
             result["not_saved"] = rejected
         return result
+
+    def apply_internal(self, updates: dict[str, Any]) -> dict[str, Any]:
+        """Backend-computed slot updates (e.g. a skill tool's cart) — no schema filter, no normalize."""
+        self.slots.update(updates)
+        self.flow.on_saved(dict(updates), self.slots, self.ctx)
+        return self.advance(saved_keys=sorted(updates))
 
     def mark_decided(self, outcome: str) -> None:
         """A terminal fired: the decision slot is filled and the flow moves on."""

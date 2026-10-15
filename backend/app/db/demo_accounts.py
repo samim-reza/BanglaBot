@@ -8,6 +8,11 @@ region (America/New_York, USD, 911) with the website chat widget enabled.
     clinic / clinic123             doctor appointments              (CityCare Family Clinic)
     realestate / realestate123     real estate agency               (Keystone Realty)
     homeservice / homeservice123   home services                    (FixRight Home Services)
+    restaurant / restaurant123     restaurant (see demo_new_engines) (Luigi's Pizza Kitchen)
+    custom / custom123             custom business                   (Harbor Yoga Studio)
+    dental / dental123             dental practice (see demo_care_engines) (BrightSmile Dental)
+    vet / vet123                   veterinary clinic                 (Pawsitive Vet Clinic)
+    salon / salon123               salon & spa                       (Glow Studio)
 """
 
 from __future__ import annotations
@@ -317,8 +322,11 @@ async def seed_home_service(session: AsyncSession) -> str | None:
 
 
 async def seed_demo_accounts(session: AsyncSession) -> list[str]:
+    from app.db.demo_care_engines import CARE_SEEDS
+    from app.db.demo_new_engines import seed_custom, seed_restaurant
+
     created: list[str] = []
-    for seed in (seed_shop, seed_clinic, seed_real_estate, seed_home_service):
+    for seed in (seed_shop, seed_clinic, seed_real_estate, seed_home_service, seed_restaurant, seed_custom, *CARE_SEEDS.values()):
         username = await seed(session)
         if username:
             created.append(username)

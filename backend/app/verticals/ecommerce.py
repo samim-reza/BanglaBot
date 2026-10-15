@@ -26,7 +26,9 @@ from app.flows.base import (
 )
 from app.flows.context import CallContext
 from app.verticals.base import FieldSpec, L, Vertical
+from app.verticals.pipelines import pipeline_vertical
 from app.verticals.reception import ReceptionFlow
+from app.verticals.reception.blueprint import reception_blueprint
 from app.voice.languages import normalize_language, phrase, spoken_amount
 
 _DECISION_SLOT = "decision"
@@ -350,7 +352,8 @@ def _summary(record: Any, names: dict[str, str]) -> str:
     return f"{items} · {symbol}{amount}"
 
 
-ECOMMERCE = Vertical(
+#: Keyword arguments of the e-commerce :class:`Vertical` (everything but its flows).
+ECOMMERCE_SPEC: dict[str, Any] = dict(
     key="ecommerce",
     label=L("E-commerce order confirmation", "ই-কমার্স অর্ডার কনফার্মেশন"),
     description=L(
@@ -369,9 +372,16 @@ ECOMMERCE = Vertical(
         FieldSpec("address", L("Delivery address", "ডেলিভারি ঠিকানা"), "textarea"),
         FieldSpec("notes", L("Notes", "নোট"), "textarea"),
     ),
-    flows={"outbound": DEFAULT_FLOW, "inbound": ReceptionFlow(vertical="ecommerce")},
     outbound_label=L("Confirmation call", "কনফার্মেশন কল"),
     summarize=_summary,
+)
+
+# Outbound stays on the tuned COD-confirmation flow; inbound reception runs on the skill pipeline.
+ECOMMERCE: Vertical = pipeline_vertical(
+    ECOMMERCE_SPEC,
+    {"inbound": reception_blueprint("ecommerce")},
+    legacy_flows={"inbound": ReceptionFlow(vertical="ecommerce")},
+    fixed_flows={"outbound": DEFAULT_FLOW},
 )
 
 

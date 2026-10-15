@@ -1,9 +1,9 @@
 import { CalendarCheck, PhoneOutgoing } from "lucide-react";
 
 import { CallTranscript } from "@/components/site/call-transcript";
-import { AGENTS } from "@/lib/site-content";
+import { AGENTS, agentByKey } from "@/lib/site-content";
 
-const clinic = AGENTS[0];
+const clinic = agentByKey("clinic") ?? AGENTS[0];
 
 /** Hero illustration: a live booking call plus the record it writes. CSS only. */
 export function HeroVisual() {

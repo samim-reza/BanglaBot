@@ -25,7 +25,7 @@ import { SALES_HREF, TRIAL_HREF } from "@/lib/site-content";
 export const metadata: Metadata = {
   title: "How it works",
   description:
-    "Pick your business type, add your doctors, listings or services, test the agent in your browser, then go live. Here's what happens on every call.",
+    "Pick your business type, add your doctors, menu, services or listings, test the agent in your browser, then go live. Here's what happens on every call.",
 };
 
 const PIPELINE = [

@@ -1,10 +1,12 @@
 "use client";
 
-/** Where customers reach the agent: phone, website chat, WhatsApp and Messenger (locked ones link to their add-on). */
+/** Where customers reach the agent: phone, website chat, WhatsApp, Messenger, Instagram (locked ones link to their add-on). */
 
 import Link from "next/link";
-import { ArrowRight, MessageCircle, MessageCircleMore, MessageSquare, Phone } from "lucide-react";
+import { ArrowRight, Camera, MessageCircle, MessageCircleMore, MessageSquare, Phone } from "lucide-react";
 
+import { ChannelStates } from "@/components/channels/channel-states";
+import { MetaConnectSection } from "@/components/channels/meta-connect";
 import { PageHeader } from "@/components/page-header";
 import { LockedAddon, LockedCard, MessengerSection, WhatsAppSection, useChannelsView } from "@/components/portal/channel-sections";
 import { OutboundSection, PhoneLineSection, RecordingsSection } from "@/components/portal/phone-sections";
@@ -13,7 +15,7 @@ import { WidgetSection } from "@/components/portal/widget-section";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
-import type { ChannelKey } from "@/services/api";
+import { channelsApi, type ChannelKey } from "@/services/api";
 
 export default function ChannelsPage() {
   const { vertical, entitlements } = useWorkspace();
@@ -23,10 +25,13 @@ export default function ChannelsPage() {
   useHashTarget(true);
   const has = (channel: ChannelKey) => entitlements.channels.includes(channel);
   const outbound = vertical.directions.includes("outbound");
+  const instagramState = view?.status?.find((row) => row.channel === "instagram");
+  const showInstagram = has("instagram") || Boolean(instagramState && instagramState.state !== "unavailable");
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <PageHeader title="Channels" subtitle="Where customers reach your agent." />
+      {view?.status && <ChannelStates rows={view.status} />}
 
       {has("voice") ? (
         <>
@@ -60,7 +65,25 @@ export default function ChannelsPage() {
       )}
 
       {has("whatsapp") ? (
-        <WhatsAppSection view={view} />
+        <>
+          <WhatsAppSection view={view} />
+          {view?.whatsapp_cloud && (
+            <MetaConnectSection
+              id="whatsapp-cloud"
+              icon={MessageCircle}
+              title="Your WhatsApp number"
+              connected={view.whatsapp_cloud.connected}
+              summary={[view.whatsapp_cloud.name, view.whatsapp_cloud.display_number].filter(Boolean).join(" · ")}
+              idLabel="Phone number ID"
+              tokenLabel="Access token"
+              help="Meta Business → WhatsApp → API setup: copy the phone number ID and a permanent access token."
+              platformReady={view.platform.whatsapp_cloud_ready !== false}
+              connect={channelsApi.connectWhatsAppCloud}
+              disconnect={channelsApi.disconnectWhatsAppCloud}
+              onView={setView}
+            />
+          )}
+        </>
       ) : (
         <LockedAddon id="whatsapp" addonKey="whatsapp" icon={MessageCircle} title="WhatsApp" shop={shop} actions={actions} />
       )}
@@ -70,6 +93,26 @@ export default function ChannelsPage() {
       ) : (
         <LockedAddon id="messenger" addonKey="messenger" icon={MessageCircleMore} title="Messenger" shop={shop} actions={actions} />
       )}
+
+      {showInstagram &&
+        (has("instagram") && view?.instagram ? (
+          <MetaConnectSection
+            id="instagram"
+            icon={Camera}
+            title="Instagram"
+            connected={view.instagram.connected}
+            summary={view.instagram.username ? `@${view.instagram.username}` : ""}
+            idLabel="Instagram account ID"
+            tokenLabel="Page access token"
+            help="Link the Instagram professional account to your Facebook Page, then copy its account ID and the Page access token from your Meta app."
+            platformReady={view.platform.instagram_ready !== false}
+            connect={channelsApi.connectInstagram}
+            disconnect={channelsApi.disconnectInstagram}
+            onView={setView}
+          />
+        ) : !has("instagram") ? (
+          <LockedAddon id="instagram" addonKey={instagramState?.addon || "instagram"} icon={Camera} title="Instagram" shop={shop} actions={actions} />
+        ) : null)}
     </div>
   );
 }

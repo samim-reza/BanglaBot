@@ -14,12 +14,23 @@ from sqlalchemy.ext.asyncio import AsyncConnection
 
 from app.db.base import Base
 from app.db.session import engine
-from app.models import AddonRequest, CallLog, CatalogItem, Merchant, Message, Order, SalesInquiry
+from app.models import AddonRequest, AdminUser, AuditEvent, CallLog, CatalogItem, Merchant, Message, Order, SalesInquiry
+from app.models.payment import Payment
+from app.models.platform_setting import PlatformSetting
+from app.models.signup import Signup
+from app.models.subscription import Subscription
+from app.models.usage import UsageDaily, UsageEvent
 
 logger = structlog.get_logger(__name__)
 
 #: Importing the models registers their tables on ``Base.metadata`` for create_all.
-REGISTERED_MODELS = (Merchant, Order, CallLog, CatalogItem, SalesInquiry, Message, AddonRequest)
+REGISTERED_MODELS = (
+    Merchant, Order, CallLog, CatalogItem, SalesInquiry, Message, AddonRequest, AdminUser, AuditEvent,
+    # payments + finance (2026-10)
+    Payment, PlatformSetting, UsageEvent, UsageDaily,
+    # self-serve signup + subscriptions (2026-10)
+    Subscription, Signup,
+)
 
 SCHEMA_PATCHES: tuple[str, ...] = (
     # merchants
@@ -124,6 +135,12 @@ SCHEMA_PATCHES: tuple[str, ...] = (
     # --- Add-ons + chat channels (2026-10) ----------------------------------------------
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS addons JSONB NOT NULL DEFAULT '{}'::jsonb",
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS channel_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+    # Skill-pipeline call flows: owner settings, admin locks, per-account provider chains.
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS agent_flow JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS agent_flow_locks JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS provider_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+    # Commit idempotency: a retried booking write finds the first one (details->>'idem').
+    "CREATE INDEX IF NOT EXISTS ix_orders_idem ON orders ((details->>'idem')) WHERE details ? 'idem'",
     # Accounts from before add-ons existed keep the website chat they already had on.
     (
         "UPDATE merchants SET addons = CASE WHEN widget_enabled AND plan NOT IN ('trial', 'enterprise', 'chat') "
@@ -134,6 +151,29 @@ SCHEMA_PATCHES: tuple[str, ...] = (
     "CREATE INDEX IF NOT EXISTS ix_merchants_whatsapp ON merchants ((channel_settings->'whatsapp'->>'number'))",
     "CREATE INDEX IF NOT EXISTS ix_merchants_messenger ON merchants ((channel_settings->'messenger'->>'page_id'))",
     "CREATE INDEX IF NOT EXISTS ix_addon_requests_status ON addon_requests (status, created_at DESC)",
+    # --- Security hardening (2026-10): session revocation + secrets at rest ----------------
+    # (admin_users / audit_events are new tables: create_all builds them with their indexes.)
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS token_version INTEGER NOT NULL DEFAULT 0",
+    # Webhook secrets are stored Fernet-encrypted ("enc:..." is ~170 chars).
+    "ALTER TABLE merchants ALTER COLUMN webhook_secret TYPE VARCHAR(255)",
+    # Calendar feed tokens: looked up by a peppered hash, an encrypted copy shows the URL;
+    # the old plaintext column is upgraded lazily (first feed access / owner sign-in).
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS calendar_token_hash VARCHAR(64) NOT NULL DEFAULT ''",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS calendar_token_enc VARCHAR(255) NOT NULL DEFAULT ''",
+    "CREATE INDEX IF NOT EXISTS ix_merchants_calendar_token_hash ON merchants (calendar_token_hash)",
+    # --- Payments + finance (2026-10) ---------------------------------------------------------
+    # (payments / usage_events / usage_daily / platform_settings are new tables: create_all.)
+    # A booking's online payment: not_required | at_venue | pending | paid | failed | refunded | expired.
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status VARCHAR(16) NOT NULL DEFAULT 'not_required'",
+    # payments.id of the record's current link, and the link itself (shown in the portal record).
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_ref VARCHAR(64) NOT NULL DEFAULT ''",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_url TEXT NOT NULL DEFAULT ''",
+    # Owner payment settings: {"provider": "platform" | "link", "link_template", "methods"}.
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS payment_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+    # --- Self-serve signup + Meta channels (2026-10) -------------------------------------------
+    # (subscriptions / signups are new tables: create_all builds them with their indexes.)
+    "CREATE INDEX IF NOT EXISTS ix_merchants_instagram ON merchants ((channel_settings->'instagram'->>'account_id'))",
+    "CREATE INDEX IF NOT EXISTS ix_merchants_whatsapp_cloud ON merchants ((channel_settings->'whatsapp_cloud'->>'phone_number_id'))",
 )
 
 
@@ -150,5 +190,9 @@ async def create_schema() -> None:
 
 async def bootstrap() -> None:
     """Called from the app lifespan: schema and idempotent patches. No demo data in production —
-    accounts are created in the admin console (``scripts/create_merchant.py`` for the terminal)."""
+    accounts are created in the admin console (``scripts/create_merchant.py`` for the terminal).
+    The first superadmin is seeded from ADMIN_USERNAME / ADMIN_PASSWORD while admin_users is empty."""
     await create_schema()
+    from app.services.admin_user_service import seed_from_env
+
+    await seed_from_env()

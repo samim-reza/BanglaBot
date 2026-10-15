@@ -16,27 +16,28 @@ router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 
 
 @router.get("", response_model=list[CatalogItemOut])
-async def list_items(merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
-    return await catalog_service.list_items(db, merchant)
+async def list_items(kind: str | None = None, merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
+    """``?kind=`` picks one of the vertical's catalog kinds (a salon's services or staff); default the primary."""
+    return await catalog_service.list_items(db, merchant, kind)
 
 
 @router.post("", response_model=CatalogItemOut, status_code=201)
-async def create_item(data: CatalogItemIn, merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
-    return await catalog_service.create_item(db, merchant, data)
+async def create_item(data: CatalogItemIn, kind: str | None = None, merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
+    return await catalog_service.create_item(db, merchant, data, kind)
 
 
 @router.get("/template.csv", response_class=PlainTextResponse)
-async def template(merchant: Merchant = Depends(get_current_merchant)):
+async def template(kind: str | None = None, merchant: Merchant = Depends(get_current_merchant)):
     return PlainTextResponse(
-        catalog_service.csv_template(merchant),
+        catalog_service.csv_template(merchant, kind),
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="catalog-template.csv"'},
     )
 
 
 @router.post("/import", response_model=CatalogImportResult)
-async def import_csv(data: CatalogImport, merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
-    return await catalog_service.import_csv(db, merchant, data.csv, replace=data.replace)
+async def import_csv(data: CatalogImport, kind: str | None = None, merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
+    return await catalog_service.import_csv(db, merchant, data.csv, replace=data.replace, kind=kind)
 
 
 @router.patch("/{item_id}", response_model=CatalogItemOut)

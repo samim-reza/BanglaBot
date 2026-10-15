@@ -1,4 +1,8 @@
-"""The call brain: ``gpt-5.4-mini`` over Chat Completions with the flow tools.
+"""The call brain over Chat Completions with the flow tools.
+
+:class:`ChatLLM` talks to OpenAI directly; calls normally go through
+``voice/providers/llm`` (a fallback chain over Groq, Gemini, OpenRouter and
+OpenAI). Both parse replies with :func:`parse_reply`.
 
 Plain text in, plain text or tool calls out. The agent owns the conversation
 history (system prompt + node directives + caller/agent turns + tool results),
@@ -43,14 +47,14 @@ def shared_client() -> httpx.AsyncClient:
     return _shared_client
 
 
-async def warm_connection(api_key: str | None) -> None:
-    """Open (and keep) a TLS connection to OpenAI before the first call needs it."""
-    if not api_key:
-        return
+async def warm_connection(api_key: str | None = None) -> None:
+    """Open (and keep) TLS connections to the LLM chain's first providers before a call needs them."""
+    from app.voice.providers.llm.factory import warm_llm
+
     try:
-        await shared_client().get(MODELS_URL, headers={"Authorization": f"Bearer {api_key}"}, timeout=5.0)
+        await warm_llm()
     except Exception as exc:  # noqa: BLE001 — an optimization only
-        await logger.ainfo("openai_warm_failed", error=str(exc))
+        await logger.ainfo("llm_warm_failed", error=str(exc))
 
 
 async def close_shared_client() -> None:
@@ -109,6 +113,62 @@ class LLMError(RuntimeError):
     pass
 
 
+def clean_assistant_message(message: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the portable fields of an assistant message.
+
+    Providers add extras (gpt-oss ``reasoning``, Gemini ``extra_content`` …)
+    that another provider rejects when the history is replayed after a
+    fallback, so the conversation only ever stores role, content and calls.
+    """
+    cleaned: dict[str, Any] = {"role": "assistant", "content": message.get("content") or ""}
+    calls = []
+    for call in message.get("tool_calls") or []:
+        if not isinstance(call, dict):
+            continue
+        function = call.get("function") or {}
+        calls.append(
+            {
+                "id": str(call.get("id") or ""),
+                "type": "function",
+                "function": {"name": str(function.get("name") or ""), "arguments": str(function.get("arguments") or "{}")},
+            }
+        )
+    if calls:
+        cleaned["tool_calls"] = calls
+        if not cleaned["content"]:
+            cleaned["content"] = None
+    return cleaned
+
+
+def parse_reply(data: dict[str, Any]) -> LLMReply:
+    """A Chat Completions response body → :class:`LLMReply`."""
+    choice = (data.get("choices") or [{}])[0]
+    message = choice.get("message") or {}
+    tool_calls = [
+        LLMToolCall(
+            id=str(call.get("id") or ""),
+            name=str((call.get("function") or {}).get("name") or ""),
+            arguments=str((call.get("function") or {}).get("arguments") or "{}"),
+        )
+        for call in (message.get("tool_calls") or [])
+        if isinstance(call, dict)
+    ]
+    return LLMReply(
+        content=str(message.get("content") or "").strip(),
+        tool_calls=tool_calls,
+        usage=data.get("usage") or {},
+        assistant_message=clean_assistant_message(message),
+        finish_reason=str(choice.get("finish_reason") or ""),
+    )
+
+
+def usage_counts(usage: dict[str, Any]) -> tuple[int, int, int]:
+    """``(prompt, completion, cached)`` tokens from a usage block (OpenAI or compatible)."""
+    details = usage.get("prompt_tokens_details") or {}
+    cached = details.get("cached_tokens") if isinstance(details, dict) else 0
+    return int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0), int(cached or 0)
+
+
 class ChatLLM:
     def __init__(
         self,
@@ -160,29 +220,13 @@ class ChatLLM:
         if self.prompt_cache_retention:
             body["prompt_cache_retention"] = self.prompt_cache_retention
         data = await self._post(body)
-        choice = (data.get("choices") or [{}])[0]
-        message = choice.get("message") or {}
-        usage = data.get("usage") or {}
+        reply = parse_reply(data)
+        prompt, completion, cached = usage_counts(reply.usage)
         self.request_count += 1
-        self.prompt_tokens += int(usage.get("prompt_tokens") or 0)
-        self.completion_tokens += int(usage.get("completion_tokens") or 0)
-        self.cached_prompt_tokens += int(((usage.get("prompt_tokens_details") or {}).get("cached_tokens")) or 0)
-        tool_calls = [
-            LLMToolCall(
-                id=str(call.get("id") or ""),
-                name=str((call.get("function") or {}).get("name") or ""),
-                arguments=str((call.get("function") or {}).get("arguments") or "{}"),
-            )
-            for call in (message.get("tool_calls") or [])
-            if isinstance(call, dict)
-        ]
-        return LLMReply(
-            content=str(message.get("content") or "").strip(),
-            tool_calls=tool_calls,
-            usage=usage,
-            assistant_message=message,
-            finish_reason=str(choice.get("finish_reason") or ""),
-        )
+        self.prompt_tokens += prompt
+        self.completion_tokens += completion
+        self.cached_prompt_tokens += cached
+        return reply
 
     async def _post(self, body: dict[str, Any]) -> dict[str, Any]:
         last_error: Exception | None = None

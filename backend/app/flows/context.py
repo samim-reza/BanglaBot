@@ -60,6 +60,9 @@ class CallContext:
     busy: dict[str, list[tuple[datetime, datetime]]] = field(default_factory=dict)
     #: The caller's open records (upcoming appointments, bookings) for inbound calls.
     caller_records: list[Any] = field(default_factory=list)
+    #: How many past records this caller's number has with the business (any status) —
+    #: lets a flow recognise a returning customer / patient without asking.
+    caller_history: int = 0
     #: Business-local "now" (defaults to the account's time zone).
     now: datetime | None = None
     #: Lines composed ahead of time (e.g. the order-confirmation sentence), by key.

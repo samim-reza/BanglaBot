@@ -17,6 +17,7 @@ from app.api.deps import get_current_merchant
 from app.core.addons import CATALOG, MAX_QUANTITY, available_for, entitlements, public_catalog
 from app.db.session import get_db
 from app.models import AddonRequest, Merchant
+from app.services.tenancy import owned
 
 router = APIRouter(prefix="/api/addons", tags=["addons"])
 
@@ -84,9 +85,7 @@ async def request_addon(data: AddonRequestIn, merchant: Merchant = Depends(get_c
 
 @router.delete("/requests/{request_id}")
 async def cancel_request(request_id: str, merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
-    row = await db.get(AddonRequest, request_id)
-    if row is None or row.merchant_id != merchant.id:
-        raise HTTPException(status_code=404, detail="Request not found")
+    row = await owned(db, AddonRequest, request_id, merchant, detail="Request not found")
     if row.status != OPEN:
         raise HTTPException(status_code=409, detail="This request was already handled")
     row.status = "cancelled"

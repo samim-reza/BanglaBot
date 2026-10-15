@@ -11,22 +11,22 @@ import base64
 import math
 import re
 
+from app.voice.codec import ULAW_TO_LINEAR as _MULAW_TABLE
+
 # Telnyx media streaming (PCMU): 8 kHz μ-law, one frame per 20 ms.
 FRAME_BYTES = 160
 FRAME_SECONDS = 0.02
 
 
-def _mulaw_to_linear(byte: int) -> int:
-    byte = ~byte & 0xFF
-    sign = byte & 0x80
-    exponent = (byte >> 4) & 0x07
-    mantissa = byte & 0x0F
-    sample = ((mantissa << 3) + 0x84) << exponent
-    sample -= 0x84
-    return -sample if sign else sample
-
-
-_MULAW_TABLE: tuple[int, ...] = tuple(_mulaw_to_linear(i) for i in range(256))
+def ulaw_rms(data: bytes) -> int:
+    """RMS of raw μ-law bytes as 16-bit linear amplitude."""
+    if not data:
+        return 0
+    total = 0
+    for byte in data:
+        sample = _MULAW_TABLE[byte]
+        total += sample * sample
+    return int(math.sqrt(total / len(data)))
 
 
 def pcm_rms(payload_b64: str) -> int:
@@ -35,13 +35,7 @@ def pcm_rms(payload_b64: str) -> int:
         data = base64.b64decode(payload_b64)
     except Exception:  # noqa: BLE001
         return 0
-    if not data:
-        return 0
-    total = 0
-    for byte in data:
-        sample = _MULAW_TABLE[byte]
-        total += sample * sample
-    return int(math.sqrt(total / len(data)))
+    return ulaw_rms(data)
 
 
 class AmbientNoiseTracker:

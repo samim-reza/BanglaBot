@@ -1,0 +1,50 @@
+"""Helpers shared by the admin route modules: the admin view of an account, lookups."""
+
+from __future__ import annotations
+
+from fastapi import HTTPException
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.api.routes.auth import merchant_out
+from app.core.addons import CATALOG
+from app.models import AddonRequest, Merchant
+from app.schemas.merchant import MerchantOut
+
+
+def admin_out(merchant: Merchant) -> MerchantOut:
+    """An account as the admin sees it — without the owner's webhook signing secret."""
+    out = merchant_out(merchant)
+    return out.model_copy(update={"webhook_secret": ""})
+
+
+async def _merchant_or_404(db: AsyncSession, merchant_id: str) -> Merchant:
+    merchant = await db.get(Merchant, merchant_id)
+    if merchant is None:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return merchant
+
+
+async def _merchants(db: AsyncSession, ids: set[str]) -> dict[str, Merchant]:
+    if not ids:
+        return {}
+    return {row.id: row for row in await db.scalars(select(Merchant).where(Merchant.id.in_(ids)))}
+
+
+def _addon_request(row: AddonRequest, merchant: Merchant | None) -> dict:
+    addon = CATALOG.get(row.addon)
+    return {
+        "id": row.id,
+        "merchant_id": row.merchant_id,
+        "merchant_name": merchant.business_name if merchant else "",
+        "merchant_plan": merchant.plan if merchant else "",
+        "addon": row.addon,
+        "addon_name": addon.name if addon else row.addon,
+        "price_label": addon.price_label() if addon else "",
+        "quantity": row.quantity,
+        "note": row.note,
+        "status": row.status,
+        "admin_note": row.admin_note,
+        "created_at": row.created_at,
+        "decided_at": row.decided_at,
+    }

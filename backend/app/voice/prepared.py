@@ -162,7 +162,7 @@ async def prepare_call_lines(order: Any, merchant: Any, *, flow: Any | None = No
     from app.core.regions import region_of
     from app.verticals.ecommerce import DEFAULT_FLOW
     from app.voice.audio import sentence_units
-    from app.voice.llm import ChatLLM
+    from app.voice.providers.llm import llm_configured, llm_for_call
     from app.voice.tts import get_tts, normalize_persona, tts_configured, voice_for
 
     settings = get_settings()
@@ -174,14 +174,9 @@ async def prepare_call_lines(order: Any, merchant: Any, *, flow: Any | None = No
     persona = normalize_persona(_get(merchant, "voice_persona", None) or settings.tts_voice_persona)
     own_llm = llm is None
     if own_llm:
-        if not settings.openai_api_key:
+        if not llm_configured(merchant):
             return {}
-        llm = ChatLLM(
-            api_key=settings.openai_api_key,
-            model=settings.openai_llm_model,
-            reasoning_effort=settings.openai_llm_reasoning_effort,
-            max_output_tokens=160,
-        )
+        llm = llm_for_call(flow_key=f"{flow.key}:prepared", merchant=merchant, max_output_tokens=160)
     if tts is None and tts_configured():
         tts = get_tts()
     prepared: dict[str, str] = {}

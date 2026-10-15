@@ -92,7 +92,8 @@ def test_settings_validation():
 
 
 def test_account_creation_validates_engine_and_region():
-    created = MerchantCreate(business_name="X", username="clinic_two", password="secret1", vertical="Clinic", region="gb")
+    created = MerchantCreate(business_name="X", username="clinic_two", password="secret-pass-1", vertical="Clinic", region="gb")
     assert created.vertical == "clinic" and created.region == "GB" and created.language == "en"
+    assert MerchantCreate(business_name="X", username="x_z", password="secret-pass-1", vertical="Restaurant").vertical == "restaurant"
     with pytest.raises(ValidationError):
-        MerchantCreate(business_name="X", username="x_y", password="secret1", vertical="restaurant")
+        MerchantCreate(business_name="X", username="x_y", password="secret-pass-1", vertical="bakery")

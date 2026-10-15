@@ -3,48 +3,29 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, PhoneOutgoing, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, PhoneOutgoing } from "lucide-react";
 
 import { ApiError } from "@/components/api-error";
 import { useAppToast } from "@/components/app-toast";
 import { CallLogList } from "@/components/call-log-list";
 import { RecordForm, recordFieldValue, recordToFormValues, recordUpdatePayload } from "@/components/order-form";
 import { PageHeader } from "@/components/page-header";
+import { KeyValueList, looseValue, type KeyValueEntry } from "@/components/records/key-values";
+import { PaymentCard, PaymentChip, paymentOf } from "@/components/records/payment-card";
+import { DeleteCard, StatusCard } from "@/components/records/record-actions";
+import { FLOW_DETAIL_KEYS, RecordExtras } from "@/components/records/record-extras";
 import { RecordSmsCard } from "@/components/sms-messages";
 import type { FormValues } from "@/components/schema-form";
 import { BADGE_BASE, OrderStatusBadge, SourceBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Select } from "@/components/ui/select";
 import { humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { displayValue, formatInZone, statusLabel, t } from "@/lib/vertical";
 import { useWorkspace } from "@/lib/workspace";
-import { ORDER_STATUSES, callLocked, formatApiError, ordersApi, type OrderDetail, type OrderStatus } from "@/services/api";
+import { callLocked, formatApiError, ordersApi, type OrderDetail, type OrderStatus } from "@/services/api";
 
 const WIDE_TYPES = new Set(["textarea", "list", "days", "multiselect"]);
-
-/** Anything the agent stored (strings, numbers, flags, small objects) as readable text. */
-function looseValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") return "—";
-  if (typeof value === "boolean") return value ? "Yes" : "No";
-  if (typeof value === "string" || typeof value === "number") return String(value);
-  if (Array.isArray(value)) return value.map((item) => looseValue(item)).join(", ");
-  return JSON.stringify(value);
-}
-
-function KeyValueList({ entries }: { entries: Array<[string, string, boolean?]> }) {
-  return (
-    <dl className="grid gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-      {entries.map(([label, value, wide]) => (
-        <div key={label} className={cn("min-w-0", wide && "sm:col-span-2")}>
-          <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
-          <dd className="mt-0.5 whitespace-pre-wrap break-words">{value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
 
 export default function RecordDetailPage() {
   const params = useParams<{ id: string }>();
@@ -179,19 +160,19 @@ export default function RecordDetailPage() {
   const catalogNames = order.catalog_item_id && order.catalog_item_name ? { [order.catalog_item_id]: order.catalog_item_name } : {};
   const fmt = { currency: order.currency || merchant.currency, catalogNames, timezone };
   const notesSpec = specs.find((spec) => spec.key === "notes");
-  const fieldEntries: Array<[string, string, boolean?]> = specs
+  const fieldEntries: KeyValueEntry[] = specs
     .filter((spec) => spec !== notesSpec)
     .map((spec) => [t(spec.label), displayValue(spec, recordFieldValue(order, spec), fmt), WIDE_TYPES.has(spec.type)]);
   const known = new Set(specs.map((spec) => spec.key));
-  const extraEntries: Array<[string, string, boolean?]> = Object.entries(order.details ?? {})
-    .filter(([key]) => !known.has(key) && !key.startsWith("_"))
+  const extraEntries: KeyValueEntry[] = Object.entries(order.details ?? {})
+    .filter(([key]) => !known.has(key) && !key.startsWith("_") && !FLOW_DETAIL_KEYS.has(key))
     .map(([key, value]) => [humanize(key), looseValue(value)]);
-  const flowEntries: Array<[string, string, boolean?]> = Object.entries(order.flow_data ?? {})
+  const flowEntries: KeyValueEntry[] = Object.entries(order.flow_data ?? {})
     .filter(([key, value]) => !key.startsWith("_") && value !== null && value !== undefined && value !== "")
     .map(([key, value]) => [humanize(key), looseValue(value)]);
   const notes = notesSpec ? String(recordFieldValue(order, notesSpec) ?? "") : "";
   const odd = Boolean(order.kind) && order.kind !== vertical.record_kind;
-  const statusChoices = ORDER_STATUSES.filter((value) => value !== "calling");
+  const payment = paymentOf(order);
 
   return (
     <div className="space-y-6">
@@ -224,6 +205,7 @@ export default function RecordDetailPage() {
                 <CardTitle>{singular}</CardTitle>
                 <OrderStatusBadge status={order.status} spec={vertical} />
                 <SourceBadge source={order.source} />
+                {payment && <PaymentChip status={payment.status} />}
                 {odd && <span className={cn(BADGE_BASE, "bg-secondary text-muted-foreground")}>{humanize(order.kind)}</span>}
               </div>
               {!editing && (
@@ -245,6 +227,7 @@ export default function RecordDetailPage() {
                       <p className={cn("mt-1 whitespace-pre-wrap break-words text-sm", !notes && "text-muted-foreground")}>{notes || "No notes."}</p>
                     </div>
                   )}
+                  <RecordExtras order={order} timezone={timezone} />
                   {extraEntries.length > 0 && (
                     <div>
                       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">More details</p>
@@ -279,50 +262,13 @@ export default function RecordDetailPage() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Status</CardTitle>
-              <CardDescription>Set by your agent; change it anytime.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <label className="flex flex-col gap-1.5 text-sm sm:max-w-xs">
-                <span className="sr-only">Status</span>
-                <Select
-                  value={order.status}
-                  disabled={busy || order.status === "calling"}
-                  onChange={(event) => void setStatus(event.target.value as OrderStatus)}
-                >
-                  {order.status === "calling" && (
-                    <option value="calling" disabled>
-                      {statusLabel(vertical, "calling")}
-                    </option>
-                  )}
-                  {statusChoices.map((value) => (
-                    <option key={value} value={value}>
-                      {statusLabel(vertical, value)}
-                    </option>
-                  ))}
-                </Select>
-                {order.status === "calling" && <span className="text-xs text-muted-foreground">Call in progress.</span>}
-              </label>
-            </CardContent>
-          </Card>
+          <StatusCard status={order.status} vertical={vertical} busy={busy} onChange={(status) => void setStatus(status)} />
 
-          <Card className="border-destructive/40">
-            <CardHeader>
-              <CardTitle>Delete {singular.toLowerCase()}</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-muted-foreground">Its calls and chats stay in your log.</p>
-              <Button variant="destructive" size="sm" onClick={() => void remove()} disabled={busy || order.status === "calling"}>
-                <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Delete
-              </Button>
-            </CardContent>
-          </Card>
+          <DeleteCard singular={singular} disabled={busy || order.status === "calling"} onDelete={() => void remove()} />
         </div>
 
         <div className="grid h-fit gap-6">
+          <PaymentCard order={order} timezone={timezone} onChanged={() => void load()} />
           <Card className="h-fit">
             <CardHeader>
               <CardTitle>Calls &amp; chats</CardTitle>

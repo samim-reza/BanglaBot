@@ -19,6 +19,7 @@ from app.core.regions import region_of
 from app.flows.timefmt import business_tz
 from app.models import CallLog, CatalogItem, Merchant, Order, OrderStatus
 from app.schemas.order import OrderCreate, OrderUpdate
+from app.services.tenancy import owned
 from app.verticals import vertical_for
 from app.verticals.forms import FieldError, split_record
 
@@ -82,6 +83,8 @@ def serialize_order(order: Order, *, merchant: Merchant | None = None, names: di
         "scheduled_at": order.scheduled_at,
         "details": dict(order.details or {}),
         "summary": summary,
+        "payment_status": str(getattr(order, "payment_status", "") or "not_required"),
+        "payment_url": str(getattr(order, "payment_url", "") or ""),
         "flow_data": dict(order.flow_data or {}),
         "call_attempts": int(order.call_attempts or 0),
         "last_call_at": order.last_call_at,
@@ -173,10 +176,7 @@ async def order_stats(db: AsyncSession, merchant_id: str) -> dict[str, int]:
 
 
 async def get_order(db: AsyncSession, merchant: Merchant, order_id: str) -> Order:
-    order = await db.get(Order, order_id)
-    if order is None or order.merchant_id != merchant.id:
-        raise HTTPException(status_code=404, detail="Record not found")
-    return order
+    return await owned(db, Order, order_id, merchant, detail="Record not found")
 
 
 async def order_call_logs(db: AsyncSession, order_id: str) -> list[CallLog]:
@@ -191,9 +191,10 @@ def _tz(merchant: Merchant):
 async def _check_catalog(db: AsyncSession, merchant: Merchant, item_id: str | None) -> None:
     if not item_id:
         return
-    item = await db.get(CatalogItem, item_id)
-    if item is None or item.merchant_id != merchant.id:
-        raise HTTPException(status_code=422, detail="catalog_item_id does not belong to this account")
+    try:
+        await owned(db, CatalogItem, item_id, merchant)
+    except HTTPException as exc:
+        raise HTTPException(status_code=422, detail="catalog_item_id does not belong to this account") from exc
 
 
 def _split(merchant: Merchant, payload: dict[str, Any], *, partial: bool) -> tuple[dict[str, Any], dict[str, Any]]:

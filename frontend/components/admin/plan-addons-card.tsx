@@ -34,6 +34,7 @@ export const CHANNEL_LABELS: Record<ChannelKey, string> = {
   web_chat: "Website chat",
   whatsapp: "WhatsApp",
   messenger: "Messenger",
+  instagram: "Instagram",
 };
 
 const CHANNELS: { key: ChannelKey; icon: React.ComponentType<{ className?: string }> }[] = [

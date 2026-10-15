@@ -14,3 +14,9 @@ structlog==24.4.0
 redis==5.2.1
 # Encrypts integration secrets at rest (Google Calendar refresh tokens).
 cryptography>=43
+# Speech providers: MP3 decode + resampling (edge-tts, Gemini 24 kHz → 8 kHz μ-law).
+miniaudio>=1.61
+# Free, unofficial Edge voices — last link of the TTS fallback chain (testing only).
+edge-tts>=7.0
+# Password hashing (argon2id; legacy PBKDF2 hashes still verify and are upgraded at sign-in).
+argon2-cffi>=23.1

@@ -14,7 +14,7 @@ from app.core.config import get_settings
 from app.core.addons import entitlements
 from app.core.addons import public_catalog as addon_catalog
 from app.core.plans import CHANNEL_WEB_CHAT, PLANS
-from app.core.ratelimit import limit
+from app.core.ratelimit import rate_limit
 from app.core.redis import redis_health
 from app.core.regions import regions_json
 from app.db.session import AsyncSessionLocal
@@ -66,7 +66,7 @@ class SalesInquiryIn(BaseModel):
 
 @router.post("/api/public/contact", status_code=201)
 async def contact_sales(data: SalesInquiryIn, request: Request):
-    limit(request, "contact", max_hits=5, per_seconds=3600)
+    await rate_limit(request, "contact", max_hits=5, per_seconds=3600)
     if data.website:
         return {"ok": True}
     if not data.email.strip() and not data.phone.strip():
@@ -158,7 +158,7 @@ async def widget_config(key: str):
 
 @router.post("/api/public/widget/{key}/start")
 async def widget_start(key: str, request: Request):
-    limit(request, f"widget-start:{key}", max_hits=30, per_seconds=3600)
+    await rate_limit(request, f"widget-start:{key}", max_hits=30, per_seconds=3600)
     merchant = await _widget_merchant(key)
     if merchant is None:
         return _json({"detail": "Chat is not available."}, 404)
@@ -192,7 +192,7 @@ async def widget_start(key: str, request: Request):
 
 @router.post("/api/public/widget/{key}/say")
 async def widget_say(key: str, request: Request):
-    limit(request, f"widget-say:{key}", max_hits=120, per_seconds=600)
+    await rate_limit(request, f"widget-say:{key}", max_hits=120, per_seconds=600)
     data = await _body(request)
     chat = text_session.get(str(data.get("session_id") or ""))
     if chat is None or getattr(chat.merchant, "widget_key", None) != key:

@@ -21,9 +21,15 @@ export default function MerchantLoginPage() {
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => {
-    if (merchantToken()) router.replace("/dashboard");
+    if (merchantToken()) {
+      router.replace("/dashboard");
+      return;
+    }
+    // Sent here by a revoked session (password changed, "sign out everywhere").
+    if (new URLSearchParams(window.location.search).get("expired")) setExpired(true);
   }, [router]);
 
   const login = async (event: FormEvent) => {
@@ -57,6 +63,11 @@ export default function MerchantLoginPage() {
           <h1 className="text-2xl font-semibold tracking-normal">Merchant login</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sign in to enter orders and place confirmation calls.</p>
         </div>
+        {expired && !error && (
+          <p role="status" className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-muted-foreground">
+            Session expired — sign in again.
+          </p>
+        )}
         <ApiError message={error} />
         <Card>
           <CardHeader>

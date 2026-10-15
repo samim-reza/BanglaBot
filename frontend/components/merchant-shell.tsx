@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  Bot,
   Building2,
   CalendarCheck,
   CalendarClock,
@@ -17,10 +18,12 @@ import {
   Package,
   Puzzle,
   Radio,
+  Scissors,
   Settings,
   ShoppingBag,
   Stethoscope,
   UserRound,
+  UtensilsCrossed,
   Wrench,
   X,
   type LucideIcon,
@@ -40,14 +43,22 @@ type NavItem = { href: string; label: string; icon: LucideIcon };
 const RECORD_ICONS: Record<string, LucideIcon> = {
   ecommerce: ShoppingBag,
   clinic: CalendarCheck,
+  dental: CalendarCheck,
+  vet: CalendarCheck,
+  salon: CalendarCheck,
   real_estate: Contact,
   home_service: CalendarClock,
+  restaurant: UtensilsCrossed,
 };
 
 const CATALOG_ICONS: Record<string, LucideIcon> = {
   clinic: Stethoscope,
+  dental: Stethoscope,
+  vet: Stethoscope,
+  salon: Scissors,
   real_estate: Building2,
   home_service: Wrench,
+  restaurant: UtensilsCrossed,
 };
 
 function navFor(vertical: VerticalSpec): NavItem[] {
@@ -60,9 +71,10 @@ function navFor(vertical: VerticalSpec): NavItem[] {
     items.push({ href: "/catalog", label: t(vertical.catalog_label_plural, "Catalog"), icon: CATALOG_ICONS[vertical.key] ?? Package });
   }
   items.push(
+    { href: "/agent", label: "Agent", icon: Bot },
     { href: "/calls", label: "Calls & chats", icon: MessagesSquare },
     { href: "/channels", label: "Channels", icon: Radio },
-    { href: "/addons", label: "Add-ons", icon: Puzzle },
+    { href: "/plan", label: "Plan & add-ons", icon: Puzzle },
     { href: "/settings", label: "Settings", icon: Settings },
   );
   return items;

@@ -16,3 +16,8 @@ frontend/.next/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
 .DS_Store
+speech/.venv/
+speech/models/
+
+# Local test credentials (scripts/seed_test_accounts.py)
+backend/.test-accounts.txt

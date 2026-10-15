@@ -22,7 +22,7 @@ from app.flows.context import DIRECTION_INBOUND, CallContext
 from app.voice.agent import CallAgent
 from app.voice.audio import clean_spoken_text
 from app.voice.languages import normalize_language
-from app.voice.llm import ChatLLM
+from app.voice.providers.llm import llm_for_call
 from app.voice.tools import CallStore
 
 logger = structlog.get_logger(__name__)
@@ -99,16 +99,8 @@ class TextSession:
 
     # ---- conversation ---------------------------------------------------------------
     async def start(self) -> list[str]:
-        settings = self.settings
         if self._llm is None:
-            self._llm = ChatLLM(
-                api_key=str(settings.openai_api_key or ""),
-                model=settings.openai_llm_model,
-                reasoning_effort=settings.openai_llm_reasoning_effort,
-                max_output_tokens=settings.openai_llm_max_output_tokens,
-                prompt_cache_key=f"{self.flow.key}:chat:{getattr(self.merchant, 'id', '')}",
-                prompt_cache_retention=settings.openai_prompt_cache_retention,
-            )
+            self._llm = llm_for_call(flow_key=self.flow.key, merchant=self.merchant, channel="chat")
         self.agent.llm = self._llm
         opening = self.agent.configure()
         self.speak(opening)
@@ -150,7 +142,8 @@ class TextSession:
                 counters["llm_prompt_tokens"] = int(getattr(self._llm, "prompt_tokens", 0))
                 counters["llm_completion_tokens"] = int(getattr(self._llm, "completion_tokens", 0))
                 counters["llm_cached_tokens"] = int(getattr(self._llm, "cached_prompt_tokens", 0))
-            await self.store.save_usage(**counters)
+            stats = getattr(self._llm, "stats", None)
+            await self.store.save_usage(**counters, llm_stats=stats() if callable(stats) else None)
             notify = getattr(self.store, "notify_finished", None)
             if notify is not None:
                 await notify()

@@ -89,7 +89,7 @@ export function IntegrationsPlaceholder({ error, onRetry }: { error: string | nu
 
 // ---------------------------------------------------------------- SMS confirmations
 
-const SMS_COPY: Record<VerticalKey, { booking: string; change: string }> = {
+const SMS_COPY: Partial<Record<VerticalKey, { booking: string; change: string }>> = {
   clinic: { booking: "Appointment booked", change: "Moved or cancelled" },
   real_estate: { booking: "Viewing or lead", change: "Moved or cancelled" },
   home_service: { booking: "Visit booked", change: "Moved or cancelled" },
@@ -117,7 +117,7 @@ export function SmsSection({ data, onSaved }: { data: Integrations; onSaved: (ne
   const [messages, setMessages] = useState<SmsMessage[] | null>(null);
   const [loadingMessages, setLoadingMessages] = useState(false);
 
-  const copy = SMS_COPY[vertical.key] ?? SMS_COPY.clinic;
+  const copy = SMS_COPY[vertical.key] ?? SMS_COPY.clinic!;
   const live = sms.settings.enabled && sms.platform_ready;
   const recordLabel = t(vertical.record_label, "record").toLowerCase();
 

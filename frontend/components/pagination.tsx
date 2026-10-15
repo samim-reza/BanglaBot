@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 
@@ -34,6 +34,35 @@ export function Pagination({
           <ChevronRight className="h-3.5 w-3.5" />
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Cursor pagination: how many are shown and a "Load more" button while the server has more. */
+export function LoadMore({
+  shown,
+  hasMore,
+  loading,
+  onLoadMore,
+  noun = "results",
+}: {
+  shown: number;
+  hasMore: boolean;
+  loading?: boolean;
+  onLoadMore: () => void;
+  noun?: string;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
+      <span className="tabular-nums">
+        {shown === 0 ? "No results" : `Showing ${shown.toLocaleString("en-US")} ${noun}${hasMore ? "" : " · end of list"}`}
+      </span>
+      {hasMore && (
+        <Button variant="outline" size="sm" disabled={loading} onClick={onLoadMore} aria-busy={loading}>
+          <ChevronDown className="h-3.5 w-3.5" />
+          {loading ? "Loading…" : "Load more"}
+        </Button>
+      )}
     </div>
   );
 }

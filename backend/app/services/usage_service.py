@@ -13,7 +13,7 @@ from app.models import CallLog, Merchant, Message
 
 #: Directions that are billable phone minutes / billable chats.
 VOICE_DIRECTIONS = ("outbound", "inbound")
-CHAT_DIRECTIONS = ("widget", "whatsapp", "messenger")
+CHAT_DIRECTIONS = ("widget", "whatsapp", "messenger", "instagram")
 
 
 def month_start(now: datetime | None = None) -> datetime:

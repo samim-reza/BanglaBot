@@ -138,9 +138,12 @@ def split_record(vertical: Vertical, data: dict[str, Any], *, partial: bool = Fa
     return columns, details
 
 
-def split_catalog(vertical: Vertical, data: dict[str, Any], *, partial: bool = False) -> tuple[str | None, dict[str, Any]]:
-    """Catalog form input → (name, data)."""
-    values = clean(vertical.catalog_fields, data, partial=partial)
+def split_catalog(vertical: Vertical, data: dict[str, Any], *, partial: bool = False, kind: str | None = None) -> tuple[str | None, dict[str, Any]]:
+    """Catalog form input → (name, data); ``kind`` picks one of the vertical's catalog kinds (default: the primary)."""
+    spec = vertical.catalog_spec(kind)
+    if kind and spec is None:
+        raise FieldError("kind", "unknown catalog kind")
+    values = clean(spec.fields if spec else vertical.catalog_fields, data, partial=partial)
     name = values.pop("name", None)
     return (str(name) if name else None), {key: value for key, value in values.items() if value is not None}
 

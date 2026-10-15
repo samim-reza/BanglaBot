@@ -71,7 +71,7 @@ export function LockedAddon({ id, addonKey, icon, title, shop, actions }: { id: 
           <RequestControls item={item} pending={pendingRequest(shop, addonKey)} actions={actions} />
         ) : (
           <Button asChild variant="outline" size="sm">
-            <Link href={`/addons#${addonKey}`}>
+            <Link href={`/plan#${addonKey}`}>
               See add-on
               <ArrowRight className="h-3.5 w-3.5" aria-hidden />
             </Link>

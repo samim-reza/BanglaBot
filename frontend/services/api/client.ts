@@ -17,12 +17,18 @@ export type AuthScope = "merchant" | "admin" | "none";
 export class ApiRequestError extends Error {
   status: number;
   detail: string;
+  /** Response headers (e.g. `X-2FA-Required`, `Retry-After`); absent for client-side errors. */
+  headers?: Headers;
+  /** The parsed JSON error body, for structured details such as `{errors: [{path, message}]}`. */
+  body?: unknown;
 
-  constructor(status: number, statusText: string, detail?: string) {
+  constructor(status: number, statusText: string, detail?: string, extra?: { headers?: Headers; body?: unknown }) {
     super(`${status} ${detail || statusText}`);
     this.name = "ApiRequestError";
     this.status = status;
     this.detail = detail || statusText;
+    this.headers = extra?.headers;
+    this.body = extra?.body;
   }
 }
 
@@ -57,23 +63,31 @@ export function authHeaders(scope: AuthScope): Record<string, string> {
   throw new ApiRequestError(401, "Unauthorized", "Login required");
 }
 
-async function readErrorDetail(response: Response): Promise<string> {
+async function readErrorDetail(response: Response): Promise<{ detail: string; body?: unknown }> {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
     const detail = body?.detail;
-    if (typeof detail === "string") return detail;
+    if (typeof detail === "string") return { detail, body };
     if (Array.isArray(detail)) {
       // FastAPI validation errors: [{loc, msg, type}]
-      return detail
+      const text = detail
         .map((item) => (item && typeof item === "object" && "msg" in item ? String((item as { msg: unknown }).msg) : ""))
         .filter(Boolean)
         .join("; ");
+      return { detail: text, body };
     }
-    if (detail && typeof detail === "object") return String((detail as { message?: string }).message ?? "");
-    return "";
+    if (detail && typeof detail === "object") {
+      const structured = detail as { message?: string; errors?: { path?: string; message?: string }[] };
+      // Call-flow / provider validation: {errors: [{path, message}]}
+      const listed = Array.isArray(structured.errors)
+        ? structured.errors.map((e) => [e.path, e.message].filter(Boolean).join(": ")).filter(Boolean).join("; ")
+        : "";
+      return { detail: String(structured.message ?? "") || listed, body };
+    }
+    return { detail: "", body };
   }
-  return response.text().catch(() => "");
+  return { detail: await response.text().catch(() => "") };
 }
 
 export type RequestOptions = RequestInit & { auth?: AuthScope };
@@ -89,35 +103,50 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 export async function rawRequest(path: string, options: RequestOptions = {}): Promise<Response> {
   const { auth = "none", headers, ...init } = options;
   const scopedHeaders = authHeaders(auth);
-  let response: Response;
-  try {
-    response = await fetch(`${API_BASE}${path}`, {
-      ...init,
-      headers: {
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...scopedHeaders,
-        ...headers,
-      },
-      cache: "no-store",
-    });
-  } catch {
-    throw new Error("Could not connect to the backend API.");
+  const sentToken = auth === "merchant" ? merchantToken() : "";
+  const send = async (scoped: Record<string, string>) => {
+    try {
+      return await fetch(`${API_BASE}${path}`, {
+        ...init,
+        headers: {
+          ...(init.body ? { "Content-Type": "application/json" } : {}),
+          ...scoped,
+          ...headers,
+        },
+        cache: "no-store",
+      });
+    } catch {
+      throw new Error("Could not connect to the backend API.");
+    }
+  };
+  let response = await send(scopedHeaders);
+
+  // The merchant token was replaced while this call was in flight (password change,
+  // "sign out everywhere" revoke the old one on purpose): retry once with the new one.
+  if (response.status === 401 && auth === "merchant") {
+    const fresh = merchantToken();
+    if (fresh && fresh !== sentToken) response = await send({ Authorization: `Bearer ${fresh}` });
   }
 
   if (!response.ok) {
-    const detail = await readErrorDetail(response);
+    const { detail, body } = await readErrorDetail(response);
     // A 401 on an authenticated call means the stored token is dead: drop it and
     // send the user back to sign in. Login POSTs use auth "none", so a wrong
     // password never triggers this.
     if (response.status === 401 && auth === "merchant") {
       clearMerchantSession();
-      redirect("/login");
+      if (typeof window !== "undefined" && window.location.pathname !== withBasePath("/login")) {
+        redirect(detail.toLowerCase().includes("session expired") ? "/login?expired=1" : "/login");
+        // Never settle: the page keeps its loading state instead of flashing an error
+        // while the browser navigates to sign-in.
+        return new Promise<Response>(() => undefined);
+      }
     }
     if (response.status === 401 && auth === "admin") {
       clearAdminSession();
-      redirect("/admin/login");
+      redirect(detail.toLowerCase().includes("session expired") ? "/admin/login?expired=1" : "/admin/login");
     }
-    throw new ApiRequestError(response.status, response.statusText, detail);
+    throw new ApiRequestError(response.status, response.statusText, detail, { headers: response.headers, body });
   }
   return response;
 }

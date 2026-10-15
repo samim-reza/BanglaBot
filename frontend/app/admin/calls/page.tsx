@@ -6,6 +6,8 @@ import { ChevronDown, ChevronRight, X } from "lucide-react";
 
 import { AdminRecordingPlayer } from "@/components/admin/admin-recording";
 import { OutcomePill } from "@/components/admin/badges";
+import { CallCosts } from "@/components/admin/finance/call-costs";
+import { useAdminMe } from "@/components/admin/shell/admin-me";
 import { FilterBar, LoadingRows } from "@/components/admin/states";
 import { pageFrom, useUrlFilters } from "@/components/admin/url-filters";
 import { useAdminMerchants } from "@/components/admin/use-admin-meta";
@@ -208,6 +210,7 @@ function CallsView() {
 }
 
 function CallDetail({ log }: { log: CallLog }) {
+  const { can } = useAdminMe();
   const facts: [string, React.ReactNode][] = [
     ["Language", languageLabel(log.language)],
     ["Call status", humanize(log.call_status)],
@@ -228,6 +231,7 @@ function CallDetail({ log }: { log: CallLog }) {
           </div>
         ))}
       </dl>
+      {can("finance") && <CallCosts callLogId={log.id} />}
       {log.recording_sid && <AdminRecordingPlayer logId={log.id} />}
       {log.transcript ? (
         <pre className="transcript max-h-80 overflow-y-auto whitespace-pre-wrap break-words font-sans">{log.transcript}</pre>

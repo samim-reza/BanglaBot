@@ -28,6 +28,12 @@ export const ordersApi = {
       body: JSON.stringify(values),
     }),
   remove: (id: string) => request<void>(`/api/orders/${encodeURIComponent(id)}`, { method: "DELETE", auth: "merchant" }),
+  /** Record a payment taken outside the link (cash, card at the desk). */
+  markPaid: (id: string) =>
+    request<{ order_id: string; status: OrderStatus; payment_status: string; payment: Record<string, unknown> }>(
+      `/api/orders/${encodeURIComponent(id)}/mark-paid`,
+      { method: "POST", auth: "merchant" },
+    ),
   /** Place an outbound call about this record (confirmation / reminder / follow-up). */
   call: (id: string) => request<Order>(`/api/orders/${encodeURIComponent(id)}/call`, { method: "POST", auth: "merchant" }),
   /** Bulk dialing: status of the current/last "Call all" run plus the auto-call schedule. */

@@ -7,16 +7,22 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.routes import addons, admin, auth, calls, catalog, channels, integrations, orders, public, telnyx, twilio
+from app.api.routes import addons, admin, admin_audit, admin_users, auth, calls, catalog, channels, integrations, orders, public, telnyx, twilio
+from app.api.routes import admin_flow, admin_system, agent_flow
+from app.api.routes import admin_plans, plan, signup
+from app.api.routes import admin_finance, payments
 from app.core.config import get_settings
+from app.core.http_security import BodySizeLimitMiddleware, SecurityHeadersMiddleware, SplitCORSMiddleware, cors_origins
 from app.core.logging import configure_logging
 from app.core.redis import close_redis, connect_redis
+from app.core.security import boot_guard
 from app.db.bootstrap import bootstrap
 from app.db.session import engine
-from app.services import call_service, dialer_service, sms_service
+from app.services import billing_jobs, call_service, dialer_service, sms_service
+from app.services.payments import holds as payment_holds
+from app.finance import scheduler as finance_scheduler
 from app.voice import text_session
 from app.voice.llm import close_shared_client, warm_connection
 
@@ -41,6 +47,8 @@ async def _reap_chats() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
+    # Production refuses to start with default / weak secrets (development only warns).
+    boot_guard.enforce(settings)
     log = structlog.get_logger(__name__)
     await log.ainfo("starting", app=settings.app_name, environment=settings.environment, public_base_url=settings.public_base_url)
     await connect_redis()
@@ -56,6 +64,12 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(_reap_chats(), name="chat-reaper"),
         # SMS reminders before appointments / visits / viewings.
         asyncio.create_task(sms_service.run_reminders(), name="sms-reminders"),
+        # Plan catalog refresh (admin edits reach every worker) + ended subscription periods.
+        asyncio.create_task(billing_jobs.run(), name="billing-jobs"),
+        # Releases unpaid booking holds, expires stale payment links.
+        asyncio.create_task(payment_holds.run_sweeper(), name="payment-sweeper"),
+        # SMS metering, cost-guard refresh, ledger retention.
+        asyncio.create_task(finance_scheduler.run_scheduler(), name="finance-jobs"),
     ]
     yield
     for task in background:
@@ -68,6 +82,11 @@ async def lifespan(app: FastAPI):
 
         if _tts is not None:
             _tts.cache.flush()
+    with contextlib.suppress(Exception):
+        # Flush disk manifests and let background uploads to the shared audio cache finish.
+        from app.voice.providers.tts import aclose_all
+
+        await aclose_all()
     await close_shared_client()
     await close_redis()
     await engine.dispose()
@@ -75,18 +94,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app_name, version="2.0.0", lifespan=lifespan)
 
-allowed_origins = [origin.strip() for origin in settings.frontend_origin.split(",") if origin.strip()]
-for origin in ("http://localhost:3000", "http://localhost:5173"):
-    if origin not in allowed_origins:
-        allowed_origins.append(origin)
+# Middleware, innermost first: body size cap → CORS (widget paths open to any site,
+# the rest only to the portal's origins) → security headers on every response.
+app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes, max_small_bytes=settings.max_public_request_bytes)
+allowed_origins, allowed_origin_regex = cors_origins(settings.frontend_origin, production=boot_guard.is_production(settings))
 app.add_middleware(
-    CORSMiddleware,
+    SplitCORSMiddleware,
     allow_origins=allowed_origins,
-    allow_origin_regex=r"https://.*\.(ngrok-free\.app|ngrok\.io|trycloudflare\.com)",
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # The console reads these cross-origin: "ask for the 2FA code" and rate-limit waits.
+    expose_headers=["X-2FA-Required", "Retry-After"],
 )
+app.add_middleware(SecurityHeadersMiddleware, hsts=boot_guard.is_production(settings))
 
 
 @app.exception_handler(HTTPException)
@@ -100,6 +122,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 
+# Before public.router: its data-driven /api/public/catalog is the one served.
+app.include_router(signup.router)
 app.include_router(public.router)
 app.include_router(auth.router)
 app.include_router(orders.router)
@@ -109,5 +133,14 @@ app.include_router(integrations.router)
 app.include_router(addons.router)
 app.include_router(channels.router)
 app.include_router(admin.router)
+app.include_router(admin_users.router)
+app.include_router(admin_audit.router)
+app.include_router(plan.router)
+app.include_router(admin_plans.router)
+app.include_router(agent_flow.router)
+app.include_router(admin_flow.router)
+app.include_router(admin_system.router)
+app.include_router(payments.router)
+app.include_router(admin_finance.router)
 app.include_router(telnyx.router)
 app.include_router(twilio.router)

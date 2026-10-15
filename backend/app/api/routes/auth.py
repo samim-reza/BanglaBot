@@ -4,22 +4,21 @@ from __future__ import annotations
 
 import secrets
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import MERCHANT_ROLE, get_current_merchant
+from app.api.deps import get_current_merchant
 from app.core.addons import entitlements
 from app.core.config import get_settings
 from app.core.plans import CHANNEL_WEB_CHAT
 from app.core.regions import regions_json
-from app.core.security import hash_password, sign_token, verify_password
+from app.core.security import issue_merchant_token
 from app.db.session import get_db
 from app.flows.context import DIRECTION_INBOUND, DIRECTION_OUTBOUND, CallContext
 from app.models import Merchant
 from app.schemas.auth import ChangePasswordRequest, FlowPreview, LoginRequest, MerchantLoginResponse
 from app.schemas.merchant import MerchantOut, MerchantSettingsUpdate
-from app.services import usage_service
+from app.services import auth_service, usage_service
 from app.verticals import flow_for, vertical_for
 from app.verticals.forms import FieldError, clean_config
 
@@ -68,14 +67,15 @@ def apply_settings(merchant: Merchant, data: MerchantSettingsUpdate) -> None:
 
 
 @router.post("/login", response_model=MerchantLoginResponse)
-async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
-    merchant = await db.scalar(select(Merchant).where(Merchant.username == data.username.strip()))
-    if merchant is None or not verify_password(data.password, merchant.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    if not merchant.active:
-        raise HTTPException(status_code=403, detail="This account is disabled")
-    token = sign_token({"sub": merchant.id, "role": MERCHANT_ROLE, "username": merchant.username})
-    return MerchantLoginResponse(token=token, merchant=merchant_out(merchant))
+async def login(data: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    merchant = await auth_service.login(db, request, username=data.username, password=data.password)
+    return MerchantLoginResponse(token=issue_merchant_token(merchant), merchant=merchant_out(merchant))
+
+
+@router.post("/logout-all")
+async def logout_all(request: Request, merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
+    """Sign out every session of this account; ``token`` keeps this browser signed in."""
+    return {"ok": True, "token": await auth_service.sign_out_everywhere(db, request, merchant)}
 
 
 @router.get("/me", response_model=MerchantOut)
@@ -147,14 +147,13 @@ async def test_webhook(merchant: Merchant = Depends(get_current_merchant)):
 @router.post("/change-password")
 async def change_password(
     data: ChangePasswordRequest,
+    request: Request,
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    if not verify_password(data.current_password, merchant.password_hash):
-        raise HTTPException(status_code=400, detail="Current password is incorrect")
-    merchant.password_hash = hash_password(data.new_password)
-    await db.commit()
-    return {"ok": True}
+    """Other sessions are signed out; ``token`` keeps this browser signed in."""
+    token = await auth_service.change_password(db, request, merchant, current=data.current_password, new=data.new_password)
+    return {"ok": True, "token": token}
 
 
 @router.get("/flow-preview", response_model=FlowPreview)

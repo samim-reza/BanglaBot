@@ -31,8 +31,12 @@ def sign(secret: str, body: bytes) -> str:
 async def post_event(merchant: Merchant, payload: dict[str, Any]) -> dict[str, Any]:
     body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
     headers = {"Content-Type": "application/json", "User-Agent": "voice-agent-webhooks/1"}
-    if merchant.webhook_secret:
-        headers["X-Agent-Signature"] = sign(merchant.webhook_secret, body)
+    # Stored encrypted; the property decrypts (legacy plaintext rows read as-is).
+    secret = merchant.webhook_secret
+    if secret:
+        headers["X-Agent-Signature"] = sign(secret, body)
+    elif getattr(merchant, "webhook_secret_stored", ""):
+        await logger.awarning("webhook_secret_unreadable", merchant_id=merchant.id, hint="ENCRYPTION_SECRET changed; rotate the secret")
     try:
         response = await shared_client().post(merchant.webhook_url, content=body, headers=headers, timeout=TIMEOUT_SECONDS)
         ok = 200 <= response.status_code < 300

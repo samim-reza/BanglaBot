@@ -3,10 +3,10 @@ import { ArrowRight } from "lucide-react";
 
 import { AGENTS } from "@/lib/site-content";
 
-/** The four ready-made agents, each linking to its solution page. */
+/** Every ready-made agent, each linking to its solution page. */
 export function AgentCards() {
   return (
-    <ul className="grid gap-4 sm:grid-cols-2">
+    <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {AGENTS.map((agent) => {
         const Icon = agent.icon;
         return (

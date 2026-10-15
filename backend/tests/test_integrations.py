@@ -17,6 +17,9 @@ from app.flows.scheduling import Window, free_slots
 from app.flows.timefmt import business_tz
 from app.models import CatalogItem, Order, OrderStatus
 from app.services import calendar_service, sms_service
+from app.services.calendar import busy as calendar_busy
+from app.services.calendar import common as calendar_common
+from app.services.sms import policy as sms_policy
 from app.services.ics import FeedEvent, build_calendar, busy_intervals
 
 NY = business_tz("America/New_York")
@@ -134,7 +137,7 @@ def test_sms_texts_per_event_stay_in_one_or_two_gsm_segments():
 
 
 def test_which_outcomes_send_a_text(monkeypatch):
-    monkeypatch.setattr(sms_service, "platform_ready", lambda: True)
+    monkeypatch.setattr(sms_policy, "platform_ready", lambda: True)
     merchant = _merchant()
     assert sms_service.planned_kind(merchant, "booked", record_kind="appointment", phone="+1") == "confirmation"
     assert sms_service.planned_kind(merchant, "rescheduled", record_kind="appointment", phone="+1") == "change"
@@ -143,7 +146,7 @@ def test_which_outcomes_send_a_text(monkeypatch):
     assert sms_service.planned_kind(merchant, "booked", record_kind="appointment", phone="") is None
     assert sms_service.planned_kind(_merchant(sms_settings={"enabled": False}), "booked", phone="+1") is None
     assert sms_service.planned_kind(_merchant(sms_settings={"enabled": True, "on_change": False}), "cancelled", phone="+1") is None
-    monkeypatch.setattr(sms_service, "platform_ready", lambda: False)
+    monkeypatch.setattr(sms_policy, "platform_ready", lambda: False)
     assert sms_service.planned_kind(merchant, "booked", phone="+1") is None
 
 
@@ -153,7 +156,7 @@ async def test_the_agent_says_a_text_is_coming(monkeypatch):
     from app.verticals import flow_for
     from app.voice.tools import CallTools, NullCallStore
 
-    monkeypatch.setattr(sms_service, "platform_ready", lambda: True)
+    monkeypatch.setattr(sms_policy, "platform_ready", lambda: True)
     merchant = SimpleNamespace(vertical="home_service", business_name="FixRight", language="en", region="US", timezone="America/New_York",
                                currency="USD", emergency_number="911", custom_greeting="", support_phone="", knowledge="",
                                vertical_config={"teams": 2}, sms_settings={"enabled": True})
@@ -205,7 +208,7 @@ def google(monkeypatch):
 
     fake = Google()
     client = httpx.AsyncClient(transport=httpx.MockTransport(fake.handler))
-    monkeypatch.setattr(calendar_service, "http", lambda: client)
+    monkeypatch.setattr(calendar_common, "http", lambda: client)
     settings = get_settings()
     monkeypatch.setattr(settings, "google_client_id", "cid")
     monkeypatch.setattr(settings, "google_client_secret", "secret")
@@ -250,7 +253,7 @@ async def test_busy_times_for_a_call_are_cached(monkeypatch):
         fetched.append(url)
         return [(datetime(2026, 10, 6, 9, tzinfo=NY), datetime(2026, 10, 6, 10, tzinfo=NY))]
 
-    monkeypatch.setattr(calendar_service, "fetch_ics_busy", fake_fetch)
+    monkeypatch.setattr(calendar_busy, "fetch_ics_busy", fake_fetch)
     merchant = SimpleNamespace(id="m-cache", timezone="America/New_York", region="US", calendar_settings={"busy_ics_urls": ["https://cal.example/a.ics"]})
     doctor = CatalogEntry("d1", "D1", "doctor", "Dr. X", {"calendar_ics": "webcal://cal.example/d.ics"})
     first = await calendar_service.busy_for(merchant, [doctor], days=14)

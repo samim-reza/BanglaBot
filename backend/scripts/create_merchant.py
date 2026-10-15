@@ -42,6 +42,8 @@ async def upsert(args: argparse.Namespace) -> str:
             action = "created"
         else:
             merchant.password_hash = hash_password(args.password)
+            # A reset signs the account out everywhere (older session tokens stop working).
+            merchant.token_version = int(merchant.token_version or 0) + 1
             if args.business:
                 merchant.business_name = args.business
             action = "password updated"

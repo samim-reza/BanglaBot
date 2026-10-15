@@ -3,190 +3,39 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import {
-  Building2,
-  ClipboardList,
-  ExternalLink,
-  Inbox,
-  LayoutDashboard,
-  LogOut,
-  Menu,
-  MessagesSquare,
-  Puzzle,
-  X,
-  type LucideIcon,
-} from "lucide-react";
+import { LogOut, Menu, X } from "lucide-react";
 
-import { ADDON_REQUESTS_CHANGED_EVENT } from "@/components/admin/addon-requests";
+import { AccountChip } from "@/components/admin/shell/account-chip";
+import { AdminMeProvider } from "@/components/admin/shell/admin-me";
+import { NavList, WebsiteLink } from "@/components/admin/shell/nav";
+import { useNavBadges } from "@/components/admin/shell/use-nav-badges";
 import { useAppToast } from "@/components/app-toast";
 import { BanglaBotBrand, BanglaBotMark } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { adminApi, adminToken, clearAdminSession } from "@/services/api";
+import { clearAdminSession } from "@/services/api";
 
-type NavItem = { href: string; label: string; icon: LucideIcon; badge?: "inquiries" | "requests" };
-
-const NAV: NavItem[] = [
-  { href: "/admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/merchants", label: "Accounts", icon: Building2 },
-  { href: "/admin/requests", label: "Add-on requests", icon: Puzzle, badge: "requests" },
-  { href: "/admin/orders", label: "Records", icon: ClipboardList },
-  { href: "/admin/calls", label: "Calls & chats", icon: MessagesSquare },
-  { href: "/admin/inquiries", label: "Sales inquiries", icon: Inbox, badge: "inquiries" },
-];
-
-/** Fired by screens that change inquiry statuses so the nav count refreshes. */
-export const INQUIRIES_CHANGED_EVENT = "admin:inquiries-changed";
-
-/**
- * Route guard for the admin console. `/admin/login` is public; every other
- * admin route needs a stored admin token, and a signed-in admin who visits the
- * login page is forwarded to the overview.
- */
-export function AdminGate({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [readyPath, setReadyPath] = useState<string | null>(null);
-  const isLogin = pathname.startsWith("/admin/login");
-
-  useEffect(() => {
-    setReadyPath(null);
-    const token = adminToken();
-    if (isLogin) {
-      if (token) {
-        router.replace("/admin");
-        return;
-      }
-      setReadyPath(pathname);
-      return;
-    }
-    if (!token) {
-      router.replace("/admin/login");
-      return;
-    }
-    setReadyPath(pathname);
-  }, [isLogin, pathname, router]);
-
-  if (readyPath !== pathname) {
-    return (
-      <div className="px-1 py-10 text-sm text-muted-foreground" role="status">
-        Loading…
-      </div>
-    );
-  }
-  return <>{children}</>;
-}
-
-/** Count of "new" sales inquiries for the nav badge; refreshed on navigation and on change events. */
-function useNewInquiries(enabled: boolean, pathname: string): number {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!enabled || !adminToken()) return;
-    let cancelled = false;
-    const load = () =>
-      adminApi
-        .inquiries({ status: "new", page_size: 1 })
-        .then((page) => !cancelled && setCount(page.total))
-        .catch(() => undefined);
-    void load();
-    window.addEventListener(INQUIRIES_CHANGED_EVENT, load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(INQUIRIES_CHANGED_EVENT, load);
-    };
-  }, [enabled, pathname]);
-  return enabled ? count : 0;
-}
-
-/** Pending add-on requests for the nav badge; refreshed on navigation and after approve / decline. */
-function usePendingRequests(enabled: boolean, pathname: string): number {
-  const [count, setCount] = useState(0);
-  useEffect(() => {
-    if (!enabled || !adminToken()) return;
-    let cancelled = false;
-    const load = () =>
-      adminApi
-        .addonRequests("pending")
-        .then((result) => !cancelled && setCount(result.items.length))
-        .catch(() => undefined);
-    void load();
-    window.addEventListener(ADDON_REQUESTS_CHANGED_EVENT, load);
-    return () => {
-      cancelled = true;
-      window.removeEventListener(ADDON_REQUESTS_CHANGED_EVENT, load);
-    };
-  }, [enabled, pathname]);
-  return enabled ? count : 0;
-}
-
-function NavList({
-  pathname,
-  newInquiries,
-  pendingRequests,
-  onNavigate,
-}: {
-  pathname: string;
-  newInquiries: number;
-  pendingRequests: number;
-  onNavigate?: () => void;
-}) {
-  return (
-    <nav aria-label="Admin console" className="flex flex-col gap-1">
-      {NAV.map((item) => {
-        const active = item.href === "/admin" ? pathname === "/admin" : pathname === item.href || pathname.startsWith(`${item.href}/`);
-        const count = item.badge === "inquiries" ? newInquiries : item.badge === "requests" ? pendingRequests : 0;
-        return (
-          <Link
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            aria-current={active ? "page" : undefined}
-            className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-            )}
-          >
-            <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-            <span className="flex-1">{item.label}</span>
-            {count > 0 && (
-              <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-bold leading-none text-primary-foreground">
-                {count > 99 ? "99+" : count}
-                <span className="sr-only">{item.badge === "requests" ? " pending" : " new"}</span>
-              </span>
-            )}
-          </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-function WebsiteLink({ onNavigate }: { onNavigate?: () => void }) {
-  return (
-    <Link
-      href="/"
-      target="_blank"
-      rel="noopener"
-      onClick={onNavigate}
-      className="flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <ExternalLink className="h-4 w-4 shrink-0" aria-hidden="true" />
-      Public website
-      <span className="sr-only">(opens in a new tab)</span>
-    </Link>
-  );
-}
+export { AdminGate } from "@/components/admin/shell/admin-gate";
+export { INQUIRIES_CHANGED_EVENT } from "@/components/admin/shell/use-nav-badges";
 
 /** Header, sidebar and mobile drawer for the platform admin console. */
 export function AdminShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const isLogin = pathname.startsWith("/admin/login");
+  return (
+    <AdminMeProvider enabled={!isLogin}>
+      <ShellFrame pathname={pathname} isLogin={isLogin}>
+        {children}
+      </ShellFrame>
+    </AdminMeProvider>
+  );
+}
+
+function ShellFrame({ pathname, isLogin, children }: { pathname: string; isLogin: boolean; children: React.ReactNode }) {
   const router = useRouter();
   const toast = useAppToast();
-  const isLogin = pathname.startsWith("/admin/login");
   const [menuOpen, setMenuOpen] = useState(false);
-  const newInquiries = useNewInquiries(!isLogin, pathname);
-  const pendingRequests = usePendingRequests(!isLogin, pathname);
+  const counts = useNavBadges(!isLogin, pathname);
 
   useEffect(() => setMenuOpen(false), [pathname]);
 
@@ -232,6 +81,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
             </Link>
           </div>
           <div className="flex items-center gap-2">
+            {!isLogin && <AccountChip />}
             <ThemeToggle />
             {!isLogin && (
               <Button variant="ghost" size="sm" onClick={logout} aria-label="Sign out">
@@ -251,8 +101,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         <div className="flex min-h-[calc(100vh-57px)]">
           <aside className="hidden w-60 shrink-0 border-r border-border bg-card lg:block">
             <div className="sticky top-[57px] flex h-[calc(100vh-57px)] flex-col overflow-y-auto p-3">
-              <p className="mb-2 px-3 text-[12px] font-semibold text-muted-foreground">Console</p>
-              <NavList pathname={pathname} newInquiries={newInquiries} pendingRequests={pendingRequests} />
+              <NavList pathname={pathname} counts={counts} />
               <div className="mt-auto border-t border-border pt-3">
                 <WebsiteLink />
               </div>
@@ -287,7 +136,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </button>
             </div>
             <div className="flex flex-1 flex-col overflow-y-auto p-3">
-              <NavList pathname={pathname} newInquiries={newInquiries} pendingRequests={pendingRequests} onNavigate={() => setMenuOpen(false)} />
+              <NavList pathname={pathname} counts={counts} onNavigate={() => setMenuOpen(false)} />
               <div className="mt-auto border-t border-border pt-3">
                 <WebsiteLink onNavigate={() => setMenuOpen(false)} />
               </div>

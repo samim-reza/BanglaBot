@@ -4,9 +4,12 @@ from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.crypto import decrypt_secret, encrypt_secret, is_encrypted, lookup_hash
 from app.db.base import Base, new_id
 
 DEFAULT_SUPPORTED_LANGUAGES = ["en", "bn"]
+#: ``lookup_hash`` purpose of calendar feed tokens.
+CALENDAR_TOKEN_PURPOSE = "calendar-feed"
 
 
 class Merchant(Base):
@@ -65,19 +68,68 @@ class Merchant(Base):
     widget_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     # POSTed a signed JSON event when a call / chat ends (bookings into the business's own system).
     webhook_url: Mapped[str] = mapped_column(String(500), default="")
-    webhook_secret: Mapped[str] = mapped_column(String(64), default="")
+    # Stored as ``enc:<fernet>`` (rows from before: plaintext until the next write);
+    # read and set through the ``webhook_secret`` property.
+    webhook_secret_stored: Mapped[str] = mapped_column("webhook_secret", String(255), default="")
     # SMS confirmations / reminders: {"enabled", "on_booking", "on_change", "reminder_hours"}.
     sms_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
-    # Secret in the account's calendar feed URL (iCal subscription); "" = not issued yet.
-    calendar_token: Mapped[str] = mapped_column(String(48), default="", index=True)
+    # Secret in the account's calendar feed URL (iCal subscription), read and set through the
+    # ``calendar_token`` property: found by its peppered hash, an encrypted copy rebuilds the
+    # URL for the owner. ``calendar_token_legacy`` is plaintext from before (cleared on upgrade).
+    calendar_token_legacy: Mapped[str] = mapped_column("calendar_token", String(48), default="", index=True)
+    calendar_token_hash: Mapped[str] = mapped_column(String(64), default="", index=True)
+    calendar_token_enc: Mapped[str] = mapped_column(String(255), default="")
     # {"busy_ics_urls": [...], "google": {"email", "calendar_id", "refresh_token_enc", ...}}
     calendar_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Add-ons on top of the plan: {"_v": 1, "<addon key>": quantity} (see app.core.addons).
     addons: Mapped[dict] = mapped_column(JSONB, default=lambda: {"_v": 1})
+    # Booking payments: {"provider": "platform" | "link", "link_template", "methods"} (app.services.payments.link).
+    payment_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Chat channels: {"whatsapp": {"number"}, "messenger": {"page_id", "page_name", "token_enc"}}.
     channel_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # The owner's call-flow settings, sparse (see app.pipeline.config): {"_v", "steps", "branches", "order"}.
+    agent_flow: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Platform-admin locks on call-flow settings: {"_v": 1, "locks": {path: value}}.
+    agent_flow_locks: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Admin-only provider overrides: {"llm_chain": "...", "stt_chain": "...", "tts_chain": "..."}.
+    provider_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Scheduled "call everyone who needs a call" run (UTC); NULL = nothing scheduled.
     auto_call_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Re-arm the schedule for the same time the next day after it fires.
     auto_call_repeat_daily: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Bumped on a password change / "sign out everywhere": older session tokens stop working.
+    token_version: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # --- secrets at rest -----------------------------------------------------------
+    @property
+    def webhook_secret(self) -> str:
+        return decrypt_secret(self.webhook_secret_stored or "")
+
+    @webhook_secret.setter
+    def webhook_secret(self, value: str) -> None:
+        self.webhook_secret_stored = encrypt_secret(value or "")
+
+    @property
+    def calendar_token(self) -> str:
+        if self.calendar_token_enc:
+            return decrypt_secret(self.calendar_token_enc)
+        return self.calendar_token_legacy or ""
+
+    @calendar_token.setter
+    def calendar_token(self, value: str) -> None:
+        token = value or ""
+        self.calendar_token_hash = lookup_hash(token, purpose=CALENDAR_TOKEN_PURPOSE) if token else ""
+        self.calendar_token_enc = encrypt_secret(token)
+        self.calendar_token_legacy = ""
+
+    def upgrade_stored_secrets(self) -> bool:
+        """Encrypt / hash secrets still stored in plaintext; True when anything changed."""
+        changed = False
+        if self.webhook_secret_stored and not is_encrypted(self.webhook_secret_stored):
+            self.webhook_secret = self.webhook_secret_stored
+            changed = True
+        if self.calendar_token_legacy and not self.calendar_token_hash:
+            self.calendar_token = self.calendar_token_legacy
+            changed = True
+        return changed

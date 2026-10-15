@@ -42,6 +42,11 @@ export function saveMerchantSession(token: string, merchant: Merchant) {
   store.removeItem(ADMIN_TOKEN_KEY);
 }
 
+/** Swap in a re-issued token (password change, "sign out everywhere") and keep the profile. */
+export function saveMerchantToken(token: string) {
+  if (token) storage()?.setItem(MERCHANT_TOKEN_KEY, token);
+}
+
 /** Refresh the cached merchant profile without touching the token. */
 export function saveMerchantProfile(merchant: Merchant) {
   storage()?.setItem(MERCHANT_KEY, JSON.stringify(merchant));

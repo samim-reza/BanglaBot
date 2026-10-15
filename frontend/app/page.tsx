@@ -12,11 +12,11 @@ import { SiteShell } from "@/components/site/site-shell";
 import { Steps } from "@/components/site/steps";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
-import { ENTERPRISE, HOME_FAQS, SALES_HREF, TRIAL, TRIAL_HREF, usd } from "@/lib/site-content";
+import { AGENTS, ENTERPRISE, HOME_FAQS, SALES_HREF, TRIAL, TRIAL_HREF, usd } from "@/lib/site-content";
 
 const PROMISES = [
   { icon: Clock, title: "Answers 24/7", body: "Calls and chats, nights and weekends included." },
-  { icon: CalendarCheck, title: "Books into your records", body: "Appointments, viewings and visits — read back first." },
+  { icon: CalendarCheck, title: "Books into your records", body: "Appointments, orders, tables and visits — read back first." },
   { icon: PhoneOutgoing, title: "Calls customers back", body: "Reminders, confirmations and lead follow-ups." },
   { icon: PhoneForwarded, title: "Hands off to your team", body: "Live transfer the moment a person is needed." },
 ];
@@ -34,7 +34,7 @@ export default function HomePage() {
           <div>
             <p className="inline-flex flex-wrap items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-primary-dark">
               <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
-              For clinics, real estate, home services &amp; e-commerce
+              For clinics, restaurants, salons, real estate, home services &amp; more
             </p>
             <h1 className="mt-5 text-balance text-4xl font-bold leading-[1.1] tracking-tight text-foreground sm:text-5xl">
               The AI receptionist that answers, books and calls back.
@@ -91,7 +91,7 @@ export default function HomePage() {
       <Section id="agents" labelledBy="agents-title">
         <SectionHeading
           id="agents-title"
-          eyebrow="One platform, four agents"
+          eyebrow={`One platform, ${AGENTS.length} agents`}
           title="An agent that already knows your kind of business"
           subtitle="Pick your business type. The agent already knows what to ask, how your bookings work and what it must never say."
         />

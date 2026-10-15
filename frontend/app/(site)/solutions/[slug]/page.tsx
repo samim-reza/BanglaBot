@@ -65,7 +65,7 @@ export default async function SolutionPage({ params }: Props) {
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button asChild className="h-11 px-6">
-                <Link href={`/contact?plan=trial&type=${agent.key}`}>
+                <Link href={`/get-started?vertical=${agent.key}`}>
                   Start free trial
                   <ArrowRight className="h-4 w-4" aria-hidden />
                 </Link>
@@ -158,7 +158,7 @@ export default async function SolutionPage({ params }: Props) {
 
       <Section tone="muted" labelledBy="others-title">
         <SectionHeading id="others-title" title="Other agents on the same platform" />
-        <ul className="mt-10 grid gap-4 md:grid-cols-3">
+        <ul className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {others.map((item) => {
             const OtherIcon = item.icon;
             return (
@@ -181,7 +181,7 @@ export default async function SolutionPage({ params }: Props) {
 
       <CtaBand
         title={`Start with the ${agent.agentName.toLowerCase()} today`}
-        trialHref={`/contact?plan=trial&type=${agent.key}`}
+        trialHref={`/get-started?vertical=${agent.key}`}
         salesHref={`/contact?type=${agent.key}`}
       />
     </>

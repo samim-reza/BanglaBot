@@ -11,6 +11,8 @@ from fastapi import HTTPException
 from app.core.config import get_settings
 from app.models import OrderStatus
 from app.services import dialer_service as dialer
+from app.services.dialer import batch as dialer_batch
+from app.services.dialer import queries as dialer_queries
 
 
 @pytest.fixture
@@ -18,8 +20,8 @@ def fast(monkeypatch):
     settings = get_settings()
     monkeypatch.setattr(settings, "bulk_call_gap_seconds", 0.0)
     monkeypatch.setattr(settings, "bulk_call_max_concurrent", 2)
-    monkeypatch.setattr(dialer, "SLOT_POLL_SECONDS", 0.01)
-    monkeypatch.setattr(dialer, "_runs", {})
+    monkeypatch.setattr(dialer_batch, "SLOT_POLL_SECONDS", 0.01)
+    monkeypatch.setattr(dialer_batch, "_runs", {})
     return settings
 
 
@@ -38,10 +40,10 @@ async def test_batch_dials_every_order_and_counts_outcomes(fast, monkeypatch):
     async def no_live_calls(merchant_id):
         return 0
 
-    monkeypatch.setattr(dialer, "_dial_one", fake_dial)
-    monkeypatch.setattr(dialer, "_live_calls", no_live_calls)
+    monkeypatch.setattr(dialer_batch, "_dial_one", fake_dial)
+    monkeypatch.setattr(dialer_batch, "_live_calls", no_live_calls)
     run = _run(outcomes)
-    await dialer._run_batch(run)
+    await dialer_batch._run_batch(run)
     assert dialed == ["o1", "o2", "o3", "o4"]
     assert (run.state, run.started, run.failed, run.skipped) == ("done", 2, 1, 1)
     assert run.finished_at is not None and not run.active
@@ -60,10 +62,10 @@ async def test_batch_waits_for_a_free_slot(fast, monkeypatch):
     async def fake_dial(run, order_id):
         return "started"
 
-    monkeypatch.setattr(dialer, "_live_calls", live_calls)
-    monkeypatch.setattr(dialer, "_dial_one", fake_dial)
+    monkeypatch.setattr(dialer_batch, "_live_calls", live_calls)
+    monkeypatch.setattr(dialer_batch, "_dial_one", fake_dial)
     run = _run(["o1"])
-    await dialer._run_batch(run)
+    await dialer_batch._run_batch(run)
     assert run.state == "done" and run.started == 1
     assert checks["n"] >= 3
 
@@ -79,10 +81,10 @@ async def test_cancel_stops_dialing_new_orders(fast, monkeypatch):
     async def no_live_calls(merchant_id):
         return 0
 
-    monkeypatch.setattr(dialer, "_dial_one", fake_dial)
-    monkeypatch.setattr(dialer, "_live_calls", no_live_calls)
+    monkeypatch.setattr(dialer_batch, "_dial_one", fake_dial)
+    monkeypatch.setattr(dialer_batch, "_live_calls", no_live_calls)
     run = _run(["o1", "o2", "o3"])
-    await dialer._run_batch(run)
+    await dialer_batch._run_batch(run)
     assert dialed == ["o1"]
     assert run.state == "cancelled" and run.started == 1
 
@@ -94,10 +96,10 @@ async def test_config_error_aborts_the_whole_batch(fast, monkeypatch):
     async def no_live_calls(merchant_id):
         return 0
 
-    monkeypatch.setattr(dialer, "_dial_one", fake_dial)
-    monkeypatch.setattr(dialer, "_live_calls", no_live_calls)
+    monkeypatch.setattr(dialer_batch, "_dial_one", fake_dial)
+    monkeypatch.setattr(dialer_batch, "_live_calls", no_live_calls)
     run = _run(["o1", "o2"])
-    await dialer._run_batch(run)
+    await dialer_batch._run_batch(run)
     assert run.state == "failed"
     assert "TELNYX_FROM_NUMBER" in run.error
 
@@ -106,20 +108,20 @@ async def test_wait_for_slot_survives_a_db_hiccup_then_cancels(fast, monkeypatch
     async def broken(merchant_id):
         raise RuntimeError("db down")
 
-    monkeypatch.setattr(dialer, "_live_calls", broken)
+    monkeypatch.setattr(dialer_batch, "_live_calls", broken)
     run = _run(["o1"])
     asyncio.get_running_loop().call_later(0.03, run.cancel_event.set)
-    assert await dialer._wait_for_slot(run) is False
+    assert await dialer_batch._wait_for_slot(run) is False
 
 
 def test_normalize_statuses_rejects_settled_orders():
-    assert dialer._normalize_statuses(None) == dialer.DEFAULT_BATCH_STATUSES
-    assert dialer._normalize_statuses([OrderStatus.pending, OrderStatus.pending, OrderStatus.needs_review]) == (
+    assert dialer_queries._normalize_statuses(None) == dialer.DEFAULT_BATCH_STATUSES
+    assert dialer_queries._normalize_statuses([OrderStatus.pending, OrderStatus.pending, OrderStatus.needs_review]) == (
         OrderStatus.pending,
         OrderStatus.needs_review,
     )
     with pytest.raises(HTTPException) as exc:
-        dialer._normalize_statuses([OrderStatus.confirmed])
+        dialer_queries._normalize_statuses([OrderStatus.confirmed])
     assert exc.value.status_code == 422
 
 
@@ -142,7 +144,7 @@ def test_next_daily_rolls_to_the_same_time_after_now():
 async def test_cancel_batch_only_touches_active_runs(fast):
     finished = _run(["o1"])
     finished.state = "done"
-    dialer._runs["m1"] = finished
+    dialer_batch._runs["m1"] = finished
     assert await dialer.cancel_batch("m1") is finished
     assert not finished.cancel_event.is_set()
     assert await dialer.cancel_batch("nobody") is None

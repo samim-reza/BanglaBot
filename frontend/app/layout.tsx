@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     template: `%s | ${BRAND.name}`,
   },
   description:
-    "Ready-made AI voice and chat agents for clinics, real estate agencies, home services and e-commerce. They answer every call 24/7, book straight into your records and call customers back.",
+    "Ready-made AI voice and chat agents for clinics, restaurants, salons, real estate, home services, e-commerce and more. They answer every call 24/7, book straight into your records and call customers back.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

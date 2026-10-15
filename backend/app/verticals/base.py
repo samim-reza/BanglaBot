@@ -24,6 +24,8 @@ from app.flows.base import Flow
 FIELD_TYPES = (
     "text", "textarea", "phone", "money", "number", "date", "time", "datetime",
     "select", "multiselect", "days", "catalog", "bool", "list",
+    # Structured options of call-flow steps (intake field lists, custom questions).
+    "fields", "custom_fields",
 )
 #: Record columns a record field may map to (everything else lives in ``details``).
 RECORD_COLUMNS = (
@@ -50,6 +52,8 @@ class FieldSpec:
     default: Any = None
     #: Shown in the records table.
     list_column: bool = False
+    #: For a ``catalog`` field: which catalog kind it picks from (empty = the vertical's primary kind).
+    catalog_kind: str = ""
 
     @property
     def column(self) -> str | None:
@@ -67,6 +71,32 @@ class FieldSpec:
             "default": self.default,
             "list_column": self.list_column,
             "column": self.column,
+            "catalog_kind": self.catalog_kind,
+        }
+
+
+@dataclass(frozen=True)
+class CatalogKind:
+    """One kind of catalog item a vertical keeps — most keep one, a salon keeps services AND staff."""
+
+    kind: str
+    label: dict[str, str]
+    label_plural: dict[str, str]
+    fields: tuple[FieldSpec, ...]
+    #: Prefix of the short refs the agent uses (``S1``, ``T2``); empty = the kind's first letter.
+    ref_prefix: str = ""
+
+    @property
+    def prefix(self) -> str:
+        return self.ref_prefix or self.kind[:1].upper() or "I"
+
+    def as_json(self) -> dict[str, Any]:
+        return {
+            "kind": self.kind,
+            "label": self.label,
+            "label_plural": self.label_plural,
+            "fields": [spec.as_json() for spec in self.fields],
+            "ref_prefix": self.prefix,
         }
 
 
@@ -95,6 +125,12 @@ class Vertical:
     scheduled: bool = False
     #: One-line description of a record for tables and logs.
     summarize: Callable[[Any, dict[str, str]], str] | None = None
+    #: Skill pipelines per direction (``app.pipeline.Blueprint``); empty = legacy flows only.
+    blueprints: dict[str, Any] = field(default_factory=dict)
+    #: Settings layered under the owner's (e.g. dental/vet wording on the clinic engine).
+    preset: dict[str, Any] = field(default_factory=dict)
+    #: Every catalog kind, primary first; empty = just ``catalog_kind`` / ``catalog_fields``.
+    catalog_kinds: tuple[CatalogKind, ...] = ()
 
     @property
     def directions(self) -> list[str]:
@@ -102,6 +138,22 @@ class Vertical:
 
     def flow(self, direction: str) -> Flow | None:
         return self.flows.get(direction)
+
+    @property
+    def kinds(self) -> tuple[CatalogKind, ...]:
+        """The catalog kinds this vertical keeps (one for most verticals)."""
+        if self.catalog_kinds:
+            return self.catalog_kinds
+        if not self.catalog_kind:
+            return ()
+        return (CatalogKind(self.catalog_kind, self.catalog_label, self.catalog_label_plural, self.catalog_fields),)
+
+    def catalog_spec(self, kind: str | None = None) -> CatalogKind | None:
+        """One catalog kind's spec (the primary one when ``kind`` is empty), or ``None``."""
+        kinds = self.kinds
+        if not kind:
+            return kinds[0] if kinds else None
+        return next((spec for spec in kinds if spec.kind == kind), None)
 
     def config(self, merchant: Any) -> dict[str, Any]:
         """The merchant's vertical settings over this vertical's defaults."""
@@ -124,13 +176,15 @@ class Vertical:
             "catalog_label": self.catalog_label,
             "catalog_label_plural": self.catalog_label_plural,
             "catalog_fields": [spec.as_json() for spec in self.catalog_fields],
+            "catalog_kinds": [spec.as_json() for spec in self.kinds],
             "config_fields": [spec.as_json() for spec in self.config_fields],
             "config_defaults": self.config_defaults,
             "status_labels": self.status_labels,
             "outbound_label": self.outbound_label,
             "directions": self.directions,
             "scheduled": self.scheduled,
+            "configurable_flow": bool(self.blueprints),
         }
 
 
-__all__ = ["FIELD_TYPES", "RECORD_COLUMNS", "FieldSpec", "L", "Vertical"]
+__all__ = ["FIELD_TYPES", "RECORD_COLUMNS", "CatalogKind", "FieldSpec", "L", "Vertical"]

@@ -15,6 +15,8 @@ from typing import Any, AsyncIterator
 import structlog
 import websockets
 
+from app.voice.codec import b64_decoded_len
+
 logger = structlog.get_logger(__name__)
 
 TRANSCRIPTION_URL = "wss://api.openai.com/v1/realtime?intent=transcription"
@@ -30,6 +32,9 @@ class STTEvent:
 
 
 class TranscriptionStream:
+    #: Provider name (finance metering + logs).
+    name = "openai"
+
     def __init__(
         self,
         *,
@@ -52,6 +57,8 @@ class TranscriptionStream:
         self.noise_reduction = noise_reduction
         self._ws: Any = None
         self.session_id: str | None = None
+        #: μ-law bytes forwarded (8000 per second): what the transcription model bills.
+        self.audio_bytes = 0
 
     def _session_body(self) -> dict[str, Any]:
         transcription: dict[str, Any] = {"model": self.model}
@@ -87,6 +94,7 @@ class TranscriptionStream:
             return
         try:
             await self._ws.send(json.dumps({"type": "input_audio_buffer.append", "audio": payload}))
+            self.audio_bytes += b64_decoded_len(payload)
         except websockets.ConnectionClosed:
             # Late frames after the session closed are not an error for the call.
             self._ws = None
@@ -137,6 +145,11 @@ class TranscriptionStream:
         # Socket iteration ended without an exception (clean close).
         self._ws = None
         yield STTEvent("closed")
+
+    def usage(self) -> dict[str, Any]:
+        """Billable usage so far (OpenAI bills transcription by audio duration)."""
+        seconds = round(self.audio_bytes / 8000, 2)
+        return {"provider": self.name, "model": self.model, "audio_seconds": seconds, "billed_seconds": seconds}
 
     async def close(self) -> None:
         if self._ws is not None:

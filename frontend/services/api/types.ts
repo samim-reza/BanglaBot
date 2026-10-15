@@ -6,13 +6,13 @@ export const ORDER_STATUSES: OrderStatus[] = ["pending", "calling", "confirmed",
 
 export type Language = "bn" | "en";
 export type VoicePersona = "female" | "male";
-export type VerticalKey = "ecommerce" | "clinic" | "real_estate" | "home_service";
+export type VerticalKey = "ecommerce" | "clinic" | "dental" | "vet" | "salon" | "real_estate" | "home_service" | "restaurant" | "custom";
 export type Direction = "inbound" | "outbound";
 /** Where a call log came from: phone (outbound / inbound), browser test (web), chat test (chat), website widget. */
 export type CallChannel = "outbound" | "inbound" | "web" | "chat" | "widget" | "whatsapp" | "messenger";
 
 /** Where an account talks to customers. */
-export type ChannelKey = "voice" | "web_chat" | "whatsapp" | "messenger";
+export type ChannelKey = "voice" | "web_chat" | "whatsapp" | "messenger" | "instagram";
 
 /** A label in both portal languages. */
 export type Label = { en: string; bn: string };
@@ -49,6 +49,15 @@ export type FieldSpec = {
   column: string | null;
 };
 
+/** One kind of catalog item a vertical keeps (most verticals have one). */
+export type CatalogKindSpec = {
+  kind: string;
+  label: Partial<Label>;
+  label_plural: Partial<Label>;
+  fields: FieldSpec[];
+  ref_prefix?: string;
+};
+
 /** A business engine: what records / catalog items are called and which fields they have. */
 export type VerticalSpec = {
   key: VerticalKey;
@@ -62,6 +71,8 @@ export type VerticalSpec = {
   catalog_label: Partial<Label>;
   catalog_label_plural: Partial<Label>;
   catalog_fields: FieldSpec[];
+  /** Every catalog kind, primary first (newer backends only — detect at runtime). */
+  catalog_kinds?: CatalogKindSpec[];
   config_fields: FieldSpec[];
   config_defaults: Record<string, unknown>;
   status_labels: Partial<Record<OrderStatus, Label>>;
@@ -69,6 +80,8 @@ export type VerticalSpec = {
   directions: Direction[];
   /** Records have a date/time (appointments, viewings, visits). */
   scheduled: boolean;
+  /** The call flow is built from skills the owner can edit (Agent page). */
+  configurable_flow?: boolean;
 };
 
 export type Region = {
@@ -222,11 +235,29 @@ export type Order = {
   /** One-line, vertical-specific description. */
   summary: string;
   flow_data: Record<string, unknown>;
+  /** Online payment state (newer backends): see `PaymentStatus`. */
+  payment_status?: PaymentStatus | string;
+  /** The current payment link, when one was sent. */
+  payment_url?: string;
   call_attempts: number;
   last_call_at: string | null;
   created_at: string;
   /** Present on admin listings only. */
   merchant_name?: string;
+};
+
+/** A record's payment: not needed, paid on arrival, link out, paid, … */
+export type PaymentStatus = "not_required" | "at_venue" | "pending" | "link_sent" | "paid" | "failed" | "refunded" | "expired";
+
+/** `details.payment` as the payment step leaves it on a record. */
+export type RecordPayment = {
+  mode?: string;
+  method?: string;
+  amount?: number | string;
+  currency?: string;
+  status?: string;
+  paid_at?: string;
+  hold_until?: string;
 };
 
 /** Record form values: columns top-level, vertical fields top-level or under `details`. */
@@ -525,7 +556,17 @@ export type Entitlements = {
   channels: ChannelKey[];
   features: string[];
   addons: Record<string, number>;
-  limits: Limits;
+  limits: Limits & { languages?: number; max_concurrent_calls?: number };
+  /** What the tier unlocks (newer backends). */
+  capabilities?: Capabilities;
+};
+
+export type Capabilities = {
+  /** "lines" = reword lines only; "full" = also switch / reorder steps and change options. */
+  flow_editing?: "lines" | "full";
+  payments?: boolean;
+  custom_fields?: boolean;
+  api_webhooks?: boolean;
 };
 
 export type AddonCategory = "channel" | "capacity" | "feature" | "service";
@@ -579,8 +620,33 @@ export type AddonShop = {
   requests: AddonRequest[];
 };
 
+/** A channel on the Channels page: in the tier, bought, buyable, or not offered. */
+export type ChannelState = {
+  channel: string;
+  label: string;
+  state: "included" | "addon" | "available" | "unavailable";
+  active: boolean;
+  /** The add-on that sells it ("" = none). */
+  addon: string;
+  /** Set when `state` is "available". */
+  price_label: string;
+};
+
 /** GET /api/channels */
 export type ChannelsView = ChannelSetup & {
   active: ChannelKey[];
-  platform: { whatsapp_ready: boolean; whatsapp_webhook: string; messenger_ready: boolean; messenger_webhook: string };
+  /** Newer backends: Instagram DMs and the WhatsApp Cloud API (Meta). */
+  instagram?: { account_id: string; username: string; connected: boolean };
+  whatsapp_cloud?: { phone_number_id: string; display_number: string; name: string; connected: boolean };
+  status?: ChannelState[];
+  platform: {
+    whatsapp_ready: boolean;
+    whatsapp_webhook: string;
+    messenger_ready: boolean;
+    messenger_webhook: string;
+    instagram_ready?: boolean;
+    instagram_webhook?: string;
+    whatsapp_cloud_ready?: boolean;
+    whatsapp_cloud_webhook?: string;
+  };
 };

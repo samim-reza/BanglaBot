@@ -50,7 +50,7 @@ def _phone(value: str) -> str:
 class MerchantCreate(BaseModel):
     business_name: str = Field(min_length=1, max_length=160)
     username: str = Field(min_length=3, max_length=80, pattern=r"^[A-Za-z0-9_.-]+$")
-    password: str = Field(min_length=6, max_length=200)
+    password: str = Field(min_length=10, max_length=200)
     #: Business engine — fixed for the life of the account.
     vertical: str = "ecommerce"
     region: str = "INTL"
@@ -115,7 +115,7 @@ class MerchantCreate(BaseModel):
 
 
 class MerchantAdminUpdate(MerchantSettingsUpdate):
-    password: str | None = Field(default=None, min_length=6, max_length=200)
+    password: str | None = Field(default=None, min_length=10, max_length=200)
     active: bool | None = None
     plan: str | None = None
 
@@ -159,6 +159,8 @@ class AdminOverview(BaseModel):
     needs_review_orders: int
     inbound_today: int = 0
     booked_today: int = 0
+    #: Call minutes today across all accounts (voice directions only).
+    minutes_today: float = 0
     by_vertical: dict[str, int] = {}
     pending_addon_requests: int = 0
 

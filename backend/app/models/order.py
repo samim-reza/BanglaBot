@@ -58,6 +58,11 @@ class Order(Base):
     notes: Mapped[str] = mapped_column(Text, default="")
     # Slots the agent collected on the last call (identity, address, note, ...).
     flow_data: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Online payment (app.services.payments): not_required | at_venue | pending | paid | failed |
+    # refunded | expired; the payments.id of the current link and the link itself.
+    payment_status: Mapped[str] = mapped_column(String(16), default="not_required")
+    payment_ref: Mapped[str] = mapped_column(String(64), default="")
+    payment_url: Mapped[str] = mapped_column(Text, default="")
     call_attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_call_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

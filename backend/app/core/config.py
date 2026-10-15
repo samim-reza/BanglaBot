@@ -49,6 +49,34 @@ class Settings(BaseSettings):
         default="change-me-admin-token-secret",
         validation_alias=AliasChoices("ADMIN_TOKEN_SECRET", "JWT_SECRET"),
     )
+    # The secret being rotated out: tokens / signed paths it made still verify.
+    admin_token_secret_previous: str | None = None
+    merchant_session_ttl_hours: int = 72
+    admin_session_ttl_hours: int = 12
+    # Proxies in front of the app that append to X-Forwarded-For (Render = 1);
+    # 0 = ignore the header and use the socket address.
+    trusted_proxy_hops: int = 1
+    # Signs the /telnyx/* webhook paths; empty = derived from ADMIN_TOKEN_SECRET.
+    telnyx_webhook_secret: str | None = None
+    # Largest request body accepted (bytes): everything / public + webhook endpoints.
+    max_request_bytes: int = 2_000_000
+    max_public_request_bytes: int = 65_536
+    encryption_secret_previous: str | None = None
+
+    @field_validator("admin_token_secret", mode="before")
+    @classmethod
+    def _blank_token_secret_is_default(cls, value):
+        # An empty ADMIN_TOKEN_SECRET= line must never mean "sign with an empty key".
+        if isinstance(value, str) and not value.strip():
+            return "change-me-admin-token-secret"
+        return value
+
+    @field_validator("admin_token_secret_previous", "telnyx_webhook_secret", "encryption_secret_previous", mode="before")
+    @classmethod
+    def _blank_security_secret_as_none(cls, value):
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value.strip() if isinstance(value, str) else value
 
     # --- OpenAI: streaming STT + the call brain ------------------------------
     openai_api_key: str | None = None

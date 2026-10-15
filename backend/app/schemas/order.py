@@ -125,6 +125,9 @@ class OrderOut(BaseModel):
     scheduled_at: datetime | None = None
     details: dict[str, Any] = {}
     summary: str = ""
+    #: not_required | pending | link_sent | paid | failed | refunded | expired
+    payment_status: str = "not_required"
+    payment_url: str = ""
     flow_data: dict[str, Any]
     call_attempts: int
     last_call_at: datetime | None

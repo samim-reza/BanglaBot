@@ -3,6 +3,8 @@
 #
 #   ./scripts/dev.sh            start everything (re-runnable: stops previous instances first)
 #   ./scripts/dev.sh --no-ngrok start without a tunnel (no outbound calls will reach Telnyx webhooks)
+#   ./scripts/dev.sh --speech   also start the local open-source speech server (GPU: Parakeet + Kokoro)
+#   ./scripts/dev.sh --route-telnyx  point the Telnyx number's TeXML app at the ngrok URL (and back on exit)
 #
 # The ngrok https URL is exported as PUBLIC_BASE_URL / TELNYX_PUBLIC_BASE_URL so the backend
 # builds Telnyx webhook + media-stream URLs that Telnyx can reach. Real environment variables
@@ -14,7 +16,16 @@ FRONTEND="$ROOT/frontend"
 VENV="$BACKEND/venv"
 UV="${UV:-$HOME/.local/bin/uv}"
 USE_NGROK=1
-[ "${1:-}" = "--no-ngrok" ] && USE_NGROK=0
+USE_SPEECH=0
+ROUTE_TELNYX=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-ngrok) USE_NGROK=0 ;;
+    --speech) USE_SPEECH=1 ;;
+    --route-telnyx) ROUTE_TELNYX=1 ;;
+    *) echo "✖ Unknown option: $arg"; exit 1 ;;
+  esac
+done
 
 cleanup() { kill 0 2>/dev/null || true; }
 trap cleanup EXIT
@@ -103,6 +114,22 @@ else
   echo "▶ Skipping ngrok (--no-ngrok): outbound calls cannot reach this machine."
 fi
 
+# --- Local speech server (optional) --------------------------------------------------------------
+if [ "$USE_SPEECH" -eq 1 ]; then
+  pkill -f "python -m server" 2>/dev/null || true
+  echo "▶ Starting the local speech server on :8100 (first run downloads ~2 GB of models)..."
+  "$ROOT/scripts/speech.sh" > /tmp/banglabot-speech.log 2>&1 &
+  for _ in $(seq 1 120); do
+    curl -sf --max-time 2 http://127.0.0.1:8100/health >/dev/null 2>&1 && break
+    sleep 1
+  done
+  if curl -sf --max-time 2 http://127.0.0.1:8100/health >/dev/null 2>&1; then
+    echo "✔ Speech server ready (log: /tmp/banglabot-speech.log)"
+  else
+    echo "⚠ Speech server not ready yet — calls fall back to the cloud chain. Log: /tmp/banglabot-speech.log"
+  fi
+fi
+
 # --- Backend -----------------------------------------------------------------------------------
 echo "▶ Starting backend on :8000..."
 (cd "$BACKEND" && "$VENV/bin/uvicorn" app.main:app --host 0.0.0.0 --port 8000 --reload) &
@@ -121,6 +148,12 @@ if [ "$backend_ready" -ne 1 ]; then
   exit 1
 fi
 echo "✔ Backend ready"
+
+if [ "$ROUTE_TELNYX" -eq 1 ] && [ -n "$PUBLIC_BASE_URL" ]; then
+  echo "▶ Pointing the Telnyx number at $PUBLIC_BASE_URL ..."
+  (cd "$BACKEND" && "$VENV/bin/python" -m scripts.telnyx_route local --url "$PUBLIC_BASE_URL") || echo "⚠ Telnyx repoint failed — calls still go to production"
+  trap '(cd "$BACKEND" && "$VENV/bin/python" -m scripts.telnyx_route prod) >/dev/null 2>&1 || true; cleanup' EXIT
+fi
 
 # --- Frontend ----------------------------------------------------------------------------------
 echo "▶ Starting frontend on :3000..."

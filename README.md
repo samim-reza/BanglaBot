@@ -45,12 +45,12 @@ backend/app/
     base.py       Vertical spec: flows per direction, record/catalog/config field specs, labels
     forms.py      validates portal input against those field specs
   voice/        TRANSPORTS + speech
-    agent.py      CallAgent: the conversation brain (model loop, tools, fast paths)
-    bridge.py     audio transport (Telnyx media stream, or the browser test call)
+    agent/        CallAgent: the conversation brain (model loop, tools, fast paths)
+    bridge/       audio transport (Telnyx media stream, or the browser test call)
     text_session.py  text transport (portal chat test, website widget)
     tools.py      save_details / terminals / transfer / end_call; commits through a CallStore
     prompts.py    layered prompt: core rules → engine rules → business → this call
-    llm.py stt.py tts.py tts_cache.py audio.py languages.py prepared.py twiml.py
+    llm.py stt.py tts.py tts_cache/ audio.py languages.py prepared.py twiml.py
   services/     call lifecycle (call_service), context loading, catalog, records, usage, webhooks, dialer
   api/routes/   auth (owner), orders (records), catalog, calls, agent (tests), admin, public, telnyx (calls + SMS), twilio (WhatsApp)
 ```

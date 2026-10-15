@@ -84,7 +84,7 @@ function PlanCard({ plan, billing }: { plan: SitePlan; billing: Billing }) {
         <Price monthly={plan.price} billing={billing} />
       </div>
       <Button asChild variant={plan.highlight ? "default" : "outline"} className="mt-6 w-full">
-        <Link href={`/contact?plan=${plan.key}`} aria-label={`Start with the ${plan.name} plan`}>
+        <Link href={`/get-started?plan=${plan.key}&interval=${billing === "annual" ? "year" : "month"}`} aria-label={`Start with the ${plan.name} plan`}>
           Start with {plan.name}
         </Link>
       </Button>

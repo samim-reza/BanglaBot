@@ -3,7 +3,7 @@ edit, delete, call, bulk calling, recordings."""
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_merchant
@@ -21,6 +21,7 @@ from app.schemas.order import (
     OrderUpdate,
 )
 from app.services import call_service, dialer_service, order_service
+from app.services.tenancy import owned
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
 
@@ -116,9 +117,7 @@ async def recording(
     merchant: Merchant = Depends(get_current_merchant),
     db: AsyncSession = Depends(get_db),
 ):
-    log = await db.get(CallLog, log_id)
-    if log is None or log.merchant_id != merchant.id:
-        raise HTTPException(status_code=404, detail="Call log not found")
+    log = await owned(db, CallLog, log_id, merchant, detail="Call log not found")
     content, media_type = await call_service.fetch_recording(log)
     return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, max-age=3600"})
 

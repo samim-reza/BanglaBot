@@ -16,17 +16,27 @@ from app.core.datetime_utils import utcnow
 from app.models import CatalogItem, Merchant
 from app.schemas.catalog import CatalogItemIn
 from app.services.context_service import invalidate_catalog
+from app.services.tenancy import owned
 from app.verticals import vertical_for
 from app.verticals.forms import FieldError, split_catalog
 
 MAX_ITEMS = 500
 
 
-def _vertical_kind(merchant: Merchant) -> str:
+def _vertical_kind(merchant: Merchant, kind: str | None = None) -> str:
+    """The catalog kind to work on: ``kind`` when the vertical keeps it (a salon: service / staff), else the primary."""
     vertical = vertical_for(merchant)
     if not vertical.catalog_kind:
         raise HTTPException(status_code=404, detail="This account type has no catalog")
-    return vertical.catalog_kind
+    spec = vertical.catalog_spec(kind)
+    if spec is None:
+        raise HTTPException(status_code=422, detail=f"Unknown catalog kind {kind!r}")
+    return spec.kind
+
+
+def _fields(merchant: Merchant, kind: str | None = None):  # noqa: ANN202
+    spec = vertical_for(merchant).catalog_spec(kind)
+    return spec.fields if spec is not None else vertical_for(merchant).catalog_fields
 
 
 def _payload(data: CatalogItemIn) -> dict[str, Any]:
@@ -37,8 +47,8 @@ def _payload(data: CatalogItemIn) -> dict[str, Any]:
     return payload
 
 
-async def list_items(db: AsyncSession, merchant: Merchant) -> list[CatalogItem]:
-    kind = _vertical_kind(merchant)
+async def list_items(db: AsyncSession, merchant: Merchant, kind: str | None = None) -> list[CatalogItem]:
+    kind = _vertical_kind(merchant, kind)
     rows = await db.scalars(
         select(CatalogItem)
         .where(CatalogItem.merchant_id == merchant.id, CatalogItem.kind == kind)
@@ -48,19 +58,16 @@ async def list_items(db: AsyncSession, merchant: Merchant) -> list[CatalogItem]:
 
 
 async def get_item(db: AsyncSession, merchant: Merchant, item_id: str) -> CatalogItem:
-    item = await db.get(CatalogItem, item_id)
-    if item is None or item.merchant_id != merchant.id:
-        raise HTTPException(status_code=404, detail="Catalog item not found")
-    return item
+    return await owned(db, CatalogItem, item_id, merchant, detail="Catalog item not found")
 
 
-async def create_item(db: AsyncSession, merchant: Merchant, data: CatalogItemIn) -> CatalogItem:
-    kind = _vertical_kind(merchant)
+async def create_item(db: AsyncSession, merchant: Merchant, data: CatalogItemIn, kind: str | None = None) -> CatalogItem:
+    kind = _vertical_kind(merchant, kind)
     count = int(await db.scalar(select(func.count(CatalogItem.id)).where(CatalogItem.merchant_id == merchant.id)) or 0)
     if count >= MAX_ITEMS:
         raise HTTPException(status_code=409, detail=f"An account can have at most {MAX_ITEMS} catalog items")
     try:
-        name, values = split_catalog(vertical_for(merchant), _payload(data))
+        name, values = split_catalog(vertical_for(merchant), _payload(data), kind=kind)
     except FieldError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     item = CatalogItem(
@@ -80,7 +87,7 @@ async def create_item(db: AsyncSession, merchant: Merchant, data: CatalogItemIn)
 
 async def update_item(db: AsyncSession, merchant: Merchant, item: CatalogItem, data: CatalogItemIn) -> CatalogItem:
     try:
-        name, values = split_catalog(vertical_for(merchant), _payload(data), partial=True)
+        name, values = split_catalog(vertical_for(merchant), _payload(data), partial=True, kind=item.kind or None)
     except FieldError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if name:
@@ -111,9 +118,9 @@ async def delete_item(db: AsyncSession, item: CatalogItem) -> None:
     invalidate_catalog(merchant_id)
 
 
-def _header_map(merchant: Merchant, header: list[str]) -> dict[int, str]:
+def _header_map(merchant: Merchant, header: list[str], kind: str | None = None) -> dict[int, str]:
     """CSV column index → field key (headers may be keys or English / Bangla labels)."""
-    specs = vertical_for(merchant).catalog_fields
+    specs = _fields(merchant, kind)
     lookup: dict[str, str] = {}
     for spec in specs:
         lookup[spec.key.lower()] = spec.key
@@ -127,14 +134,14 @@ def _header_map(merchant: Merchant, header: list[str]) -> dict[int, str]:
     return mapping
 
 
-async def import_csv(db: AsyncSession, merchant: Merchant, text: str, *, replace: bool = False) -> dict[str, Any]:
-    kind = _vertical_kind(merchant)
+async def import_csv(db: AsyncSession, merchant: Merchant, text: str, *, replace: bool = False, kind: str | None = None) -> dict[str, Any]:
+    kind = _vertical_kind(merchant, kind)
     vertical = vertical_for(merchant)
     reader = csv.reader(io.StringIO(text.strip()))
     rows = list(reader)
     if not rows:
         raise HTTPException(status_code=422, detail="The CSV is empty")
-    mapping = _header_map(merchant, rows[0])
+    mapping = _header_map(merchant, rows[0], kind)
     if "name" not in mapping.values():
         raise HTTPException(status_code=422, detail="The CSV header must include a 'name' column")
     if replace:
@@ -150,7 +157,7 @@ async def import_csv(db: AsyncSession, merchant: Merchant, text: str, *, replace
             if index < len(row) and row[index].strip():
                 payload[key] = row[index].strip()
         try:
-            name, values = split_catalog(vertical, payload)
+            name, values = split_catalog(vertical, payload, kind=kind)
         except FieldError as exc:
             skipped += 1
             errors.append(f"line {line_no}: {exc}")
@@ -166,8 +173,8 @@ async def import_csv(db: AsyncSession, merchant: Merchant, text: str, *, replace
     return {"created": created, "skipped": skipped, "errors": errors[:50]}
 
 
-def csv_template(merchant: Merchant) -> str:
-    specs = vertical_for(merchant).catalog_fields
+def csv_template(merchant: Merchant, kind: str | None = None) -> str:
+    specs = _fields(merchant, kind)
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow([spec.key for spec in specs])

@@ -10,7 +10,7 @@ in-memory store and are printed.
     venv/bin/python -m scripts.simulate clinic --direction outbound --record 0
     venv/bin/python -m scripts.simulate home_service --chat            # website-chat style
 
-Needs OPENAI_API_KEY in .env (each turn is one gpt-5.4-mini request).
+Uses the LLM chain from .env (LLM_CHAIN; free Groq/Gemini keys by default, OpenAI with LLM_ALLOW_PAID).
 """
 
 from __future__ import annotations
@@ -22,15 +22,14 @@ import sys
 import time
 from typing import Any
 
-from app.core.config import get_settings
 from app.db.base import new_id
-from app.db import demo_accounts
+from app.db import demo_accounts, demo_care_engines, demo_new_engines
 from app.flows.context import DIRECTION_INBOUND, CallContext, CatalogEntry
 from app.flows.scheduling import slot_key
 from app.flows.timefmt import business_tz, local_now
 from app.models import CatalogItem, Merchant, Order
 from app.verticals import flow_for
-from app.voice.llm import ChatLLM
+from app.voice.providers.llm import llm_configured, llm_for_call
 from app.voice.text_session import TextSession
 from app.voice.tools import NullCallStore
 
@@ -39,8 +38,11 @@ SEEDS = {
     "clinic": demo_accounts.seed_clinic,
     "real_estate": demo_accounts.seed_real_estate,
     "home_service": demo_accounts.seed_home_service,
+    "restaurant": demo_new_engines.seed_restaurant,
+    "custom": demo_new_engines.seed_custom,
+    **demo_care_engines.CARE_SEEDS,
 }
-REF_PREFIX = {"doctor": "D", "property": "P", "service": "S"}
+REF_PREFIX = {"doctor": "D", "property": "P", "service": "S", "staff": "T"}
 
 
 class MemorySession:
@@ -67,17 +69,27 @@ class MemorySession:
         await self.flush()
 
 
-class LoggingLLM(ChatLLM):
-    async def complete(self, messages, **kwargs):  # type: ignore[override]
+class LoggingLLM:
+    """Wraps the call's LLM; prints each tool call with latency, tokens and the model that served it."""
+
+    def __init__(self, inner) -> None:  # noqa: ANN001
+        self.inner = inner
+
+    def __getattr__(self, name):  # noqa: ANN001, ANN204
+        return getattr(self.inner, name)
+
+    async def complete(self, messages, **kwargs):  # noqa: ANN001, ANN201
         started = time.monotonic()
-        reply = await super().complete(messages, **kwargs)
+        reply = await self.inner.complete(messages, **kwargs)
         ms = int((time.monotonic() - started) * 1000)
         usage = reply.usage or {}
         cached = int((usage.get("prompt_tokens_details") or {}).get("cached_tokens") or 0)
+        served = getattr(getattr(self.inner, "last_link", None), "key", getattr(self.inner, "model", "?"))
+        tag = f"[{ms} ms, {served}, prompt {usage.get('prompt_tokens')} / cached {cached}]"
         for call in reply.tool_calls:
-            print(f"      · {call.name}({call.arguments})  [{ms} ms, prompt {usage.get('prompt_tokens')} / cached {cached}]")
+            print(f"      · {call.name}({call.arguments})  {tag}")
         if not reply.tool_calls:
-            print(f"      · text reply  [{ms} ms, prompt {usage.get('prompt_tokens')} / cached {cached}]")
+            print(f"      · text reply  {tag}")
         return reply
 
 
@@ -124,9 +136,8 @@ def context(merchant: Merchant, items: list[CatalogItem], records: list[Order], 
 
 
 async def run(args: argparse.Namespace) -> int:
-    settings = get_settings()
-    if not settings.openai_api_key:
-        print("OPENAI_API_KEY is not set (.env)")
+    if not llm_configured():
+        print("No LLM provider configured (.env): set GROQ_API_KEY / GEMINI_API_KEY, or OPENAI_API_KEY + LLM_ALLOW_PAID=true")
         return 2
     merchant, items, records = await build(args.vertical)
     if args.language:
@@ -135,13 +146,7 @@ async def run(args: argparse.Namespace) -> int:
     ctx = context(merchant, items, records, direction=args.direction, record=record, caller=args.caller, chat=args.chat)
     flow = flow_for(merchant, args.direction)
     store = NullCallStore(taken=set(args.taken or []))
-    llm = LoggingLLM(
-        api_key=settings.openai_api_key,
-        model=settings.openai_llm_model,
-        reasoning_effort=settings.openai_llm_reasoning_effort,
-        max_output_tokens=settings.openai_llm_max_output_tokens,
-        prompt_cache_key=f"{flow.key}:sim",
-    )
+    llm = LoggingLLM(llm_for_call(flow_key=f"{flow.key}:sim", merchant=merchant, channel="chat" if args.chat else "voice"))
     session = TextSession(merchant=merchant, ctx=ctx, flow=flow, store=store, call_log_id="sim", llm=llm)
     print(f"== {merchant.business_name} · {flow.key} · {ctx.now:%a %Y-%m-%d %H:%M %Z} ==")
     for line in await session.start():

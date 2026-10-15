@@ -19,9 +19,11 @@ from typing import Any
 import pytest
 
 from app.flows.base import OUTCOME_AUTO_DROPPED, OUTCOME_CONFIRMED, OUTCOME_UNCLEAR
-from app.voice import bridge as bridge_module
 from app.voice.audio import speech_units
 from app.voice.bridge import CallBridge
+from app.voice.bridge import lifecycle as bridge_lifecycle
+from app.voice.bridge import speaker as bridge_speaker
+from app.voice.bridge import stt_loop as bridge_stt
 from app.voice.languages import phrase
 from app.voice.llm import LLMReply, LLMToolCall
 from app.voice.stt import STTEvent
@@ -209,9 +211,17 @@ def _build(monkeypatch: pytest.MonkeyPatch, order, merchant, *, replies: list[LL
         llm_holder["llm"] = llm
         return llm
 
-    monkeypatch.setattr(bridge_module, "TranscriptionStream", FakeSTT)
-    monkeypatch.setattr(bridge_module, "ChatLLM", fake_llm_factory)
-    monkeypatch.setattr(bridge_module, "get_tts", lambda: tts)
+    async def fake_open_stt(**kwargs):
+        stt = FakeSTT(**kwargs)
+        await stt.connect()
+        return stt
+
+    monkeypatch.setattr(bridge_stt, "open_stt", fake_open_stt)
+    monkeypatch.setattr(bridge_lifecycle, "stt_available", lambda language=None: True)
+    monkeypatch.setattr(bridge_lifecycle, "llm_for_call", fake_llm_factory)
+    monkeypatch.setattr(bridge_lifecycle, "llm_configured", lambda merchant=None: True)
+    monkeypatch.setattr(bridge_speaker, "get_tts_for", lambda language=None, chain=None: tts)
+    monkeypatch.setattr(bridge_lifecycle, "tts_available", lambda language=None: True)
     bridge = CallBridge(
         ws,  # type: ignore[arg-type]
         order=order,

@@ -1,4 +1,4 @@
-/** The add-on shop and the account's chat channels (WhatsApp, Messenger). */
+/** The add-on shop and the account's chat channels (WhatsApp, Messenger, Instagram). */
 
 import { request } from "./client";
 import type { AddonShop, ChannelsView } from "./types";
@@ -17,4 +17,11 @@ export const channelsApi = {
   connectMessenger: (page_id: string, page_token: string) =>
     request<ChannelsView>("/api/channels/messenger", { method: "PUT", auth: "merchant", body: JSON.stringify({ page_id, page_token }) }),
   disconnectMessenger: () => request<ChannelsView>("/api/channels/messenger", { method: "DELETE", auth: "merchant" }),
+  /** 409 = that account is connected to another business. */
+  connectInstagram: (account_id: string, page_token: string) =>
+    request<ChannelsView>("/api/channels/instagram", { method: "PUT", auth: "merchant", body: JSON.stringify({ account_id, page_token }) }),
+  disconnectInstagram: () => request<ChannelsView>("/api/channels/instagram", { method: "DELETE", auth: "merchant" }),
+  connectWhatsAppCloud: (phone_number_id: string, access_token: string) =>
+    request<ChannelsView>("/api/channels/whatsapp-cloud", { method: "PUT", auth: "merchant", body: JSON.stringify({ phone_number_id, access_token }) }),
+  disconnectWhatsAppCloud: () => request<ChannelsView>("/api/channels/whatsapp-cloud", { method: "DELETE", auth: "merchant" }),
 };

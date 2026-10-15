@@ -11,9 +11,9 @@ import { AGENTS, SALES_HREF, TRIAL_HREF } from "@/lib/site-content";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = {
-  title: "Solutions — AI agents for clinics, real estate, home services and e-commerce",
+  title: "Solutions — AI agents for clinics, restaurants, salons, real estate and more",
   description:
-    "Four ready-made AI voice and chat agents: a clinic receptionist, a real estate leasing and sales assistant, a home services dispatch line and an e-commerce order confirmation caller.",
+    "Ready-made AI voice and chat agents for clinics, dental and vet practices, restaurants, salons and spas, real estate, home services and e-commerce — or build your own.",
 };
 
 export default function SolutionsPage() {
@@ -21,7 +21,7 @@ export default function SolutionsPage() {
     <>
       <PageHero
         eyebrow="Solutions"
-        title="Four agents, each built for one kind of business"
+        title="An agent for each kind of business"
         subtitle="Every agent answers calls and chats, books into your records and calls customers back. What it asks and books depends on your business."
       >
         <Button asChild className="h-11 px-6">
@@ -33,7 +33,7 @@ export default function SolutionsPage() {
       </PageHero>
 
       <nav aria-label="Jump to a solution" className="border-b border-border bg-card">
-        <ul className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 py-3 sm:justify-center sm:px-6">
+        <ul className="mx-auto flex max-w-6xl gap-2 overflow-x-auto px-4 py-3 sm:flex-wrap sm:justify-center sm:overflow-visible sm:px-6">
           {AGENTS.map((agent) => {
             const Icon = agent.icon;
             return (

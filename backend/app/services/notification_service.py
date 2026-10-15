@@ -16,7 +16,10 @@ logger = structlog.get_logger(__name__)
 
 async def _after_outcome(merchant_id: str, record_id: str, outcome: str) -> None:
     from app.services import calendar_service, sms_service
+    from app.services.payments import service as payments
 
+    # An online payment gets its link first, so the confirmation text can carry it (never raises).
+    await payments.after_commit(merchant_id, record_id, outcome)
     await asyncio.gather(
         sms_service.after_outcome(merchant_id, record_id, outcome),
         calendar_service.sync_record(record_id),

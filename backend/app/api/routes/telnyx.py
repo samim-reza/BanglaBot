@@ -1,7 +1,10 @@
 """Telnyx webhooks: inbound calls, status, recordings, AMD, SMS receipts, and the media stream.
 
 Voice callbacks are TeXML's Twilio-style form posts (CallSid, CallStatus, ...);
-messaging receipts are Telnyx JSON events.
+messaging receipts are Telnyx JSON events. Every webhook URL ends in an HMAC
+signature (``services.telnyx_urls``) checked before anything else; the unsigned
+forms only work while ENFORCE_WEBHOOK_SIGNATURES is off. The media socket is
+authorized by the signed media token in its start frame.
 """
 
 from __future__ import annotations
@@ -21,7 +24,7 @@ from app.core.security import verify_media_stream_token
 from app.db.session import AsyncSessionLocal
 from app.flows.context import DIRECTION_INBOUND, DIRECTION_OUTBOUND
 from app.models import CallLog, Merchant, Order
-from app.services import call_service, telnyx
+from app.services import call_service, telnyx, telnyx_urls
 from app.voice import prepared
 from app.voice.bridge import CallBridge
 from app.voice.twiml import say_twiml, stream_twiml
@@ -30,12 +33,22 @@ router = APIRouter(prefix="/telnyx", tags=["telnyx"])
 logger = structlog.get_logger(__name__)
 
 
+def _guard_path(request: Request, kind: str, value: str | None, sig: str | None) -> None:
+    """First thing every webhook does: a signed path must carry a valid signature
+    (constant-time); the old unsigned paths only work while ENFORCE_WEBHOOK_SIGNATURES is off."""
+    if sig is not None:
+        if not telnyx_urls.verify(kind, value, sig):
+            raise HTTPException(status_code=403, detail="Invalid webhook signature")
+        return
+    if get_settings().enforce_webhook_signatures:
+        raise HTTPException(status_code=403, detail="Unsigned webhook URL")
+    logger.warning("telnyx_unsigned_webhook", path=request.url.path, hint="point Telnyx at the signed URL: python -m scripts.telnyx_route")
+
+
 async def _verified_body(request: Request) -> bytes:
+    """The raw body; Telnyx's Ed25519 signature is checked whenever TELNYX_PUBLIC_KEY is set."""
     raw = await request.body()
-    settings = get_settings()
-    if settings.enforce_webhook_signatures:
-        if not settings.telnyx_public_key:
-            raise HTTPException(status_code=500, detail="TELNYX_PUBLIC_KEY is not configured")
+    if get_settings().telnyx_public_key:
         signature = request.headers.get("telnyx-signature-ed25519") or ""
         timestamp = request.headers.get("telnyx-timestamp") or ""
         if not telnyx.verify_signature(raw, signature, timestamp):
@@ -52,8 +65,10 @@ async def _form_dict(request: Request) -> dict[str, str]:
     return values
 
 
+@router.post("/status/{order_id}/{sig}")
 @router.post("/status/{order_id}")
-async def status_callback(order_id: str, request: Request):
+async def status_callback(order_id: str, request: Request, sig: str | None = None):
+    _guard_path(request, telnyx_urls.STATUS, order_id, sig)
     values = await _form_dict(request)
     call_status = values.get("CallStatus", "")
     try:
@@ -65,17 +80,21 @@ async def status_callback(order_id: str, request: Request):
     return Response(status_code=204)
 
 
+@router.post("/amd/{order_id}/{sig}")
 @router.post("/amd/{order_id}")
-async def amd_callback(order_id: str, request: Request):
+async def amd_callback(order_id: str, request: Request, sig: str | None = None):
     """Async answering-machine detection: hang up on voicemail so the order stays callable."""
+    _guard_path(request, telnyx_urls.AMD, order_id, sig)
     values = await _form_dict(request)
     async with AsyncSessionLocal() as session:
         await call_service.apply_amd_callback(session, order_id, values.get("CallSid", ""), values.get("AnsweredBy", ""))
     return Response(status_code=204)
 
 
+@router.post("/recording/{order_id}/{sig}")
 @router.post("/recording/{order_id}")
-async def recording_callback(order_id: str, request: Request):
+async def recording_callback(order_id: str, request: Request, sig: str | None = None):
+    _guard_path(request, telnyx_urls.RECORDING, order_id, sig)
     values = await _form_dict(request)
     recording_sid = values.get("RecordingSid", "")
     if recording_sid:
@@ -84,9 +103,11 @@ async def recording_callback(order_id: str, request: Request):
     return Response(status_code=204)
 
 
+@router.post("/recording-log/{call_log_id}/{sig}")
 @router.post("/recording-log/{call_log_id}")
-async def log_recording_callback(call_log_id: str, request: Request):
+async def log_recording_callback(call_log_id: str, request: Request, sig: str | None = None):
     """Recording of an inbound call (started from the media stream)."""
+    _guard_path(request, telnyx_urls.RECORDING_LOG, call_log_id, sig)
     values = await _form_dict(request)
     recording_sid = values.get("RecordingSid", "")
     if recording_sid:
@@ -95,10 +116,20 @@ async def log_recording_callback(call_log_id: str, request: Request):
     return Response(status_code=204)
 
 
+@router.get("/inbound/{sig}", status_code=204)
+async def inbound_check(sig: str):
+    """204 when ``sig`` is this server's inbound signature (scripts/telnyx_route.py checks before repointing)."""
+    if not telnyx_urls.verify(telnyx_urls.INBOUND, None, sig):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+    return Response(status_code=204)
+
+
+@router.post("/inbound/{sig}")
 @router.post("/inbound")
-async def inbound_call(request: Request):
+async def inbound_call(request: Request, sig: str | None = None):
     """Voice webhook of the platform's TeXML application: route the call to the account
     whose inbound number was dialed and connect it to that account's agent."""
+    _guard_path(request, telnyx_urls.INBOUND, None, sig)
     values = await _form_dict(request)
     async with AsyncSessionLocal() as session:
         texml = await call_service.answer_inbound_call(
@@ -110,9 +141,11 @@ async def inbound_call(request: Request):
     return Response(content=texml, media_type="application/xml")
 
 
+@router.post("/texml/{order_id}/{sig}")
 @router.post("/texml/{order_id}")
-async def texml_fallback(order_id: str, request: Request):
+async def texml_fallback(order_id: str, request: Request, sig: str | None = None):
     """Same TeXML the call was created with (for a manual redirect / debugging)."""
+    _guard_path(request, telnyx_urls.TEXML, order_id, sig)
     await _form_dict(request)
     async with AsyncSessionLocal() as session:
         order = await session.get(Order, order_id)
@@ -148,15 +181,19 @@ async def _sms_event(request: Request, message_id: str = "") -> Response:
     return Response(status_code=204)
 
 
+@router.post("/sms-status/{message_id}/{sig}")
 @router.post("/sms-status/{message_id}")
-async def sms_status(message_id: str, request: Request):
+async def sms_status(message_id: str, request: Request, sig: str | None = None):
     """Delivery receipt for an SMS we sent (per-message webhook URL)."""
+    _guard_path(request, telnyx_urls.SMS_STATUS, message_id, sig)
     return await _sms_event(request, message_id)
 
 
+@router.post("/sms-events/{sig}")
 @router.post("/sms-events")
-async def sms_events(request: Request):
+async def sms_events(request: Request, sig: str | None = None):
     """The messaging profile's webhook: receipts for texts sent without a per-message URL."""
+    _guard_path(request, telnyx_urls.SMS_EVENTS, None, sig)
     return await _sms_event(request)
 
 
