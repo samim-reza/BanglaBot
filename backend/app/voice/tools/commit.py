@@ -8,7 +8,7 @@ import structlog
 from app.flows.base import CommitAction, CommitResult
 from app.voice.languages import phrase
 from app.voice.tools.store import ToolResult
-from app.voice.tools.text import _note
+from app.voice.tools.text import _join, _note
 
 logger = structlog.get_logger(__name__)
 
@@ -40,6 +40,17 @@ class CommitMixin:
                 self.note_lines.append(action.note)
             self.closing_spoken = True
             closing_for = getattr(self.flow, "closing_for", None)
+            follows_up = getattr(self.flow, "follows_up", None)
+            if closing_for is not None and follows_up is not None and follows_up(action, len(self.completed)):
+                # Inbound: confirm, then "anything else?" — the caller can still change it, cancel it or ask for more.
+                closing = closing_for(action, self.runtime.slots, ctx, language, farewell=False)
+                self._reopen(action, result.record_id)
+                instruction = self.runtime.last_instruction
+                ask = instruction.text if instruction is not None and instruction.verbatim else phrase("anything_else", language)
+                await logger.ainfo("flow_committed", flow=self.flow.key, outcome=action.outcome, record_id=result.record_id, follow_up=True)
+                spoken = self._speak_next({"ok": True, "outcome": action.outcome, "record_id": self.record_id}, _join(closing, ask), stage=self.runtime.stage)
+                spoken.outcome = action.outcome
+                return spoken
             if closing_for is not None:
                 # Pipeline flows assemble outcome line + skill notes (text coming, pay link) + goodbye.
                 say = closing_for(action, self.runtime.slots, ctx, language)
@@ -63,6 +74,14 @@ class CommitMixin:
             return self._speak_next(payload, instruction.text, stage=self.runtime.stage)
         return ToolResult(payload=payload)
 
+    def _reopen(self, action: CommitAction, record_id: str) -> None:
+        """Keep the call going after a write: the outcome is banked, the flow starts over at the router."""
+        self.completed.append(action.outcome)
+        self.outcome = ""
+        self.runtime.outcome = ""
+        self.closing_spoken = False
+        self.flow.reopen(self.runtime, action, record_id)
+
     def _with_sms_note(self, say: str, action: CommitAction) -> str:
         """Tell the caller a text is coming, just before the goodbye."""
         from app.services.sms_service import planned_kind
@@ -73,10 +92,9 @@ class CommitMixin:
         if not planned_kind(ctx.merchant, action.outcome, record_kind=kind, phone=phone):
             return say
         note = phrase("sms_follows", self.language)
-        for marker in (" Thank you", " ধন্যবাদ"):
-            index = say.rfind(marker)
-            if index > 0:
-                return f"{say[:index]} {note}{say[index:]}"
+        index = say.rfind(" Thank you")
+        if index > 0:
+            return f"{say[:index]} {note}{say[index:]}"
         return f"{say} {note}"
 
     async def closing_result(self) -> ToolResult:

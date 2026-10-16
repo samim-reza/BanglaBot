@@ -4,7 +4,8 @@ export type OrderStatus = "pending" | "calling" | "confirmed" | "cancelled" | "n
 
 export const ORDER_STATUSES: OrderStatus[] = ["pending", "calling", "confirmed", "cancelled", "no_answer", "needs_review"];
 
-export type Language = "bn" | "en";
+/** English is the only language. */
+export type Language = "en";
 export type VoicePersona = "female" | "male";
 export type VerticalKey = "ecommerce" | "clinic" | "dental" | "vet" | "salon" | "real_estate" | "home_service" | "restaurant" | "custom";
 export type Direction = "inbound" | "outbound";
@@ -14,8 +15,8 @@ export type CallChannel = "outbound" | "inbound" | "web" | "chat" | "widget" | "
 /** Where an account talks to customers. */
 export type ChannelKey = "voice" | "web_chat" | "whatsapp" | "messenger" | "instagram";
 
-/** A label in both portal languages. */
-export type Label = { en: string; bn: string };
+/** A label keyed by language (English is the only one). */
+export type Label = { en: string };
 
 export type FieldType =
   | "text"
@@ -189,8 +190,6 @@ export type MerchantSettingsInput = Partial<{
   timezone: string;
   currency: string;
   emergency_number: string;
-  language: Language;
-  supported_languages: Language[];
   voice_persona: VoicePersona;
   verify_address: boolean;
   max_call_seconds: number;
@@ -366,7 +365,6 @@ export type AdminMeta = {
   verticals: VerticalSpec[];
   regions: Region[];
   plans: Plan[];
-  languages: { code: Language; label: string }[];
 };
 
 export type AdminMerchantDetail = {
@@ -384,7 +382,6 @@ export type MerchantCreateInput = {
   password: string;
   vertical: VerticalKey;
   region: string;
-  language: Language;
   plan?: string;
   owner_name?: string;
   phone?: string;
@@ -556,7 +553,7 @@ export type Entitlements = {
   channels: ChannelKey[];
   features: string[];
   addons: Record<string, number>;
-  limits: Limits & { languages?: number; max_concurrent_calls?: number };
+  limits: Limits & { max_concurrent_calls?: number };
   /** What the tier unlocks (newer backends). */
   capabilities?: Capabilities;
 };

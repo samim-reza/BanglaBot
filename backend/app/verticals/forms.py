@@ -102,7 +102,8 @@ def clean(specs: Iterable[FieldSpec], data: dict[str, Any], *, partial: bool = F
                 raise FieldError(spec.key, "is required")
             continue
         value = coerce(spec, data.get(spec.key), tz=tz)
-        if value is None and spec.required and not partial:
+        if (value is None or value == []) and spec.required and not partial:
+            # A required list (working days …) with nothing valid in it can never be booked.
             raise FieldError(spec.key, "is required")
         out[spec.key] = value
     return out

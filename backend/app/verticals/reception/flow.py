@@ -9,6 +9,7 @@ from app.flows.context import CallContext
 from app.pipeline.blueprint import Branch
 from app.pipeline.flow import PipelineFlow
 from app.verticals.reception.contact import caller_phone
+from app.verticals.reception.skills import caller_orders
 from app.voice.languages import normalize_language
 
 
@@ -16,6 +17,10 @@ class ReceptionPipelineFlow(PipelineFlow):
     @property
     def lines(self):  # noqa: ANN201
         return self.cp.bound["confirm"]
+
+    def call_facts(self, ctx: CallContext, language: str) -> list[str]:
+        """The caller's own orders (found by caller ID) — what the agent may tell them about."""
+        return [*super().call_facts(ctx, language), *caller_orders(ctx)]
 
     def readback_core(self, slots: dict[str, Any], ctx: CallContext, language: str) -> tuple[str, str]:
         lang = normalize_language(language)

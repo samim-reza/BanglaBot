@@ -59,84 +59,67 @@ PROPERTY_TYPES = ["land", "flat", "house", "commercial"]
 TIMELINES = ["now", "1-3 months", "3-6 months", "later"]
 
 _TYPE_WORDS = {
-    "land": {"bn": "জমি", "en": "land"},
-    "flat": {"bn": "ফ্ল্যাট", "en": "apartment"},
-    "house": {"bn": "বাড়ি", "en": "house"},
-    "commercial": {"bn": "কমার্শিয়াল স্পেস", "en": "commercial space"},
+    "land": {"en": "land"},
+    "flat": {"en": "apartment"},
+    "house": {"en": "house"},
+    "commercial": {"en": "commercial space"},
 }
 _INTENT_WORDS = {
-    "buy": {"bn": "কেনা", "en": "buying"},
-    "rent": {"bn": "ভাড়া", "en": "renting"},
-    "sell": {"bn": "বিক্রি", "en": "selling"},
+    "buy": {"en": "buying"},
+    "rent": {"en": "renting"},
+    "sell": {"en": "selling"},
 }
 
 _LINES: dict[str, dict[str, str]] = {
     "opening_question": {
-        "bn": "আপনি কি জমি বা ফ্ল্যাট কিনতে, ভাড়া নিতে, নাকি বিক্রি করতে চান?",
         "en": "Are you looking to buy, rent, or sell a property?",
     },
     "intent": {
-        "bn": "আপনি কি কিনতে চান, ভাড়া নিতে চান, নাকি আপনার জমি বা ফ্ল্যাট বিক্রি করতে চান?",
         "en": "Are you looking to buy, to rent, or to sell your property?",
     },
-    "caller_name": {"bn": "আপনার নামটা একটু বলবেন?", "en": "May I have your name, please?"},
+    "caller_name": {"en": "May I have your name, please?"},
     "property_type": {
-        "bn": "কী ধরনের প্রপার্টি — জমি বা প্লট, ফ্ল্যাট, বাড়ি, নাকি কমার্শিয়াল?",
         "en": "What kind of property — an apartment, a house, land, or commercial space?",
     },
-    "location": {"bn": "কোন এলাকায় খুঁজছেন?", "en": "Which area are you looking in?"},
-    "location_sell": {"bn": "প্রপার্টিটা কোন এলাকায়?", "en": "Where is the property located?"},
-    "budget": {"bn": "আপনার বাজেট মোটামুটি কত?", "en": "Roughly what is your budget?"},
-    "budget_rent": {"bn": "মাসিক ভাড়ার বাজেট কত?", "en": "What monthly rent are you looking at?"},
-    "size": {"bn": "জায়গাটা কত বড় — কত কাঠা বা কত স্কয়ার ফিট?", "en": "How big is it?"},
-    "asking_price": {"bn": "কত দাম আশা করছেন?", "en": "What price are you expecting?"},
-    "timeline": {"bn": "কবের মধ্যে নিতে চান — এখনই, নাকি কয়েক মাসের মধ্যে?", "en": "When are you planning to buy — right away, or in the next few months?"},
-    "timeline_rent": {"bn": "কবে থেকে উঠতে চান?", "en": "When would you like to move in?"},
+    "location": {"en": "Which area are you looking in?"},
+    "location_sell": {"en": "Where is the property located?"},
+    "budget": {"en": "Roughly what is your budget?"},
+    "budget_rent": {"en": "What monthly rent are you looking at?"},
+    "size": {"en": "How big is it?"},
+    "asking_price": {"en": "What price are you expecting?"},
+    "timeline": {"en": "When are you planning to buy — right away, or in the next few months?"},
+    "timeline_rent": {"en": "When would you like to move in?"},
     "visit_date": {
-        "bn": "কোন দিন সাইট ভিজিটে আসতে চান? আমরা {schedule} সাইট দেখাই।",
         "en": "Which day would you like to come for a viewing? We do viewings {schedule}.",
     },
-    "phone": {"bn": "আপনার মোবাইল নম্বরটা বলবেন?", "en": "What's the best mobile number to reach you?"},
+    "phone": {"en": "What's the best mobile number to reach you?"},
     "readback_visit": {
-        "bn": "তাহলে {name}, {when} {what} দেখতে সাইট ভিজিট — আমাদের প্রতিনিধি আগের দিন ফোন করে ঠিকানা জানিয়ে দেবেন। ভিজিটটা কনফার্ম করব?",
         "en": "So, {name}, a viewing of {what} {when} — our agent will call the day before with the meeting point. Shall I confirm it?",
     },
     "readback_sell": {
-        "bn": "তাহলে {area}-এ আপনার {type}, {size}, দাম আশা করছেন {price}। আমাদের প্রতিনিধি আপনার সাথে যোগাযোগ করবেন — ঠিক আছে?",
         "en": "So your {type} in {area}, {size}, asking {price}. Our agent will get in touch with you — is that right?",
     },
     "still_interested": {
-        "bn": "আপনি আমাদের কাছে {interest} নিয়ে জানতে চেয়েছিলেন। এখনও কি আগ্রহী আছেন?",
         "en": "You had asked us about {interest}. Are you still interested?",
     },
     "closing_visit": {
-        "bn": "আপনার সাইট ভিজিট কনফার্ম হয়েছে — {when}। আমাদের প্রতিনিধি আগের দিন ফোন করবেন। ধন্যবাদ, ভালো থাকবেন।",
         "en": "Your viewing is confirmed — {when}. Our agent will call you the day before. Thank you, goodbye.",
     },
     "closing_lead": {
-        "bn": "ধন্যবাদ। আমাদের একজন প্রতিনিধি শীঘ্রই আপনাকে ফোন করে আরও অপশন জানাবেন। ভালো থাকবেন।",
         "en": "Thank you. One of our agents will call you shortly with more options. Goodbye.",
     },
     "closing_seller": {
-        "bn": "ধন্যবাদ। আমাদের একজন প্রতিনিধি শীঘ্রই আপনার প্রপার্টি বিক্রির ব্যাপারে ফোন করবেন। ভালো থাকবেন।",
         "en": "Thank you. One of our agents will call you shortly about selling your property. Goodbye.",
     },
     "closing_not_interested": {
-        "bn": "ঠিক আছে, সময় দেওয়ার জন্য ধন্যবাদ। কখনো দরকার হলে ফোন করবেন। ভালো থাকবেন।",
         "en": "Alright, thank you for your time. Call us any time you need. Goodbye.",
     },
     "knows_person": {
-        "bn": "{name} আমাদের কাছে একটি প্রপার্টির ব্যাপারে জানতে চেয়েছিলেন। আপনি কি ওনাকে চেনেন?",
         "en": "{name} had asked us about a property. Do you know them?",
     },
 }
 
 _PITCH_GUIDE = {
-    "bn": (
-        "এখন তালিকা থেকে কলারের চাহিদার (ধরন, এলাকা, বাজেট) সাথে মেলে এমন সর্বোচ্চ দুটি প্রপার্টি এক-দুই ছোট বাক্যে বলুন — "
-        "এলাকা, আকার আর দাম কথায় — তারপর জিজ্ঞেস করুন সাইট ভিজিট করতে চান কি না। মিলে যাওয়ার মতো কিছু না থাকলে সৎভাবে বলুন "
-        "এবং জিজ্ঞেস করুন প্রতিনিধি অন্য অপশন নিয়ে ফোন করলে ঠিক আছে কি না (তখন wants_visit=false)। কলার কোনো প্রপার্টি বাছলে property=<ref> সেভ করুন।"
-    ),
     "en": (
         "Now tell the caller, in one or two short sentences, about at most two listings that fit their needs (type, area, budget) — "
         "area, size and price in words — then ask whether they'd like a site visit. If nothing fits, say so honestly and ask whether "
@@ -213,9 +196,9 @@ class RealEstateFlow(StepFlow):
         SlotSpec("caller_name", "The caller's name."),
         SlotSpec("property_type", "Kind of property.", {"type": "string", "enum": PROPERTY_TYPES}),
         SlotSpec("location", "Area they want (buyers/renters) or where their property is (sellers), as said."),
-        SlotSpec("budget", "Budget as the caller said it (e.g. '৫০-৬০ লাখ', '25 thousand a month')."),
+        SlotSpec("budget", "Budget as the caller said it (e.g. '400 to 450 thousand', '2 thousand a month')."),
         SlotSpec("budget_max", "Upper end of the budget as a plain number in the account's currency, when clear.", {"type": "number"}),
-        SlotSpec("size", "Size as said (e.g. '৫ কাঠা', '1200 sq ft', '3 bed')."),
+        SlotSpec("size", "Size as said (e.g. '1200 sq ft', '3 bed', 'half an acre')."),
         SlotSpec("asking_price", "Sellers: the price they expect, as said."),
         SlotSpec("timeline", "When they plan to buy / move.", {"type": "string", "enum": TIMELINES}),
         SlotSpec("property", "The listing the caller is interested in (ref P1, P2, …)."),
@@ -392,8 +375,8 @@ class RealEstateFlow(StepFlow):
         rent = slots.get("intent") == "rent"
         if stage == PITCH:
             fits = self.matching_listings(slots, ctx)
-            refs = ", ".join(item.ref for item in fits) or ("কোনোটিই নয়" if lang == "bn" else "none")
-            lead = "মিলতে পারে এমন" if lang == "bn" else "Listings that may fit"
+            refs = ", ".join(item.ref for item in fits) or "none"
+            lead = "Listings that may fit"
             return Instruction(stage, f"{lang_text(_PITCH_GUIDE, lang)} ({lead}: {refs})")
         texts = {
             INTENT: t("intent"),
@@ -421,11 +404,9 @@ class RealEstateFlow(StepFlow):
     def _interest_phrase(self, slots: dict[str, Any], ctx: CallContext, lang: str) -> str:
         item = self._property(slots, ctx)
         if item is not None:
-            return item.name if lang == "bn" else f"the {item.name}"
+            return f"the {item.name}"
         ptype = _word(_TYPE_WORDS, slots.get("property_type"), lang) if slots.get("property_type") else ""
         area = slots.get("location") or ""
-        if lang == "bn":
-            return " ".join(part for part in (area, ptype) if part) or "একটি প্রপার্টি"
         return " ".join(part for part in (ptype, f"in {area}" if area else "") if part) or "a property"
 
     def _readback(self, slots: dict[str, Any], ctx: CallContext, lang: str) -> str:
@@ -568,8 +549,6 @@ class RealEstateFlow(StepFlow):
     def transcription_hints(self, ctx: CallContext) -> list[str]:
         hints = [str(ctx.merchant_value("business_name", ""))]
         hints += [str(item.get("location", "")) for item in ctx.items(KIND_PROPERTY)][:8]
-        if normalize_language(ctx.merchant_value("language", "en")) == "bn":
-            hints += ["কাঠা", "শতাংশ", "বিঘা", "ফ্ল্যাট", "প্লট", "লাখ", "কোটি", "সাইট ভিজিট"]
         return hints
 
     # ---- prefetch / preview ------------------------------------------------------------
@@ -589,26 +568,12 @@ class RealEstateFlow(StepFlow):
     def preview_steps(self, ctx: CallContext, language: str) -> list[str]:
         lang = normalize_language(language)
         if ctx.direction == DIRECTION_INBOUND:
-            if lang == "bn":
-                return [
-                    f"শুভেচ্ছা: \"{self.opening(ctx, lang)}\"",
-                    "চাহিদা: কেনা/ভাড়া/বিক্রি, নাম, প্রপার্টির ধরন, এলাকা, বাজেট, কবে নিতে চান।",
-                    "প্রপার্টি: আপনার তালিকা থেকে মিলে যাওয়া সর্বোচ্চ দুটি প্রপার্টি বলে।",
-                    "সাইট ভিজিট: দিন ঠিক করে পড়ে শোনায়, 'হ্যাঁ' বললে বুক হয়।",
-                    "লিড: সবার তথ্য লিড হিসেবে জমা হয়, হট/ওয়ার্ম/কোল্ড স্কোরসহ। দাম বা দলিল নিয়ে কোনো প্রতিশ্রুতি দেয় না।",
-                ]
             return [
                 f"Greeting: \"{self.opening(ctx, lang)}\"",
                 "Needs: buy / rent / sell, name, property type, area, budget, timeline.",
                 "Listings: presents at most two fitting listings from your list.",
                 "Site visit: picks a day, reads it back, books on a 'yes'.",
                 "Lead: every caller is saved as a lead scored hot / warm / cold. Never promises prices or legal status.",
-            ]
-        if lang == "bn":
-            return [
-                f"শুভেচ্ছা: \"{self.opening(ctx, lang)}\"",
-                "ফলো-আপ: আগের আগ্রহ মনে করিয়ে জিজ্ঞেস করে এখনও আগ্রহী কি না।",
-                "আগ্রহী হলে: বাকি তথ্য নিয়ে প্রপার্টি বলে সাইট ভিজিট বুক করে।",
             ]
         return [
             f"Greeting: \"{self.opening(ctx, lang)}\"",
@@ -631,71 +596,70 @@ def _summary(record: Any, names: dict[str, str]) -> str:
 
 REAL_ESTATE = Vertical(
     key="real_estate",
-    label=L("Real estate / land broker", "রিয়েল এস্টেট / জমির ব্রোকার"),
+    label=L("Real estate / land broker"),
     description=L(
         "Answers buyers, renters and sellers: qualifies them, presents matching listings, books site visits and scores every lead; follows up leads by phone.",
-        "ক্রেতা, ভাড়াটিয়া ও বিক্রেতার ফোন ধরে: চাহিদা জেনে মিলে যাওয়া প্রপার্টি বলে, সাইট ভিজিট বুক করে, প্রতিটি লিড স্কোর করে; লিড ফলো-আপ কলও করে।",
     ),
     record_kind=KIND_LEAD,
-    record_label=L("Lead", "লিড"),
-    record_label_plural=L("Leads", "লিড"),
+    record_label=L("Lead"),
+    record_label_plural=L("Leads"),
     record_fields=(
-        FieldSpec("customer_name", L("Name", "নাম"), required=True, list_column=True),
-        FieldSpec("customer_phone", L("Phone", "ফোন"), "phone", required=True, list_column=True, placeholder="+1 415 555 0100"),
+        FieldSpec("customer_name", L("Name"), required=True, list_column=True),
+        FieldSpec("customer_phone", L("Phone"), "phone", required=True, list_column=True, placeholder="+1 415 555 0100"),
         FieldSpec(
             "intent",
-            L("Looking to", "উদ্দেশ্য"),
+            L("Looking to"),
             "select",
-            options=(("buy", L("Buy", "কেনা")), ("rent", L("Rent", "ভাড়া")), ("sell", L("Sell", "বিক্রি"))),
+            options=(("buy", L("Buy")), ("rent", L("Rent")), ("sell", L("Sell"))),
             default="buy",
         ),
         FieldSpec(
             "property_type",
-            L("Property type", "ধরন"),
+            L("Property type"),
             "select",
-            options=tuple((key, L(words["en"].capitalize(), words["bn"])) for key, words in _TYPE_WORDS.items()),
+            options=tuple((key, L(words["en"].capitalize())) for key, words in _TYPE_WORDS.items()),
         ),
-        FieldSpec("location", L("Area", "এলাকা"), placeholder="Riverside / Downtown"),
-        FieldSpec("budget", L("Budget", "বাজেট"), placeholder="400k–450k"),
-        FieldSpec("catalog_item_id", L("Listing of interest", "আগ্রহের প্রপার্টি"), "catalog"),
-        FieldSpec("scheduled_at", L("Site visit", "সাইট ভিজিট"), "datetime", list_column=True),
-        FieldSpec("notes", L("Notes", "নোট"), "textarea"),
+        FieldSpec("location", L("Area"), placeholder="Riverside / Downtown"),
+        FieldSpec("budget", L("Budget"), placeholder="400k–450k"),
+        FieldSpec("catalog_item_id", L("Listing of interest"), "catalog"),
+        FieldSpec("scheduled_at", L("Site visit"), "datetime", list_column=True),
+        FieldSpec("notes", L("Notes"), "textarea"),
     ),
     catalog_kind=KIND_PROPERTY,
-    catalog_label=L("Listing", "প্রপার্টি"),
-    catalog_label_plural=L("Listings", "প্রপার্টি তালিকা"),
+    catalog_label=L("Listing"),
+    catalog_label_plural=L("Listings"),
     catalog_fields=(
-        FieldSpec("name", L("Title", "শিরোনাম"), required=True, placeholder="3-bed apartment, Riverside Towers"),
+        FieldSpec("name", L("Title"), required=True, placeholder="3-bed apartment, Riverside Towers"),
         FieldSpec(
             "listing_type",
-            L("For", "উদ্দেশ্য"),
+            L("For"),
             "select",
             required=True,
-            options=(("sale", L("Sale", "বিক্রি")), ("rent", L("Rent", "ভাড়া"))),
+            options=(("sale", L("Sale")), ("rent", L("Rent"))),
             default="sale",
         ),
         FieldSpec(
             "property_type",
-            L("Type", "ধরন"),
+            L("Type"),
             "select",
             required=True,
-            options=tuple((key, L(words["en"].capitalize(), words["bn"])) for key, words in _TYPE_WORDS.items()),
+            options=tuple((key, L(words["en"].capitalize())) for key, words in _TYPE_WORDS.items()),
             default="land",
         ),
-        FieldSpec("location", L("Area", "এলাকা"), required=True, placeholder="Riverside"),
-        FieldSpec("size", L("Size", "আকার"), placeholder="1,450 sq ft / 0.5 acre / 5 katha"),
-        FieldSpec("price", L("Price (monthly for rent)", "দাম (ভাড়া হলে মাসিক)"), "money"),
-        FieldSpec("price_note", L("Price note", "দামের নোট"), placeholder="negotiable / per katha"),
-        FieldSpec("bedrooms", L("Bedrooms", "বেডরুম"), "number"),
-        FieldSpec("features", L("Highlights", "বৈশিষ্ট্য"), "textarea", placeholder="South facing, parking, ready to move in"),
+        FieldSpec("location", L("Area"), required=True, placeholder="Riverside"),
+        FieldSpec("size", L("Size"), placeholder="1,450 sq ft / 0.5 acre / 5 katha"),
+        FieldSpec("price", L("Price (monthly for rent)"), "money"),
+        FieldSpec("price_note", L("Price note"), placeholder="negotiable / per katha"),
+        FieldSpec("bedrooms", L("Bedrooms"), "number"),
+        FieldSpec("features", L("Highlights"), "textarea", placeholder="South facing, parking, ready to move in"),
     ),
     config_fields=(
-        FieldSpec("visit_days", L("Viewing days", "সাইট ভিজিটের দিন"), "days", default=["mon", "tue", "wed", "thu", "fri", "sat"]),
-        FieldSpec("visit_start", L("Visits from", "ভিজিট শুরু"), "time", default="10:00"),
-        FieldSpec("visit_end", L("Visits until", "ভিজিট শেষ"), "time", default="18:00"),
-        FieldSpec("visit_slot_minutes", L("Minutes per visit", "প্রতি ভিজিট (মিনিট)"), "number", default=60),
-        FieldSpec("visit_capacity", L("Visits at the same time", "একসাথে কয়টি ভিজিট"), "number", default=1),
-        FieldSpec("booking_horizon_days", L("Book how many days ahead", "কত দিন আগে পর্যন্ত বুকিং"), "number", default=14),
+        FieldSpec("visit_days", L("Viewing days"), "days", default=["mon", "tue", "wed", "thu", "fri", "sat"]),
+        FieldSpec("visit_start", L("Visits from"), "time", default="10:00"),
+        FieldSpec("visit_end", L("Visits until"), "time", default="18:00"),
+        FieldSpec("visit_slot_minutes", L("Minutes per visit"), "number", default=60),
+        FieldSpec("visit_capacity", L("Visits at the same time"), "number", default=1),
+        FieldSpec("booking_horizon_days", L("Book how many days ahead"), "number", default=14),
     ),
     config_defaults={
         "visit_days": ["mon", "tue", "wed", "thu", "fri", "sat"],
@@ -707,13 +671,13 @@ REAL_ESTATE = Vertical(
         "lead_minutes": 120,
     },
     status_labels={
-        "pending": L("New", "নতুন"),
-        "confirmed": L("Visit booked", "ভিজিট বুকড"),
-        "cancelled": L("Not interested", "আগ্রহী নন"),
-        "needs_review": L("Follow up", "ফলো-আপ"),
+        "pending": L("New"),
+        "confirmed": L("Visit booked"),
+        "cancelled": L("Not interested"),
+        "needs_review": L("Follow up"),
     },
     flows={"inbound": INBOUND, "outbound": OUTBOUND},
-    outbound_label=L("Follow-up call", "ফলো-আপ কল"),
+    outbound_label=L("Follow-up call"),
     scheduled=True,
     summarize=_summary,
 )

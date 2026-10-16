@@ -4,7 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.voice.languages import LANGUAGE_NAMES, normalize_language
+from app.voice.languages import normalize_language, normalize_supported
 
 VOICE_PERSONAS = ("female", "male")
 _HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -50,6 +50,17 @@ class MerchantOut(BaseModel):
     channels: dict[str, Any] = {}
     created_at: datetime | None = None
 
+    @field_validator("language", mode="before")
+    @classmethod
+    def _out_language(cls, value: Any) -> str:
+        # English is the only language; any other stored code reads as English.
+        return normalize_language(value)
+
+    @field_validator("supported_languages", mode="before")
+    @classmethod
+    def _out_supported(cls, value: Any) -> list[str]:
+        return normalize_supported(None, value)
+
 
 def validate_timezone(value: str | None) -> str | None:
     if value is None:
@@ -60,7 +71,7 @@ def validate_timezone(value: str | None) -> str | None:
 
         ZoneInfo(name)
     except Exception as exc:  # noqa: BLE001
-        if name not in ("UTC", "Asia/Dhaka"):
+        if name != "UTC":
             raise ValueError(f"unknown time zone: {name}") from exc
     return name
 
@@ -112,28 +123,13 @@ class MerchantSettingsUpdate(BaseModel):
     @field_validator("language")
     @classmethod
     def _language(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        code = normalize_language(value, fallback="")
-        if not code:
-            raise ValueError(f"language must be one of {', '.join(LANGUAGE_NAMES)}")
-        return code
+        # Any code other than "en" (an old client still sending another) is taken as English.
+        return None if value is None else normalize_language(value)
 
     @field_validator("supported_languages")
     @classmethod
     def _supported(cls, value: list[str] | None) -> list[str] | None:
-        if value is None:
-            return None
-        codes: list[str] = []
-        for item in value:
-            code = normalize_language(item, fallback="")
-            if not code:
-                raise ValueError(f"unsupported language code: {item}")
-            if code not in codes:
-                codes.append(code)
-        if not codes:
-            raise ValueError("at least one supported language is required")
-        return codes
+        return None if value is None else normalize_supported(None, value)
 
     @field_validator("voice_persona")
     @classmethod
@@ -198,4 +194,11 @@ class MerchantSettingsUpdate(BaseModel):
         url = str(value).strip()
         if url and not re.match(r"^https?://[^\s]+$", url):
             raise ValueError("webhook_url must start with http:// or https://")
+        if url:
+            from app.core.security.outbound import UnsafeURLError, check_url
+
+            try:
+                check_url(url)  # no private / loopback / metadata hosts (re-checked with DNS at send time)
+            except UnsafeURLError as exc:
+                raise ValueError(f"webhook_url: {exc}") from exc
         return url

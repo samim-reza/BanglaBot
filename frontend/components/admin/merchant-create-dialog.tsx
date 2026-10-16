@@ -11,7 +11,6 @@ import {
   formatApiError,
   isApiRequestError,
   type AdminMeta,
-  type Language,
   type Merchant,
   type MerchantCreateInput,
   type VerticalKey,
@@ -30,7 +29,7 @@ import {
   phoneError,
   timezoneError,
 } from "./form-bits";
-import { LanguageField, PersonaField, PlanField, RegionFields, VerticalPicker, regionPreset, type LocaleValues } from "./merchant-fields";
+import { PersonaField, PlanField, RegionFields, VerticalPicker, regionPreset, type LocaleValues } from "./merchant-fields";
 import { DialogError, Overlay } from "./overlay";
 
 type CreateForm = LocaleValues & {
@@ -38,7 +37,6 @@ type CreateForm = LocaleValues & {
   username: string;
   password: string;
   vertical: VerticalKey | "";
-  language: Language;
   plan: string;
   voice_persona: VoicePersona;
   owner_name: string;
@@ -58,7 +56,6 @@ function blankForm(meta: AdminMeta | null): CreateForm {
     username: "",
     password: "",
     vertical: "",
-    language: "en",
     region,
     ...preset,
     plan: meta?.plans.some((plan) => plan.key === "trial") ? "trial" : meta?.plans[0]?.key ?? "trial",
@@ -159,7 +156,6 @@ export function MerchantCreateDialog({
       password: form.password,
       vertical: form.vertical,
       region: form.region,
-      language: form.language,
       plan: form.plan,
       voice_persona: form.voice_persona,
       owner_name: form.owner_name.trim(),
@@ -267,8 +263,7 @@ export function MerchantCreateDialog({
         />
 
         <FormSection title="Agent & plan">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <LanguageField id="create-language" meta={meta} value={form.language} onChange={(language) => update({ language })} />
+          <div className="grid gap-3 sm:grid-cols-2">
             <PersonaField id="create-persona" value={form.voice_persona} onChange={(voice_persona) => update({ voice_persona })} />
             <PlanField id="create-plan" meta={meta} value={form.plan} onChange={(plan) => update({ plan })} />
           </div>

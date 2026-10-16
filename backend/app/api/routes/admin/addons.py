@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
-from app.api.routes.admin.common import _addon_request, _merchant_or_404, _merchants, admin_out
+from app.api.routes.admin.common import _addon_request, _merchant_or_404, _merchants, account_editors, admin_out
 from app.core.addons import CATALOG, MAX_QUANTITY, entitlements, quantities, stored
 from app.core.datetime_utils import utcnow
 from app.db.session import get_db
@@ -23,7 +23,7 @@ class AddonsUpdate(BaseModel):
 
 
 @router.put("/merchants/{merchant_id}/addons")
-async def set_addons(merchant_id: str, data: AddonsUpdate, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+async def set_addons(merchant_id: str, data: AddonsUpdate, _: dict = Depends(account_editors), db: AsyncSession = Depends(get_db)):
     merchant = await _merchant_or_404(db, merchant_id)
     unknown = sorted(set(data.addons) - set(CATALOG))
     if unknown:
@@ -65,7 +65,7 @@ class AddonDecision(BaseModel):
 
 @router.post("/addon-requests/{request_id}/{decision}")
 async def decide_addon_request(
-    request_id: str, decision: str, data: AddonDecision, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)
+    request_id: str, decision: str, data: AddonDecision, _: dict = Depends(account_editors), db: AsyncSession = Depends(get_db)
 ):
     if decision not in ("approve", "decline"):
         raise HTTPException(status_code=404, detail="Unknown action")

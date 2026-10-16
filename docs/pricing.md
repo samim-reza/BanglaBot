@@ -22,7 +22,7 @@ Our call stack (figures below are Twilio list prices; calls and SMS now run on T
 - A **WhatsApp** chat also pays Twilio ≈ $0.005 per message, in and out. 8 turns ≈ 16 messages ≈ $0.08, so **≈ $0.09 per chat**. Meta's own WhatsApp fees (template messages outside the 24-hour service window) are passed through to the customer at cost.
 - **Telephony is 55–95% of the cost.** Caching, plus answering yes/no steps without the model, keeps model and voice costs small; destination pricing is what moves margins.
 
-Outbound to mobiles by country (Twilio list price per minute): US/CA $0.014, UK $0.0305, India $0.0496, Bangladesh $0.060, Australia $0.075, UAE $0.2995. Australia, India, Bangladesh and the UAE need minute multipliers or a local carrier (section 4).
+Outbound to mobiles by country (Twilio list price per minute): US/CA $0.014, UK $0.0305, India $0.0496, Australia $0.075, UAE $0.2995. Australia, India and the UAE need minute multipliers or a local carrier (section 4).
 
 How the product keeps cost and latency down (all built in):
 - **Prompt caching.** The stable part of the prompt (rules, then the business's catalog) comes first. In test calls 75–85% of input tokens were served from cache.
@@ -58,7 +58,7 @@ One base plan per account; everything else is an add-on (section 3a). Voice plan
 - Full-use cost = minutes at ≈ $0.05 all-in + $1.15 per number + ≈ $0.012 per text + ≈ $0.01 per chat.
 - What each plan includes: **Chat agent** — website chatbot, calendar feed. **Starter** — booking + recordings, calendar feed, email support. **Growth** — adds reminder calls, two-way Google Calendar, webhooks + live transfer. **Pro** — adds bulk and scheduled campaigns, 12-month recordings, priority support. **Enterprise** — every channel and feature.
 - Free trial: 14 days, 50 minutes, 100 chats, 50 texts, every channel and feature switched on.
-- **Texts (SMS).** A US text costs us about $0.011–0.013 all-in: Twilio's ≈ $0.0083 per segment plus 10DLC carrier fees. Check Twilio's current price list; these figures aren't verified. Full use of the included texts adds ≈ $1 / $6 / $24 a month. Real use is about one to two texts per booking, far below the cap. English templates stay within one 160-character GSM-7 segment. Bangla is Unicode, so each segment holds 70 characters and a text costs about double.
+- **Texts (SMS).** A US text costs us about $0.011–0.013 all-in: Twilio's ≈ $0.0083 per segment plus 10DLC carrier fees. Check Twilio's current price list; these figures aren't verified. Full use of the included texts adds ≈ $1 / $6 / $24 a month. Real use is about one to two texts per booking, far below the cap. The templates stay within one 160-character GSM-7 segment (kept plain ASCII: one non-GSM character would make it a 70-character Unicode segment).
 - **Calendar sync** costs us nothing per use. The Google Calendar API is free within quota, and iCal feeds are cached. Every plan gets the feed and iCal busy links. Two-way Google sync is included in Growth and Pro (an upgrade driver) and a $9 add-on otherwise.
 - Annual billing: 2 months free.
 - Unused minutes push blended margin higher still.
@@ -74,7 +74,6 @@ One base plan per account; everything else is an add-on (section 3a). Voice plan
 | Extra 500 texts | $10/mo, stacks | +500 texts | ≈ $6 | ≈ 40% | |
 | Extra phone number | $5/mo, stacks | +1 number | $1.15 (US) | ≈ 77% | Voice plans only. Charge $10 in the UK / Australia |
 | Two-way Google Calendar | $9/mo | feature | ≈ $0 | ≈ 100% | Included in Growth and Pro |
-| Extra language | $19/mo | feature | ≈ $0 fixed | ≈ 100% | Bangla texts and speech cost more per use |
 | 12-month recordings | $10/mo | feature | ≈ $1 (storage $0.0005/min-month) | ≈ 90% | Voice plans only. Included in Pro |
 | Done-for-you setup | $299 once | service | 2–3 hours of our time | — | |
 
@@ -98,7 +97,7 @@ No longer on the public price list (quote case by case): extra location or agent
 |---|---|
 | US, Canada | List price in USD |
 | UK, Australia | Price in local currency at parity, e.g. £39 / £119 / £279 and A$79 / A$229 / A$549. Outbound minutes count 1.5× (UK mobile) and 2.5× (AU mobile). |
-| India, Bangladesh, Pakistan | 40–50% of list (Starter ≈ $22, Growth ≈ $65, Pro ≈ $149), **only once we route calls through a local carrier** (Exotel / Plivo / a Bangladeshi IPTSP at ≈ $0.01/min, unverified). Cash-on-delivery confirmation there sells at ₹3–8 / ৳8–10 per call, below our Twilio cost today. |
+| India, Pakistan | 40–50% of list (Starter ≈ $22, Growth ≈ $65, Pro ≈ $149), **only once we route calls through a local carrier** (Exotel / Plivo at ≈ $0.01/min, unverified). Cash-on-delivery confirmation there sells at ₹3–8 per call, below our Twilio cost today. |
 | UAE | List price; sell inbound and chat first. Twilio outbound there is about $0.30/min and VoIP is regulated. |
 
 ## 5. How we sell
@@ -124,5 +123,5 @@ Shipped: **calendar sync** (two-way Google, iCal feed, iCal busy links) and **SM
 1. **Self-serve signup + Stripe billing** (plans, add-ons as subscription items, metered overage for minutes and texts). Today the admin creates accounts, sets plans and approves add-on requests by hand.
 2. **Outlook / Microsoft 365 two-way sync** (Graph API). Today Outlook uses the iCal feed and busy links.
 3. **Two-way SMS**: the customer replies C to confirm or R to reschedule, and a reschedule reply triggers a call-back.
-4. **Local carriers** for India / Bangladesh, and a Bangla-optimized speech-to-text option (Soniox or Sarvam benchmark far better on Bengali than OpenAI's models).
+4. **Local carriers** for India / Pakistan.
 5. **HIPAA track** (business associate agreements with Twilio, OpenAI and Azure; audit log; retention controls) before selling to US clinics. SMS bodies would then need to drop the doctor's name.

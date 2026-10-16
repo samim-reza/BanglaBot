@@ -8,7 +8,6 @@ from typing import Any
 from app.flows.context import CallContext, CatalogEntry
 from app.flows.scheduling import Availability, window_from_config
 from app.verticals.common import join_and, schedule_phrase
-from app.voice.languages import normalize_language
 
 KIND_DOCTOR = "doctor"
 KIND_APPOINTMENT = "appointment"
@@ -43,9 +42,9 @@ def doctor_title(item: CatalogEntry | None, language: str) -> str:
     if item is None:
         return ""
     name = item.name.strip()
-    if name.lower().startswith(("dr", "ডা", "ডাক্তার", "prof", "অধ্যাপক")):
+    if name.lower().startswith(("dr", "prof")):
         return name
-    return f"ডা. {name}" if normalize_language(language) == "bn" else f"Dr. {name}"
+    return f"Dr. {name}"
 
 
 def departments(ctx: CallContext, language: str) -> str:
@@ -106,17 +105,14 @@ def uses_serials(ctx: CallContext) -> bool:
     configured = ctx.config.get("queue_numbers")
     if isinstance(configured, bool):
         return configured
-    return ctx.region.code in ("BD", "IN", "PK")
+    return ctx.region.code in ("IN", "PK")
 
 
 def serial_words(value: Any, language: str) -> str:
-    from app.flows.timefmt import bn_number
-
     try:
-        number = int(value)
+        return str(int(value))
     except (TypeError, ValueError):
         return str(value or "")
-    return bn_number(number) if normalize_language(language) == "bn" else str(number)
 
 
 __all__ = [

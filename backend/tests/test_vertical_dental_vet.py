@@ -84,7 +84,7 @@ async def test_dental_volunteered_details_skip_their_questions_and_insurance_rea
     # Dentist, day, name and insurance were all given; caller ID covers the phone → straight to the read-back.
     assert runtime.stage == "confirm" and "Dr. Emily Park for Ana Lopez" in result.say and "10 AM" in result.say and "95 dollars" in result.say
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes please")
-    assert result.outcome == "booked" and result.say.endswith("Please arrive a few minutes early. Thank you, goodbye.")
+    assert result.outcome == "booked" and result.say.endswith("Please arrive a few minutes early. Is there anything else I can help you with?")
     action = store.commits[0]["action"]
     assert action.fields["customer_name"] == "Ana Lopez" and action.fields["kind"] == "appointment"
     assert action.fields["details"]["insurance"] == "Delta Dental" and action.fields["details"]["reason"] == "cleaning"

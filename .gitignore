@@ -21,3 +21,6 @@ speech/models/
 
 # Local test credentials (scripts/seed_test_accounts.py)
 backend/.test-accounts.txt
+
+# Live scenario runs (python -m scripts.scenarios)
+.scenario-reports/

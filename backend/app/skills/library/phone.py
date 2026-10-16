@@ -8,17 +8,17 @@ from app.flows.base import Instruction
 from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.verticals.reception import PHONE_HINT, caller_phone, clean_phone
 from app.voice.languages import phrase
 
 
 class PhoneSkill(Skill):
     key = "phone"
-    label = L2("Phone number", "ফোন নম্বর")
-    description = L2("Asked only when the caller's number is hidden.", "কলারের নম্বর না দেখালে জিজ্ঞেস করা হয়।")
+    label = L("Phone number")
+    description = L("Asked only when the caller's number is hidden.")
     slots = (SlotSpec("phone", f"Mobile number to reach the caller, digits only. {PHONE_HINT}"),)
-    lines = (line("phone", "What's the best mobile number to reach you?", "আপনার মোবাইল নম্বরটা বলবেন?", label="Ask for the number", static=True),)
+    lines = (line("phone", "What's the best mobile number to reach you?", label="Ask for the number", static=True),)
     long_answer = frozenset({"phone"})
     volunteerable = frozenset({"phone"})
     goal = "Get a mobile number to reach them."

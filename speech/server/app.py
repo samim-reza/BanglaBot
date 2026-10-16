@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="BanglaBot speech server", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="Callisa speech server", version=__version__, lifespan=lifespan)
     app.include_router(http_router)
     app.include_router(ws_router)
     return app

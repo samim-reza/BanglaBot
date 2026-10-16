@@ -198,11 +198,11 @@ def test_streamed_bodies_over_the_limit_get_413():
 # ------------------------------------------------------------------ log redaction
 def test_log_redaction_masks_people_and_credentials():
     event = redact_event(None, "info", {
-        "event": "call from +8801711111111 (rahim@example.com)",
+        "event": "call from +14155550111 (rahim@example.com)",
         "authorization": "Bearer abcdefghijklmnop",
         "media_token": "eyJhbGciOiJIUzI1NiJ9.e30.sig",
         "llm_prompt_tokens": 120,
-        "nested": {"to": "01711111111", "password": "p"},
+        "nested": {"to": "4155550111", "password": "p"},
         "timestamp": "2026-10-16T10:00:00Z",
     })
     assert event["event"] == "call from ***111 (***@example.com)"

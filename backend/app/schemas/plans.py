@@ -55,7 +55,6 @@ class TierIn(BaseModel):
     included_chats: int = Field(default=0, ge=0, le=1_000_000)
     included_sms: int = Field(default=0, ge=0, le=1_000_000)
     phone_numbers: int = Field(default=0, ge=0, le=1000)
-    included_languages: int = Field(default=1, ge=1, le=20)
     channels: list[str] = Field(default_factory=list, max_length=len(ALL_CHANNELS))
     includes: list[str] = Field(default_factory=list, max_length=len(ALL_FEATURES))
     #: Marketing bullets.

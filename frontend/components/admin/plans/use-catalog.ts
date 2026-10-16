@@ -25,7 +25,6 @@ export const NEW_TIER = (sort: number): CatalogTier => ({
   included_chats: 0,
   included_sms: 0,
   phone_numbers: 1,
-  included_languages: 1,
   channels: ["voice"],
   includes: [],
   features: [],

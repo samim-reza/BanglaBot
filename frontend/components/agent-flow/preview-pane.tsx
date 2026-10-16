@@ -9,8 +9,6 @@ import { cn } from "@/lib/utils";
 import { t } from "@/lib/vertical";
 import type { AgentFlowPreview, Direction } from "@/services/api";
 
-const LANGUAGE_NAMES: Record<string, string> = { en: "English", bn: "Bangla" };
-
 /** "{doctor}" placeholders shown as chips. */
 function Said({ text }: { text: string }) {
   const parts = text.split(/(\{[a-z_][a-z0-9_]*\})/g);
@@ -67,7 +65,6 @@ export function PreviewPane({
         </h2>
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           {loading && <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-label="Updating" />}
-          {preview && <span className="rounded-full bg-secondary px-2 py-0.5 font-semibold">{LANGUAGE_NAMES[preview.language] ?? preview.language}</span>}
         </span>
       </div>
       <div className={cn("px-4 py-4 transition-opacity", loading && preview && "opacity-60")}>

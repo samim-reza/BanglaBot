@@ -9,11 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_merchant
 from app.api.routes.integrations.summary import _summary
+from app.core.ratelimit import rate_limit
+from app.core.security import outbound
 from app.db.session import get_db
 from app.models import CatalogItem, Merchant
 from app.services import calendar_service
 from app.services.context_service import invalidate_catalog
 from app.services.tenancy import owned
+from app.services.calendar.links import check_ics_url
 
 router = APIRouter()
 
@@ -31,9 +34,7 @@ class CalendarIn(BaseModel):
             url = str(raw or "").strip()
             if not url:
                 continue
-            if not url.lower().startswith(("https://", "http://", "webcal://")):
-                raise ValueError("calendar links must start with https:// (or webcal://)")
-            out.append(url[:1000])
+            out.append(check_ics_url(url[:1000]))
         return out
 
 
@@ -65,18 +66,24 @@ class CalendarCheckIn(BaseModel):
 
 
 @router.post("/calendar/check")
-async def check_calendar(data: CalendarCheckIn, merchant: Merchant = Depends(get_current_merchant)):
+async def check_calendar(
+    data: CalendarCheckIn, request: Request, merchant: Merchant = Depends(get_current_merchant)
+):
     """Fetch an iCal link once and report how many busy times it has in the next 2 weeks."""
     from datetime import datetime, timedelta
 
     from app.flows.timefmt import business_tz
 
+    await rate_limit(request, "calendar-check", max_hits=20, per_seconds=600, key=merchant.id)
     tz = business_tz(merchant.timezone)
     now = datetime.now(tz)
     try:
+        check_ics_url(data.url.strip())
         busy = await calendar_service.fetch_ics_busy(data.url, window_start=now, window_end=now + timedelta(days=14), timezone_name=str(tz))
-    except Exception as exc:  # noqa: BLE001
+    except ValueError as exc:
         return {"ok": False, "error": str(exc)[:200]}
+    except Exception as exc:  # noqa: BLE001 — a generic reason: no details about what answered
+        return {"ok": False, "error": outbound.describe_error(exc)}
     return {"ok": True, "busy_count": len(busy), "next": [(start.isoformat(), end.isoformat()) for start, end in busy[:5]]}
 
 
@@ -94,8 +101,11 @@ async def item_calendar(
     for key, value in data.model_dump(exclude_unset=True).items():
         text = str(value or "").strip()
         if text:
-            if key == "calendar_ics" and not text.lower().startswith(("https://", "http://", "webcal://")):
-                raise HTTPException(status_code=422, detail="calendar links must start with https:// (or webcal://)")
+            if key == "calendar_ics":
+                try:
+                    check_ics_url(text)
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from exc
             values[key] = text
         else:
             values.pop(key, None)

@@ -75,85 +75,65 @@ DEFAULT_WINDOWS = [
 
 _LINES: dict[str, dict[str, str]] = {
     "opening_question": {
-        "bn": "কী ধরনের সার্ভিস প্রয়োজন, বলুন?",
         "en": "What service do you need today?",
     },
     "service": {
-        "bn": "কোন সার্ভিসটা লাগবে? আমরা {services} করি।",
         "en": "Which service do you need? We do {services}.",
     },
     "service_choose": {
-        "bn": "এর মধ্যে কোনটা — {names}?",
         "en": "Which one — {names}?",
     },
     "problem": {
-        "bn": "সমস্যাটা একটু বলবেন?",
         "en": "Could you briefly describe the problem?",
     },
-    "customer_name": {"bn": "আপনার নামটা বলবেন?", "en": "May I have your name?"},
+    "customer_name": {"en": "May I have your name?"},
     "address": {
-        "bn": "কাজটা কোন ঠিকানায় হবে? এলাকা, রোড আর বাসা নম্বর বলুন।",
         "en": "What's the address for the job — area, road and house number?",
     },
     "out_of_area": {
-        "bn": "দুঃখিত, ওই এলাকায় আমাদের সার্ভিস এখনো নেই — আমরা {areas} এলাকায় কাজ করি। এর মধ্যে কোনো ঠিকানায় লাগলে বলুন।",
         "en": "Sorry, we don't cover that area yet — we work in {areas}. Tell me if the job is at an address there.",
     },
     "date": {
-        "bn": "কোন দিন আসলে সুবিধা হয়?",
         "en": "Which day suits you?",
     },
-    "phone": {"bn": "আপনার মোবাইল নম্বরটা বলবেন?", "en": "What's your mobile number?"},
+    "phone": {"en": "What's your mobile number?"},
     "readback": {
-        "bn": "তাহলে {service} এর জন্য {when} আমাদের টেকনিশিয়ান {address} এ যাবেন। {price} বুকিংটা কনফার্ম করব?",
         "en": "So a technician will come to {address} {when} for {service}. {price} Shall I confirm the booking?",
     },
     "readback_move": {
-        "bn": "তাহলে {service} এর ভিজিটটা সরিয়ে {when} করে দিচ্ছি। ঠিক আছে?",
         "en": "So I'll move the {service} visit to {when}. Is that right?",
     },
     "price": {
-        "bn": "ভিজিটিং চার্জ {visit}, কাজ দেখে টেকনিশিয়ান বাকি খরচ জানাবেন।",
         "en": "The call-out charge is {visit}; the technician will quote the rest after inspection.",
     },
     "price_range": {
-        "bn": "ভিজিটিং চার্জ {visit}; কাজের খরচ সাধারণত {low} থেকে {high}, কাজ দেখে চূড়ান্ত হবে।",
         "en": "The call-out charge is {visit}; the job usually costs {low} to {high}, final after inspection.",
     },
     "time_ok": {
-        "bn": "{when} আপনার {service} এর জন্য আমাদের টেকনিশিয়ান যাবেন। সময়টা কি ঠিক আছে?",
         "en": "Our technician is coming {when} for your {service}. Does that time still work?",
     },
     "new_time": {
-        "bn": "ঠিক আছে। অন্য কোনো দিনে পাঠালে হবে?",
         "en": "Alright. Shall we come on another day instead?",
     },
     "closing_booked": {
-        "bn": "আপনার বুকিং কনফার্ম হয়েছে — {when}। টেকনিশিয়ান যাওয়ার আগে ফোন করবেন। ধন্যবাদ, ভালো থাকবেন।",
         "en": "Your booking is confirmed — {when}. The technician will call before coming. Thank you, goodbye.",
     },
     "closing_rescheduled": {
-        "bn": "ভিজিটটা {when} করা হয়েছে। ধন্যবাদ, ভালো থাকবেন।",
         "en": "The visit is now {when}. Thank you, goodbye.",
     },
     "closing_confirmed": {
-        "bn": "ধন্যবাদ, তাহলে নির্ধারিত সময়েই টেকনিশিয়ান যাবেন। ভালো থাকবেন।",
         "en": "Thank you, the technician will come as scheduled. Goodbye.",
     },
     "closing_cancelled": {
-        "bn": "ঠিক আছে, বুকিংটা বাতিল করা হলো। দরকার হলে আবার ফোন করবেন। ভালো থাকবেন।",
         "en": "Alright, the booking has been cancelled. Call us any time. Goodbye.",
     },
     "closing_lead": {
-        "bn": "ধন্যবাদ। আমাদের একজন প্রতিনিধি আপনার সাথে যোগাযোগ করবেন। ভালো থাকবেন।",
         "en": "Thank you. One of our team will get in touch with you. Goodbye.",
     },
     "emergency": {
-        "bn": "এটা বিপজ্জনক হতে পারে। এখনই সবাই নিরাপদ জায়গায় সরে যান, কোনো সুইচ বা আগুন জ্বালাবেন না, আর সাথে সাথে {emergency} নম্বরে ফোন করুন।",
         "en": "This could be dangerous. Get everyone to a safe place now, don't touch any switch or flame, and call {emergency} right away.",
     },
     "knows_person": {
-        "bn": "{name} এর নামে আমাদের একটি সার্ভিস বুকিং আছে। আপনি কি ওনাকে চেনেন?",
         "en": "We have a service booking under the name {name}. Do you know them?",
     },
 }
@@ -196,7 +176,7 @@ def window_label(key: str, ctx: CallContext, language: str) -> str:
     for raw in service_config(ctx).get("time_windows") or DEFAULT_WINDOWS:
         if isinstance(raw, dict) and raw.get("key") == key:
             span = window_phrase(raw.get("start"), raw.get("end"), language)
-            return f"{span}র মধ্যে" if normalize_language(language) == "bn" else f"between {span.replace(' to ', ' and ')}"
+            return f"between {span.replace(' to ', ' and ')}"
     return ""
 
 
@@ -222,7 +202,7 @@ class HomeServiceFlow(StepFlow):
         SlotSpec("problem", "The problem in the caller's words, short (e.g. 'AC leaking water', 'kitchen sink blocked').", directions=('inbound',)),
         SlotSpec("customer_name", "The caller's name."),
         SlotSpec("address", "Full job address as said (area, road, house, floor, landmark)."),
-        SlotSpec("area", "Locality / thana of the address (e.g. Dhanmondi, Mirpur 10). If it is one of the service areas in the facts, spell it exactly as listed."),
+        SlotSpec("area", "Locality / neighbourhood of the address (e.g. Midtown, Westside). If it is one of the service areas in the facts, spell it exactly as listed."),
         SlotSpec("date", "Visit date as YYYY-MM-DD. Convert a day the caller names ('tomorrow', 'Friday') with the calendar in the facts."),
         SlotSpec("time_window", "Preferred arrival window.", {"type": "string", "enum": ["morning", "afternoon", "evening"]}),
         SlotSpec("phone", f"Mobile number, digits only. {PHONE_HINT}"),
@@ -510,7 +490,7 @@ class HomeServiceFlow(StepFlow):
                     "water flooding near electrics. Call at once."
                 ),
                 properties={"what": {"type": "string", "description": "What the caller described, a few words."}},
-                note_template={"bn": "জরুরি অবস্থা: {what}", "en": "Emergency: {what}"},
+                note_template={"en": "Emergency: {what}"},
                 requires_identity=False,
             )
         ]
@@ -598,15 +578,6 @@ class HomeServiceFlow(StepFlow):
     def preview_steps(self, ctx: CallContext, language: str) -> list[str]:
         lang = normalize_language(language)
         if ctx.direction == DIRECTION_INBOUND:
-            if lang == "bn":
-                return [
-                    f"শুভেচ্ছা: \"{self.opening(ctx, lang)}\"",
-                    "সার্ভিস ও সমস্যা: আপনার সার্ভিস তালিকা থেকে মিলিয়ে নেয়।",
-                    "নাম ও ঠিকানা: সার্ভিস এলাকার বাইরে হলে জানিয়ে দেয়।",
-                    "দিন ও সময়: খালি টাইম-উইন্ডো (সকাল/দুপুর/বিকেল) বেছে নেয়।",
-                    "পড়ে শোনানো: সার্ভিস, সময়, ঠিকানা ও ভিজিটিং চার্জ — 'হ্যাঁ' বললে বুক হয়।",
-                    f"জরুরি (গ্যাস লিক, স্পার্ক, আগুন): নিরাপদে সরে {ctx.emergency_number}-এ ফোন করতে বলে।",
-                ]
             return [
                 f"Greeting: \"{self.opening(ctx, lang)}\"",
                 "Service and problem: matched against your service list.",
@@ -614,12 +585,6 @@ class HomeServiceFlow(StepFlow):
                 "Day and time: picks a free arrival window (morning / afternoon / evening).",
                 "Read-back: service, window, address and visit charge — booked on a 'yes'.",
                 f"Emergencies (gas leak, sparks, fire): tells the caller to get safe and call {ctx.emergency_number}.",
-            ]
-        if lang == "bn":
-            return [
-                f"শুভেচ্ছা: \"{self.opening(ctx, lang)}\"",
-                "কনফার্মেশন: বুকিংয়ের দিন ও সময় বলে জিজ্ঞেস করে ঠিক আছে কি না।",
-                "না হলে: অন্য দিনে সরায়, না চাইলে বাতিল করে।",
             ]
         return [
             f"Greeting: \"{self.opening(ctx, lang)}\"",
@@ -642,47 +607,46 @@ def _summary(record: Any, names: dict[str, str]) -> str:
 
 HOME_SERVICE = Vertical(
     key="home_service",
-    label=L("Home services", "হোম সার্ভিস"),
+    label=L("Home services"),
     description=L(
         "Answers the service line: takes the job (service, problem, address), checks the service area, books an arrival window with the visit charge, and confirms visits by phone.",
-        "সার্ভিস লাইনের ফোন ধরে: সার্ভিস, সমস্যা ও ঠিকানা নেয়, এলাকা যাচাই করে, ভিজিটিং চার্জসহ টাইম-উইন্ডো বুক করে, আর ভিজিটের আগে কনফার্মেশন কল করে।",
     ),
     record_kind=KIND_BOOKING,
-    record_label=L("Booking", "বুকিং"),
-    record_label_plural=L("Bookings", "বুকিং"),
+    record_label=L("Booking"),
+    record_label_plural=L("Bookings"),
     record_fields=(
-        FieldSpec("customer_name", L("Customer name", "কাস্টমারের নাম"), required=True, list_column=True),
-        FieldSpec("customer_phone", L("Phone", "ফোন"), "phone", required=True, list_column=True, placeholder="+1 415 555 0100"),
-        FieldSpec("catalog_item_id", L("Service", "সার্ভিস"), "catalog", required=True, list_column=True),
-        FieldSpec("problem", L("Problem", "সমস্যা"), "textarea"),
-        FieldSpec("address", L("Address", "ঠিকানা"), "textarea", required=True),
-        FieldSpec("scheduled_at", L("Visit (window start)", "ভিজিট (শুরুর সময়)"), "datetime", required=True, list_column=True),
+        FieldSpec("customer_name", L("Customer name"), required=True, list_column=True),
+        FieldSpec("customer_phone", L("Phone"), "phone", required=True, list_column=True, placeholder="+1 415 555 0100"),
+        FieldSpec("catalog_item_id", L("Service"), "catalog", required=True, list_column=True),
+        FieldSpec("problem", L("Problem"), "textarea"),
+        FieldSpec("address", L("Address"), "textarea", required=True),
+        FieldSpec("scheduled_at", L("Visit (window start)"), "datetime", required=True, list_column=True),
         FieldSpec(
             "time_window",
-            L("Arrival window", "টাইম-উইন্ডো"),
+            L("Arrival window"),
             "select",
-            options=(("morning", L("Morning", "সকাল")), ("afternoon", L("Afternoon", "দুপুর")), ("evening", L("Evening", "বিকেল"))),
+            options=(("morning", L("Morning")), ("afternoon", L("Afternoon")), ("evening", L("Evening"))),
         ),
-        FieldSpec("total_amount", L("Visit charge", "ভিজিটিং চার্জ"), "money"),
-        FieldSpec("notes", L("Notes", "নোট"), "textarea"),
+        FieldSpec("total_amount", L("Visit charge"), "money"),
+        FieldSpec("notes", L("Notes"), "textarea"),
     ),
     catalog_kind=KIND_SERVICE,
-    catalog_label=L("Service", "সার্ভিস"),
-    catalog_label_plural=L("Services", "সার্ভিস"),
+    catalog_label=L("Service"),
+    catalog_label_plural=L("Services"),
     catalog_fields=(
-        FieldSpec("name", L("Service name", "সার্ভিসের নাম"), required=True, placeholder="AC servicing"),
-        FieldSpec("category", L("Category", "ক্যাটাগরি"), placeholder="AC / Plumbing / Electrical"),
-        FieldSpec("visit_charge", L("Visit / call-out charge", "ভিজিটিং চার্জ"), "money", required=True),
-        FieldSpec("price_from", L("Usual price from", "সাধারণ খরচ শুরু"), "money"),
-        FieldSpec("price_to", L("Usual price up to", "সাধারণ খরচ সর্বোচ্চ"), "money"),
-        FieldSpec("duration", L("Typical duration", "সাধারণ সময়"), placeholder="1–2 hours"),
-        FieldSpec("notes", L("Notes for the agent", "এজেন্টের জন্য নোট"), "textarea", placeholder="Gas refill priced separately."),
+        FieldSpec("name", L("Service name"), required=True, placeholder="AC servicing"),
+        FieldSpec("category", L("Category"), placeholder="AC / Plumbing / Electrical"),
+        FieldSpec("visit_charge", L("Visit / call-out charge"), "money", required=True),
+        FieldSpec("price_from", L("Usual price from"), "money"),
+        FieldSpec("price_to", L("Usual price up to"), "money"),
+        FieldSpec("duration", L("Typical duration"), placeholder="1–2 hours"),
+        FieldSpec("notes", L("Notes for the agent"), "textarea", placeholder="Gas refill priced separately."),
     ),
     config_fields=(
-        FieldSpec("service_areas", L("Service areas", "সার্ভিস এলাকা"), "list", help=L("One area per line; empty = anywhere", "প্রতি লাইনে একটি এলাকা; খালি = সব জায়গা")),
-        FieldSpec("working_days", L("Working days", "কাজের দিন"), "days", default=["mon", "tue", "wed", "thu", "fri", "sat"]),
-        FieldSpec("teams", L("Teams per time window", "প্রতি উইন্ডোতে টিম"), "number", default=3),
-        FieldSpec("booking_horizon_days", L("Book how many days ahead", "কত দিন আগে পর্যন্ত বুকিং"), "number", default=7),
+        FieldSpec("service_areas", L("Service areas"), "list", help=L("One area per line; empty = anywhere")),
+        FieldSpec("working_days", L("Working days"), "days", default=["mon", "tue", "wed", "thu", "fri", "sat"]),
+        FieldSpec("teams", L("Teams per time window"), "number", default=3),
+        FieldSpec("booking_horizon_days", L("Book how many days ahead"), "number", default=7),
     ),
     config_defaults={
         "service_areas": [],
@@ -693,13 +657,13 @@ HOME_SERVICE = Vertical(
         "lead_minutes": 60,
     },
     status_labels={
-        "pending": L("Requested", "অনুরোধ"),
-        "confirmed": L("Booked", "বুকড"),
-        "cancelled": L("Cancelled", "বাতিল"),
-        "needs_review": L("Call back", "কলব্যাক"),
+        "pending": L("Requested"),
+        "confirmed": L("Booked"),
+        "cancelled": L("Cancelled"),
+        "needs_review": L("Call back"),
     },
     flows={"inbound": INBOUND, "outbound": OUTBOUND},
-    outbound_label=L("Confirmation call", "কনফার্মেশন কল"),
+    outbound_label=L("Confirmation call"),
     scheduled=True,
     summarize=_summary,
 )

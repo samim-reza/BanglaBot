@@ -26,7 +26,6 @@ export type Tier = {
   included_chats: number;
   included_sms: number;
   phone_numbers: number;
-  included_languages: number;
   channels: ChannelKey[];
   includes: string[];
   features: string[];

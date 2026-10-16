@@ -190,8 +190,6 @@ class RealEstateFlow(PipelineFlow):
     def transcription_hints(self, ctx: CallContext) -> list[str]:
         hints = [str(ctx.merchant_value("business_name", ""))]
         hints += [str(item.get("location", "")) for item in ctx.items(KIND_PROPERTY)][:8]
-        if normalize_language(ctx.merchant_value("language", "en")) == "bn":
-            hints += ["কাঠা", "শতাংশ", "বিঘা", "ফ্ল্যাট", "প্লট", "লাখ", "কোটি", "সাইট ভিজিট"]
         return hints
 
 

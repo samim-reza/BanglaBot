@@ -70,6 +70,8 @@ def parse_addons(value: Any) -> list[Addon] | None:
     out: list[Addon] = []
     for item in _items(value, "addons"):
         key = str(item.get("key") or "")
+        if key in addon_catalog.RETIRED_ADDONS:
+            continue
         try:
             out.append(Addon.from_json(item, addon_catalog.DEFAULT_CATALOG.get(key)))
         except (TypeError, ValueError) as exc:

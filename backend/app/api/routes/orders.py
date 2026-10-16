@@ -31,7 +31,7 @@ async def list_orders(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=200),
     status: str = Query(default=""),
-    search: str = Query(default=""),
+    search: str = Query(default="", max_length=200),
     kind: str = Query(default=""),
     upcoming: bool = Query(default=False),
     sort: str = Query(default="created", pattern="^(created|scheduled)$"),

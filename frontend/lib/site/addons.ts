@@ -41,7 +41,6 @@ export const ADDONS: SiteAddon[] = [
     summary: "Bookings sync both ways with Google.",
     note: "Included in Growth & Pro",
   },
-  { key: "extra_language", group: "extras", name: "Extra language", price: "$19 / mo", summary: "Serve customers in a second language. Bangla today." },
   {
     key: "recording_retention",
     group: "extras",

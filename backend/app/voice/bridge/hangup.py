@@ -8,6 +8,7 @@ import asyncio
 import structlog
 
 from app.core.regions import region_of
+from app.voice import prepared
 from app.voice.bridge.utterance import _Utterance
 from app.voice.languages import phrase
 
@@ -74,6 +75,11 @@ class HangupMixin:
         self._closed_by_agent = True
         already_closed = self.closed
         self.closed = True
+        prepared.mark_call_ended(self.call_log_id)
+        # End the phone leg before closing the socket: Telnyx re-opens a media stream that
+        # drops while the call is still up, which would start the conversation over.
+        if end_phone_call and not already_closed:
+            await self._end_phone_call()
         try:
             if code is not None:
                 await self.websocket.close(code=code)
@@ -81,5 +87,3 @@ class HangupMixin:
                 await self.websocket.close()
         except Exception:  # noqa: BLE001
             pass
-        if end_phone_call and not already_closed:
-            await self._end_phone_call()

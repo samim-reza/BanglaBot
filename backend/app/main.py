@@ -92,7 +92,16 @@ async def lifespan(app: FastAPI):
     await engine.dispose()
 
 
-app = FastAPI(title=settings.app_name, version="2.0.0", lifespan=lifespan)
+# The interactive docs / schema map every route: off in production unless EXPOSE_API_DOCS=true.
+_docs = boot_guard.api_docs_enabled(settings)
+app = FastAPI(
+    title=settings.app_name,
+    version="2.0.0",
+    lifespan=lifespan,
+    docs_url="/docs" if _docs else None,
+    redoc_url="/redoc" if _docs else None,
+    openapi_url="/openapi.json" if _docs else None,
+)
 
 # Middleware, innermost first: body size cap → CORS (widget paths open to any site,
 # the rest only to the portal's origins) → security headers on every response.

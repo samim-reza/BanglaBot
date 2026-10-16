@@ -29,12 +29,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = "BanglaBot Voice Agents"
+    app_name: str = "Callisa"
     environment: str = "development"
     frontend_origin: str = "http://localhost:3000"
     log_level: str = "INFO"
 
     # --- Storage -----------------------------------------------------------
+    # Local database name predates the Callisa rename; kept so existing dev databases still connect.
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/banglabot"
     database_ssl: bool = False
     database_ssl_verify: bool = False
@@ -62,6 +63,10 @@ class Settings(BaseSettings):
     max_request_bytes: int = 2_000_000
     max_public_request_bytes: int = 65_536
     encryption_secret_previous: str | None = None
+    # Owner-typed URLs (webhooks, iCal links) may reach private / loopback hosts (development only).
+    outbound_allow_private: bool = False
+    # FastAPI's /docs, /redoc and /openapi.json; unset = on outside production only.
+    expose_api_docs: bool | None = None
 
     @field_validator("admin_token_secret", mode="before")
     @classmethod
@@ -71,7 +76,10 @@ class Settings(BaseSettings):
             return "change-me-admin-token-secret"
         return value
 
-    @field_validator("admin_token_secret_previous", "telnyx_webhook_secret", "encryption_secret_previous", mode="before")
+    @field_validator(
+        "admin_token_secret_previous", "telnyx_webhook_secret", "encryption_secret_previous", "expose_api_docs",
+        "enforce_webhook_signatures", mode="before",
+    )
     @classmethod
     def _blank_security_secret_as_none(cls, value):
         if isinstance(value, str) and not value.strip():
@@ -116,15 +124,19 @@ class Settings(BaseSettings):
     # frames above the RMS gate) interrupts playback — the agent's own echo never does.
     voice_barge_in_min_rms: int = 1100
     voice_barge_in_min_frames: int = 20
+    # Caller silence (merchant.silence_hangup_secs, default 10 s): the agent re-prompts
+    # ("Hello, can you hear me?" + its last question) this many times; the next silent
+    # stretch says goodbye and hangs up (auto_dropped → the record stays callable).
+    voice_silence_reprompts: int = 2
     # Platform default cap on one confirmation call (merchant.max_call_seconds = 0).
-    # Speak a one-word acknowledgement ("জি।" / "Okay.") the moment a caller turn
+    # Speak a one-word acknowledgement ("Okay.") the moment a caller turn
     # lands, masking the model + TTS latency of the real reply.
     voice_instant_ack: bool = True
     # Telnyx answering-machine detection (async): a voicemail answer is hung up
     # on and the order stays callable (no_answer). Small per-call Telnyx fee.
     voice_machine_detection: bool = True
     # Hang up when the carrier reports the call was forwarded to a DIFFERENT number
-    # (divert service). Off by default: Bangladeshi carriers stamp forwarded_from
+    # (divert service). Off by default: some carriers stamp forwarded_from
     # with the dialed number on ordinary answered calls, and answering-machine
     # detection already handles voicemail.
     voice_hangup_on_forwarded: bool = False
@@ -164,7 +176,8 @@ class Settings(BaseSettings):
     public_base_url: str | None = Field(
         default=None, validation_alias=AliasChoices("PUBLIC_BASE_URL", "TELNYX_PUBLIC_BASE_URL")
     )
-    enforce_webhook_signatures: bool = False
+    # Unsigned webhook URLs are refused; unset = refused in production only.
+    enforce_webhook_signatures: bool | None = None
 
     # --- Email (optional) ----------------------------------------------------------
     smtp_host: str | None = None
@@ -172,7 +185,7 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_from_email: str | None = None
-    smtp_from_name: str = "BanglaBot"
+    smtp_from_name: str = "Callisa"
 
     # --- Inbound calls --------------------------------------------------------------
     # On startup, point the TeXML application's voice webhook at {PUBLIC_BASE_URL}/telnyx/inbound
@@ -188,6 +201,9 @@ class Settings(BaseSettings):
     telnyx_sms_from: str | None = None
     # How often the reminder sender looks for upcoming appointments / visits.
     sms_reminder_interval_seconds: int = 300
+    # Abuse caps (SMS pumping / harassment through chat-typed numbers): texts per day.
+    sms_daily_cap_per_account: int = 300
+    sms_daily_cap_per_number: int = 10
 
     # --- Calendar sync -----------------------------------------------------------------
     # Google Calendar two-way sync (optional): an OAuth "Web application" client from

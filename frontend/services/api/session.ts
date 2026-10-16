@@ -7,12 +7,37 @@
 
 import type { Merchant } from "./types";
 
-const MERCHANT_TOKEN_KEY = "banglabot_merchant_token";
-const MERCHANT_KEY = "banglabot_merchant";
-const ADMIN_TOKEN_KEY = "banglabot_admin_token";
+const MERCHANT_TOKEN_KEY = "callisa_merchant_token";
+const MERCHANT_KEY = "callisa_merchant";
+const ADMIN_TOKEN_KEY = "callisa_admin_token";
+
+/** Keys from before the Callisa rename, moved to the new keys once so signed-in users stay signed in. */
+const LEGACY_KEYS: [string, string][] = [
+  ["banglabot_merchant_token", MERCHANT_TOKEN_KEY],
+  ["banglabot_merchant", MERCHANT_KEY],
+  ["banglabot_admin_token", ADMIN_TOKEN_KEY],
+];
+let legacyMigrated = false;
+
+function migrateLegacyKeys(store: Storage) {
+  legacyMigrated = true;
+  try {
+    for (const [legacy, key] of LEGACY_KEYS) {
+      const value = store.getItem(legacy);
+      if (value === null) continue;
+      if (store.getItem(key) === null) store.setItem(key, value);
+      store.removeItem(legacy);
+    }
+  } catch {
+    // storage full or blocked: the old keys just stay where they are
+  }
+}
 
 function storage(): Storage | null {
-  return typeof window === "undefined" ? null : window.localStorage;
+  if (typeof window === "undefined") return null;
+  const store = window.localStorage;
+  if (!legacyMigrated) migrateLegacyKeys(store);
+  return store;
 }
 
 export function merchantToken(): string {

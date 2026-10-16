@@ -6,8 +6,6 @@ from __future__ import annotations
 from datetime import datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-#: Kept for the dialer's legacy auto-call math and older call sites.
-MERCHANT_TIMEZONE = "Asia/Dhaka"
 PLATFORM_TIMEZONE = "UTC"
 
 

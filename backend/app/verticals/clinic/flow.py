@@ -38,7 +38,7 @@ RULES = """You are the receptionist of a doctor's practice / clinic. You book do
 - Never reveal another patient's details.
 - Doctors: when saving `doctor`, use the ref from the doctor list (D1, D2, …). If the caller describes a problem instead of naming a doctor, you may name the matching department from the list (never diagnose); if several doctors fit, let the system ask.
 - Intent: book = new appointment, reschedule = move an existing one, cancel = cancel an existing one. Questions about doctors, days, timings, fees or the address are answered from the facts below, then ask whether they would like an appointment.
-- Dates: save `date` as YYYY-MM-DD from the calendar below ("tomorrow"/"কাল" = the next day, "the day after"/"পরশু" = two days ahead; a weekday means the next such day). A preferred time goes in `time_pref` as HH:MM (24 h) or morning/afternoon/evening.
+- Dates: save `date` as YYYY-MM-DD from the calendar below ("tomorrow" = the next day, "the day after" = two days ahead; a weekday means the next such day). A preferred time goes in `time_pref` as HH:MM (24 h) or morning/afternoon/evening.
 - Existing appointments of this caller are listed with refs (A1, A2, …); save the chosen one as `appointment`.
 - Availability: you never know which times are free — the system does. When the caller wants another day or time, save it (date / time_pref) and the system proposes the nearest free time; never say a time is or isn't available yourself.
 - The system reads the summary back and writes the booking. Never say an appointment is booked, moved or cancelled before a tool result says so."""
@@ -259,7 +259,6 @@ class ClinicFlow(PipelineFlow):
     def transcription_hints(self, ctx: CallContext) -> list[str]:
         hints = [str(ctx.merchant_value("business_name", ""))]
         hints += [item.name for item in ctx.items(KIND_DOCTOR)][:8]
-        hints += ["সিরিয়াল", "অ্যাপয়েন্টমেন্ট", "ডাক্তার"]
         if ctx.record is not None:
             hints.append(self.person_name(ctx))
         return hints

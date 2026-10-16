@@ -1,15 +1,13 @@
-"""Language support for the confirmation-call agent (Bangla + English).
+"""Language support for the call agent (English).
 
 One dependency-free module owns everything language-shaped so the flow, the
 tools, the prompt builder and the bridge agree on it:
 
-- ``LANGUAGE_NAMES`` — the codes a merchant may pick (``bn``, ``en``).
+- ``LANGUAGE_NAMES`` — the codes a merchant may pick (``en``). Any other
+  stored or incoming code (an older account's) normalizes to English.
 - ``phrase(key, language, **fields)`` — the fixed lines the backend speaks
   word for word (greeting, identity question, closing lines, ...).
-- ``detect_language(text)`` — cheap script-share detector for a caller
-  transcript so the bridge can follow the caller's language mid-call.
-- ``spoken_amount()`` / ``bangla_number_words()`` — money read-backs
-  ("দুই হাজার পাঁচশো টাকা") for backend-authored lines.
+- ``spoken_amount()`` — money read-backs ("2500 dollars") for backend-authored lines.
 - A ``contextvars`` call locale so tool handlers can ask for the caller's
   language without threading a parameter through every signature.
 """
@@ -17,33 +15,17 @@ tools, the prompt builder and the bridge agree on it:
 from __future__ import annotations
 
 import contextvars
-import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-BANGLA = "bn"
 ENGLISH = "en"
-DEFAULT_LANGUAGE = BANGLA
+DEFAULT_LANGUAGE = ENGLISH
+DEFAULT_CURRENCY = "USD"
 
 LANGUAGE_NAMES: dict[str, str] = {
-    "bn": "Bangla (বাংলা)",
     "en": "English",
 }
-
-# Bengali Unicode block (letters, vowel signs, digits, currency sign).
-_BANGLA_CHAR_RE = re.compile(r"[ঀ-৿]")
-_LATIN_LETTER_RE = re.compile(r"[A-Za-z]")
-_LATIN_WORD_RE = re.compile(r"[A-Za-z]+(?:'[A-Za-z]+)?")
-#: Fillers and loanwords heard in Bangla conversation; never language evidence.
-NEUTRAL_LATIN_WORDS = frozenset(
-    {
-        "ok", "okay", "ok.", "yes", "no", "yeah", "yep", "nope", "ya", "hmm", "hm", "mm",
-        "hello", "hi", "hey", "ji", "jee", "ha", "haan", "na", "accha", "acha", "thik", "thank",
-        "thanks", "sorry", "please", "right", "fine", "sure", "bye", "confirm", "cancel", "done",
-        "cash", "delivery", "order", "sir", "madam", "bhai", "apu", "boss",
-    }
-)
 
 
 def normalize_language(value: Any, fallback: str = DEFAULT_LANGUAGE) -> str:
@@ -67,212 +49,87 @@ def normalize_supported(primary: Any, supported: Any) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Fixed spoken lines (polite "আপনি" Bangla; short, because every one is TTS)
+# Fixed spoken lines (short, because every one is TTS)
 # ---------------------------------------------------------------------------
 
 _PHRASES: dict[str, dict[str, str]] = {
-    "greeting": {
-        "bn": "আসসালামু আলাইকুম। আমি {business_name} থেকে বলছি।",
-        "en": "Hello, this is {business_name} calling.",
-    },
-    "opening_question": {
-        "bn": "আমি কি {customer_name}-এর সাথে কথা বলছি?",
-        "en": "Am I speaking with {customer_name}?",
-    },
-    "identity_reask": {
-        "bn": "দুঃখিত, একটু বলবেন — আপনিই কি {customer_name}?",
-        "en": "Sorry, just to check — is this {customer_name}?",
-    },
-    "knows_person_question": {
-        "bn": "এই নম্বরে {customer_name}-এর নামে আমাদের কাছে একটি অর্ডার আছে। আপনি কি ওনাকে চেনেন?",
-        "en": "We have an order under the name {customer_name} for this number. Do you know them?",
-    },
-    "relay_line": {
-        "bn": "ঠিক আছে। অনুগ্রহ করে {customer_name}-কে জানাবেন, {business_name}-এর অর্ডারটি কনফার্ম করতে আমরা আবার ফোন করব। ধন্যবাদ, ভালো থাকবেন।",
-        "en": "Alright. Please let {customer_name} know that {business_name} will call again to confirm the order. Thank you, goodbye.",
-    },
-    "wrong_number_line": {
-        "bn": "দুঃখিত, ভুল নম্বর । ভালো থাকবেন।",
-        "en": "Sorry, it seems we have the wrong number. Apologies for the trouble. Goodbye.",
-    },
-    "address_question": {
-        "bn": "আপনি অর্ডারকৃত ঠিকানা {address}। ঠিকানাটা কি ঠিক আছে?",
-        "en": "Let me quickly check the delivery address — {address}. Is that correct?",
-    },
-    "address_reask": {
-        "bn": "ঠিকানাটা কি ঠিক আছে, না বদলাতে হবে?",
-        "en": "Is the address correct, or does it need to change?",
-    },
-    "new_address_question": {
-        "bn": "ওকে। সঠিক ঠিকানাটা একটু বলবেন?",
-        "en": "Alright. Could you tell me the correct address?",
-    },
-    "decision_reask_1": {
-        "bn": "দুঃখিত, ঠিক বুঝতে পারিনি। অর্ডারটি কি রাখবেন? হ্যাঁ অথবা না বলুন।",
-        "en": "Sorry, I didn't quite catch that. Would you like to keep the order? Please say yes or no.",
-    },
-    "decision_reask_2": {
-        "bn": "একটু পরিষ্কার করে বলবেন — অর্ডারটি কনফার্ম করব, নাকি বাতিল করব?",
-        "en": "Just to be clear — should I confirm the order, or cancel it?",
-    },
-    "closing_confirmed": {
-        "bn": "ধন্যবাদ! আপনার অর্ডারটি কনফার্ম করা হলো, শীঘ্রই ডেলিভারি পাঠানো হবে। ভালো থাকবেন।",
-        "en": "Thank you! Your order is confirmed and will be on its way soon. Have a good day.",
-    },
-    "closing_cancelled": {
-        "bn": "ঠিক আছে, অর্ডারটি বাতিল করা হলো। সময় দেওয়ার জন্য ধন্যবাদ, ভালো থাকবেন।",
-        "en": "Alright, the order has been cancelled. Thank you for your time, goodbye.",
-    },
-    "closing_unclear": {
-        "bn": "ঠিক আছে। আমাদের একজন প্রতিনিধি আপনার সাথে পরে যোগাযোগ করবেন। ধন্যবাদ, ভালো থাকবেন।",
-        "en": "Alright. One of our team members will get back to you later. Thank you, goodbye.",
-    },
-    "closing_callback": {
-        "bn": "ঠিক আছে, আমরা পরে আবার ফোন করব। ধন্যবাদ, ভালো থাকবেন।",
-        "en": "Alright, we will call you again later. Thank you, goodbye.",
-    },
-    "closing_transfer": {
-        "bn": "এক মুহূর্ত অপেক্ষা করুন, আমি আপনাকে আমাদের একজন প্রতিনিধির সাথে কানেক্ট করছি।",
-        "en": "One moment please, I am connecting you to one of our team members.",
-    },
-    "closing_transfer_callback": {
-        "bn": "আমাদের একজন প্রতিনিধি শীঘ্রই আপনাকে ফোন করবেন। ধন্যবাদ, ভালো থাকবেন।",
-        "en": "One of our team members will call you back shortly. Thank you, goodbye.",
-    },
-    "closing_dropped": {
-        "bn": "মনে হচ্ছে আপনাকে শুনতে পাচ্ছি না। আমরা পরে আবার ফোন করব। ভালো থাকবেন।",
-        "en": "It seems I can't hear you. We will call again later. Goodbye.",
-    },
-    "closing_timeout": {
-        "bn": "দুঃখিত, কলের সময় শেষ হয়ে গেছে। আমাদের একজন প্রতিনিধি আপনার সাথে যোগাযোগ করবেন। ভালো থাকবেন।",
-        "en": "Sorry, we are out of time on this call. One of our team members will get in touch. Goodbye.",
-    },
-    "still_there": {
-        "bn": "হ্যালো, আপনি কি শুনতে পাচ্ছেন?",
-        "en": "Hello, can you hear me?",
-    },
-    "recovery": {
-        "bn": "দুঃখিত, ঠিক শুনতে পাইনি। আবার একটু বলবেন?",
-        "en": "Sorry, something went wrong on my end. Could you say that again?",
-    },
-    "transcription_prompt": {
-        "bn": "ফোন কল। হ্যাঁ, না, জি, ঠিক আছে, বাতিল, পরে, রং নাম্বার।",
-        "en": "Phone call. Yes, no, okay, sure, cancel, later, wrong number.",
-    },
-    "cash_on_delivery": {
-        "bn": "ক্যাশ অন ডেলিভারি",
-        "en": "cash on delivery",
-    },
+    "greeting": {"en": "Hello, this is {business_name} calling."},
+    "opening_question": {"en": "Am I speaking with {customer_name}?"},
+    "identity_reask": {"en": "Sorry, just to check — is this {customer_name}?"},
+    "knows_person_question": {"en": "We have an order under the name {customer_name} for this number. Do you know them?"},
+    "relay_line": {"en": "Alright. Please let {customer_name} know that {business_name} will call again to confirm the order. Thank you, goodbye."},
+    "wrong_number_line": {"en": "Sorry, it seems we have the wrong number. Apologies for the trouble. Goodbye."},
+    "address_question": {"en": "Let me quickly check the delivery address — {address}. Is that correct?"},
+    "address_reask": {"en": "Is the address correct, or does it need to change?"},
+    "new_address_question": {"en": "Alright. Could you tell me the correct address?"},
+    "decision_reask_1": {"en": "Sorry, I didn't quite catch that. Would you like to keep the order? Please say yes or no."},
+    "decision_reask_2": {"en": "Just to be clear — should I confirm the order, or cancel it?"},
+    "closing_confirmed": {"en": "Thank you! Your order is confirmed and will be on its way soon. Have a good day."},
+    "closing_cancelled": {"en": "Alright, the order has been cancelled. Thank you for your time, goodbye."},
+    "closing_unclear": {"en": "Alright. One of our team members will get back to you later. Thank you, goodbye."},
+    "closing_callback": {"en": "Alright, we will call you again later. Thank you, goodbye."},
+    "closing_transfer": {"en": "One moment please, I am connecting you to one of our team members."},
+    "closing_transfer_callback": {"en": "One of our team members will call you back shortly. Thank you, goodbye."},
+    "closing_dropped": {"en": "It seems I can't hear you. We will call again later. Goodbye."},
+    "closing_timeout": {"en": "Sorry, we are out of time on this call. One of our team members will get in touch. Goodbye."},
+    "still_there": {"en": "Hello, can you hear me?"},
+    # Second and later silence re-prompts (each followed by the unanswered question).
+    "still_there_again": {"en": "Are you still there?"},
+    "recovery": {"en": "Sorry, something went wrong on my end. Could you say that again?"},
+    "unclear_1": {"en": "Sorry, I didn't catch that."},
+    "unclear_2": {"en": "Sorry, could you say that once more?"},
+    "unclear_3": {"en": "I'm having a little trouble hearing you."},
+    "anything_else": {"en": "Is there anything else I can help you with?"},
+    "closing_saved": {"en": "All set — that's saved."},
+    "closing_caller_later": {"en": "No problem — call us back whenever suits you. Goodbye."},
+    "detail_why": {"en": "No problem — it just helps us keep your booking straight."},
+    "detail_skipped": {"en": "No problem, we'll go ahead without it."},
+    "transcription_prompt": {"en": "Phone call. Yes, no, okay, sure, cancel, later, wrong number."},
+    "cash_on_delivery": {"en": "cash on delivery"},
     # --- inbound / business engines -------------------------------------
-    "greeting_inbound": {
-        "bn": "আসসালামু আলাইকুম, {business_name} এ ফোন করার জন্য ধন্যবাদ।",
-        "en": "Hello, thank you for calling {business_name}.",
-    },
-    "greeting_chat": {
-        "bn": "আসসালামু আলাইকুম, {business_name} এ স্বাগতম।",
-        "en": "Hi, welcome to {business_name}!",
-    },
-    "how_can_i_help": {
-        "bn": "আমি কীভাবে সাহায্য করতে পারি?",
-        "en": "How can I help you today?",
-    },
-    "ask_caller_name": {
-        "bn": "আপনার নামটা একটু বলবেন?",
-        "en": "May I have your name, please?",
-    },
-    "ask_phone": {
-        "bn": "আপনার মোবাইল নম্বরটা বলবেন?",
-        "en": "What's the best mobile number to reach you?",
-    },
-    "phone_invalid": {
-        "bn": "দুঃখিত, নম্বরটা ঠিক বুঝতে পারিনি। এগারো সংখ্যার মোবাইল নম্বরটা একটু ধীরে বলবেন?",
-        "en": "Sorry, I didn't get the number. Could you say the eleven-digit mobile number slowly?",
-    },
-    "amend_question": {
-        "bn": "ঠিক আছে। কোন তথ্যটা বদলাতে হবে, একটু বলবেন?",
-        "en": "Alright. What should I change?",
-    },
-    "closing_inquiry": {
-        "bn": "ফোন করার জন্য ধন্যবাদ। ভালো থাকবেন।",
-        "en": "Thank you for calling. Goodbye.",
-    },
-    "closing_lead": {
-        "bn": "ধন্যবাদ। আমাদের একজন প্রতিনিধি শীঘ্রই আপনার সাথে যোগাযোগ করবেন। ভালো থাকবেন।",
-        "en": "Thank you. One of our team will get in touch with you shortly. Goodbye.",
-    },
-    "closing_not_interested": {
-        "bn": "ঠিক আছে, সময় দেওয়ার জন্য ধন্যবাদ। ভালো থাকবেন।",
-        "en": "Alright, thank you for your time. Goodbye.",
-    },
-    "emergency_line": {
-        "bn": "এটা জরুরি অবস্থা মনে হচ্ছে। দয়া করে এখনই নাইন নাইন নাইন নম্বরে ফোন করুন।",
-        "en": "This sounds like an emergency. Please call nine nine nine right now.",
-    },
-    "sms_follows": {
-        "bn": "বিস্তারিত তথ্য এসএমএস করে পাঠিয়ে দিচ্ছি।",
-        "en": "We'll text you the details.",
-    },
-    "confirm_reprompt": {
-        "bn": "তাহলে কি কনফার্ম করব?",
-        "en": "So, shall I go ahead and confirm it?",
-    },
-    "yes_no_reask_1": {
-        "bn": "দুঃখিত, ঠিক বুঝতে পারিনি। হ্যাঁ অথবা না বলবেন?",
-        "en": "Sorry, I didn't quite catch that. Could you say yes or no?",
-    },
-    "yes_no_reask_2": {
-        "bn": "একটু পরিষ্কার করে বলবেন — হ্যাঁ, নাকি না?",
-        "en": "Just to be clear — yes, or no?",
-    },
-    "working": {
-        "bn": "একটু দেখে নিচ্ছি।",
-        "en": "Let me check that.",
-    },
+    "greeting_inbound": {"en": "Hello, thank you for calling {business_name}."},
+    "greeting_chat": {"en": "Hi, welcome to {business_name}!"},
+    "how_can_i_help": {"en": "How can I help you today?"},
+    "ask_caller_name": {"en": "May I have your name, please?"},
+    "ask_phone": {"en": "What's the best mobile number to reach you?"},
+    "phone_invalid": {"en": "Sorry, I didn't get the number. Could you say it again slowly, digit by digit?"},
+    "amend_question": {"en": "Alright. What should I change?"},
+    "closing_inquiry": {"en": "Thank you for calling. Goodbye."},
+    "closing_lead": {"en": "Thank you. One of our team will get in touch with you shortly. Goodbye."},
+    "closing_not_interested": {"en": "Alright, thank you for your time. Goodbye."},
+    "emergency_line": {"en": "This sounds like an emergency. Please call nine nine nine right now."},
+    "sms_follows": {"en": "We'll text you the details."},
+    "confirm_reprompt": {"en": "So, shall I go ahead and confirm it?"},
+    "yes_no_reask_1": {"en": "Sorry, I didn't quite catch that. Could you say yes or no?"},
+    "yes_no_reask_2": {"en": "Just to be clear — yes, or no?"},
+    "working": {"en": "Let me check that."},
     # Settings page: what the agent will ask, in order.
-    "preview_greeting": {
-        "bn": "শুভেচ্ছা: \"{greeting}\"",
-        "en": "Greeting: \"{greeting}\"",
-    },
+    "preview_greeting": {"en": "Greeting: \"{greeting}\""},
     "preview_identity": {
-        "bn": "পরিচয় যাচাই: \"আমি কি (কাস্টমারের নাম)-এর সাথে কথা বলছি?\" — অন্য কেউ ধরলে জিজ্ঞেস করা হয় তিনি কাস্টমারকে চেনেন কি না।",
         "en": "Identity check: \"Am I speaking with (customer name)?\" — if someone else answers, the agent asks whether they know the customer.",
     },
-    "preview_address": {
-        "bn": "ঠিকানা যাচাই: ডেলিভারি ঠিকানা পড়ে শুনিয়ে জিজ্ঞেস করা হয় ঠিক আছে কি না; বদল হলে নতুন ঠিকানা নোট করা হয়।",
-        "en": "Address check: the delivery address is read back and confirmed; a corrected address is noted.",
-    },
+    "preview_address": {"en": "Address check: the delivery address is read back and confirmed; a corrected address is noted."},
     "preview_decision": {
-        "bn": "অর্ডার কনফার্মেশন: পণ্য, মোট টাকা ও ক্যাশ অন ডেলিভারি বলে জিজ্ঞেস করা হয় অর্ডারটি কনফার্ম করবেন কি না। অস্পষ্ট উত্তরে সর্বোচ্চ দুইবার আবার জিজ্ঞেস করা হয়।",
         "en": "Order confirmation: the items, total amount and cash on delivery are stated and the customer is asked to confirm or cancel. Unclear answers are re-asked up to twice.",
     },
-    "preview_wrap_up": {
-        "bn": "সমাপ্তি: ফলাফল অনুযায়ী বিদায়বাক্য (কনফার্ম / বাতিল / পরে যোগাযোগ) বলে কল শেষ হয়।",
-        "en": "Wrap-up: the matching closing line (confirmed / cancelled / follow-up) is spoken and the call ends.",
-    },
+    "preview_wrap_up": {"en": "Wrap-up: the matching closing line (confirmed / cancelled / follow-up) is spoken and the call ends."},
     # Spoken the instant a caller turn lands, before the model has replied, so the
     # caller never hears dead air while the reply is being thought out.
-    "ack": {
-        "bn": "হ্যাঁ।",
-        "en": "Okay.",
-    },
+    "ack": {"en": "Okay."},
     # Confirmation question used when the pre-composed one is unavailable.
-    "decision_fallback": {
-        "bn": "আপনি {items} অর্ডার করেছেন, মোট {amount}, {cod}। অর্ডারটি কি কনফার্ম করবেন?",
-        "en": "You ordered {items}, total {amount}, {cod}. Would you like to confirm the order?",
-    },
+    "decision_fallback": {"en": "You ordered {items}, total {amount}, {cod}. Would you like to confirm the order?"},
 }
 
 PHRASE_KEYS = tuple(_PHRASES)
 
 #: Instant acknowledgements, rotated so a long call never sounds like a loop.
 _ACKS: dict[str, tuple[str, ...]] = {
-    "bn": ("হ্যাঁ।", "জি।", "আচ্ছা।"),
     "en": ("Okay.", "Sure.", "Alright.", "Got it."),
 }
 
 
 def ack_lines(language: str | None = None) -> tuple[str, ...]:
-    return _ACKS.get(normalize_language(language), _ACKS["en"])
+    return _ACKS.get(normalize_language(language), _ACKS[DEFAULT_LANGUAGE])
 
 
 def phrase(key: str, language: str | None = None, **fields: Any) -> str:
@@ -291,136 +148,37 @@ def phrase(key: str, language: str | None = None, **fields: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Caller-language detection
+# Money
 # ---------------------------------------------------------------------------
 
-
-def contains_bangla(text: str | None) -> bool:
-    return bool(_BANGLA_CHAR_RE.search(str(text or "")))
-
-
-def english_word_count(text: str | None) -> int:
-    """Real (non-loanword) English words in a transcript — how strong the English evidence is."""
-    raw = str(text or "")
-    return sum(1 for w in _LATIN_WORD_RE.findall(raw) if w.lower() not in NEUTRAL_LATIN_WORDS)
-
-
-def detect_language(text: str | None, *, supported: list[str] | tuple[str, ...] | None = None) -> str | None:
-    """Best-effort language of a caller transcript, or ``None`` when unsure.
-
-    Bengali script is unambiguous, so the decision is a script share: mostly
-    Bengali letters → ``bn``; mostly Latin letters → ``en``. Mixed lines (a
-    Bangla sentence with an English product name in it) still count as
-    Bangla. Very short or letter-free lines ("2", "ok") return ``None`` so a
-    bare number never flips the language. ``supported`` restricts the answer
-    to languages the merchant enabled.
-    """
-    raw = str(text or "").strip()
-    if not raw:
-        return None
-    bangla = len(_BANGLA_CHAR_RE.findall(raw))
-    # Loanwords Bangladeshi callers use in either language ("ওকে" transcribed as
-    # "Okay", "yes", "hello") are no evidence of English; count only real words.
-    latin_words = [w for w in _LATIN_WORD_RE.findall(raw) if w.lower() not in NEUTRAL_LATIN_WORDS]
-    latin = sum(len(w) for w in latin_words)
-    if bangla + latin < 3:
-        return None
-    share = bangla / (bangla + latin)
-    if share >= 0.4:
-        detected = BANGLA
-    elif share <= 0.1 and len(latin_words) >= 2 and latin >= 6:
-        # Switching to English takes an actual English phrase, not one word.
-        detected = ENGLISH
-    else:
-        return None
-    if supported is not None and detected not in {normalize_language(code) for code in supported}:
-        return None
-    return detected
-
-
-# ---------------------------------------------------------------------------
-# Money and numbers
-# ---------------------------------------------------------------------------
-
-_BANGLA_UNITS = (
-    "শূন্য", "এক", "দুই", "তিন", "চার", "পাঁচ", "ছয়", "সাত", "আট", "নয়",
-    "দশ", "এগারো", "বারো", "তেরো", "চৌদ্দ", "পনেরো", "ষোলো", "সতেরো", "আঠারো", "উনিশ",
-    "বিশ", "একুশ", "বাইশ", "তেইশ", "চব্বিশ", "পঁচিশ", "ছাব্বিশ", "সাতাশ", "আটাশ", "ঊনত্রিশ",
-    "ত্রিশ", "একত্রিশ", "বত্রিশ", "তেত্রিশ", "চৌত্রিশ", "পঁয়ত্রিশ", "ছত্রিশ", "সাঁইত্রিশ", "আটত্রিশ", "ঊনচল্লিশ",
-    "চল্লিশ", "একচল্লিশ", "বিয়াল্লিশ", "তেতাল্লিশ", "চুয়াল্লিশ", "পঁয়তাল্লিশ", "ছেচল্লিশ", "সাতচল্লিশ", "আটচল্লিশ", "ঊনপঞ্চাশ",
-    "পঞ্চাশ", "একান্ন", "বায়ান্ন", "তিপ্পান্ন", "চুয়ান্ন", "পঞ্চান্ন", "ছাপ্পান্ন", "সাতান্ন", "আটান্ন", "ঊনষাট",
-    "ষাট", "একষট্টি", "বাষট্টি", "তেষট্টি", "চৌষট্টি", "পঁয়ষট্টি", "ছেষট্টি", "সাতষট্টি", "আটষট্টি", "ঊনসত্তর",
-    "সত্তর", "একাত্তর", "বাহাত্তর", "তিয়াত্তর", "চুয়াত্তর", "পঁচাত্তর", "ছিয়াত্তর", "সাতাত্তর", "আটাত্তর", "ঊনআশি",
-    "আশি", "একাশি", "বিরাশি", "তিরাশি", "চুরাশি", "পঁচাশি", "ছিয়াশি", "সাতাশি", "আটাশি", "ঊননব্বই",
-    "নব্বই", "একানব্বই", "বিরানব্বই", "তিরানব্বই", "চুরানব্বই", "পঁচানব্বই", "ছিয়ানব্বই", "সাতানব্বই", "আটানব্বই", "নিরানব্বই",
-)
-_BANGLA_HUNDREDS = ("", "একশো", "দুইশো", "তিনশো", "চারশো", "পাঁচশো", "ছয়শো", "সাতশো", "আটশো", "নয়শো")
-
-
-def bangla_number_words(value: int) -> str:
-    """Spoken Bangla for a non-negative integer (Indian grouping: হাজার / লাখ / কোটি)."""
-    number = int(value)
-    if number < 0:
-        return f"মাইনাস {bangla_number_words(-number)}"
-    if number < 100:
-        return _BANGLA_UNITS[number]
-    parts: list[str] = []
-    crore, number = divmod(number, 10_000_000)
-    lakh, number = divmod(number, 100_000)
-    thousand, number = divmod(number, 1_000)
-    hundred, number = divmod(number, 100)
-    if crore:
-        parts.append(f"{bangla_number_words(crore)} কোটি")
-    if lakh:
-        parts.append(f"{bangla_number_words(lakh)} লাখ")
-    if thousand:
-        parts.append(f"{bangla_number_words(thousand)} হাজার")
-    if hundred:
-        parts.append(_BANGLA_HUNDREDS[hundred])
-    if number:
-        parts.append(_BANGLA_UNITS[number])
-    return " ".join(parts)
-
-
-_CURRENCY_WORDS: dict[str, dict[str, tuple[str, str]]] = {
-    # code -> language -> (major unit, minor unit)
-    "BDT": {"en": ("taka", "poisha"), "bn": ("টাকা", "পয়সা")},
-    "USD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
-    "INR": {"en": ("rupees", "paise"), "bn": ("রুপি", "পয়সা")},
-    "EUR": {"en": ("euros", "cents"), "bn": ("ইউরো", "সেন্ট")},
-    "GBP": {"en": ("pounds", "pence"), "bn": ("পাউন্ড", "পেন্স")},
-    "CAD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
-    "AUD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
-    "NZD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
-    "SGD": {"en": ("dollars", "cents"), "bn": ("ডলার", "সেন্ট")},
-    "AED": {"en": ("dirhams", "fils"), "bn": ("দিরহাম", "ফিলস")},
-    "PKR": {"en": ("rupees", "paisa"), "bn": ("রুপি", "পয়সা")},
-    "ZAR": {"en": ("rand", "cents"), "bn": ("র‍্যান্ড", "সেন্ট")},
-    "NGN": {"en": ("naira", "kobo"), "bn": ("নাইরা", "কোবো")},
+_CURRENCY_WORDS: dict[str, tuple[str, str]] = {
+    # code -> (major unit, minor unit)
+    "USD": ("dollars", "cents"),
+    "INR": ("rupees", "paise"),
+    "EUR": ("euros", "cents"),
+    "GBP": ("pounds", "pence"),
+    "CAD": ("dollars", "cents"),
+    "AUD": ("dollars", "cents"),
+    "NZD": ("dollars", "cents"),
+    "SGD": ("dollars", "cents"),
+    "AED": ("dirhams", "fils"),
+    "PKR": ("rupees", "paisa"),
+    "ZAR": ("rand", "cents"),
+    "NGN": ("naira", "kobo"),
 }
 
 
-def spoken_amount(value: Any, currency: str | None = "BDT", language: str | None = None) -> str:
-    """Speak a money amount the way a person would on the phone.
-
-    Bangla + BDT: whole taka in words ("দুই হাজার পাঁচশো টাকা"), poisha only when
-    non-zero. English: "2500 taka" (decimals only when non-zero).
-    """
-    lang = normalize_language(language)
-    code = str(currency or "BDT").strip().upper() or "BDT"
+def spoken_amount(value: Any, currency: str | None = DEFAULT_CURRENCY, language: str | None = None) -> str:
+    """Speak a money amount the way a person would on the phone: "2500 dollars"
+    (minor units only when non-zero). ``language`` is accepted for symmetry."""
+    code = str(currency or DEFAULT_CURRENCY).strip().upper() or DEFAULT_CURRENCY
     try:
         amount = Decimal(str(value)).quantize(Decimal("0.01"))
     except (InvalidOperation, ValueError, TypeError):
         amount = Decimal("0.00")
-    words = _CURRENCY_WORDS.get(code, {}).get(lang) or _CURRENCY_WORDS.get(code, {}).get(ENGLISH) or (code, "")
-    major, minor = words
+    major, minor = _CURRENCY_WORDS.get(code) or (code, "")
     whole = int(amount)
     fraction = int((amount - whole) * 100)
-    if lang == BANGLA and code == "BDT":
-        text = f"{bangla_number_words(whole)} {major}"
-        if fraction and minor:
-            text = f"{text} {bangla_number_words(fraction)} {minor}"
-        return text
     if fraction:
         # "89 pounds and 50 pence" — a TTS voice reads "89.50 pounds" digit by digit.
         return f"{whole} {major} and {fraction} {minor}".strip() if minor else f"{amount:.2f} {major}".strip()
@@ -435,7 +193,7 @@ def spoken_amount(value: Any, currency: str | None = "BDT", language: str | None
 @dataclass(frozen=True)
 class CallLocale:
     language: str = DEFAULT_LANGUAGE
-    currency: str = "BDT"
+    currency: str = DEFAULT_CURRENCY
 
 
 _call_locale: contextvars.ContextVar[CallLocale] = contextvars.ContextVar("call_locale", default=CallLocale())
@@ -443,7 +201,7 @@ _call_locale: contextvars.ContextVar[CallLocale] = contextvars.ContextVar("call_
 
 def set_call_locale(language: str | None, currency: str | None = None) -> contextvars.Token:
     return _call_locale.set(
-        CallLocale(language=normalize_language(language), currency=str(currency or "BDT").strip().upper() or "BDT")
+        CallLocale(language=normalize_language(language), currency=str(currency or DEFAULT_CURRENCY).strip().upper() or DEFAULT_CURRENCY)
     )
 
 

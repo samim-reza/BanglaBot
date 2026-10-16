@@ -7,7 +7,7 @@ from typing import Any
 from app.flows.base import OUTCOME_EMERGENCY, Terminal
 from app.flows.context import CallContext
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import line
 from app.verticals.base import FieldSpec, L
 
 
@@ -15,14 +15,13 @@ class EmergencySkill(Skill):
     key = "emergency"
     kind = "global"
     toggleable = False
-    label = L2("Emergencies", "জরুরি অবস্থা")
-    description = L2("Recognises emergencies and gives the emergency number.", "জরুরি অবস্থা চিনে জরুরি নম্বর জানায়।")
-    options = (FieldSpec("red_flags", L("What counts as an emergency", "কোনগুলো জরুরি"), "list"),)
+    label = L("Emergencies")
+    description = L("Recognises emergencies and gives the emergency number.")
+    options = (FieldSpec("red_flags", L("What counts as an emergency"), "list"),)
     lines = (
         line(
             "emergency",
             "This sounds like an emergency. Please call {emergency} right now.",
-            "এটা জরুরি অবস্থা মনে হচ্ছে। দয়া করে এখনই {emergency} নম্বরে ফোন করুন।",
             label="Emergency line",
             variables=("emergency",),
             required=("emergency",),
@@ -41,7 +40,7 @@ class EmergencySkill(Skill):
                 outcome=OUTCOME_EMERGENCY,
                 description=f"The caller describes an emergency ({flags}). Call at once.",
                 properties={"what": {"type": "string", "description": "What the caller described, a few words."}},
-                note_template={"bn": "জরুরি অবস্থা: {what}", "en": "Emergency: {what}"},
+                note_template={"en": "Emergency: {what}"},
                 requires_identity=False,
             )
         ]

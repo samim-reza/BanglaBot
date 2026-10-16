@@ -27,7 +27,7 @@ from app.voice.languages import normalize_language
 
 logger = structlog.get_logger(__name__)
 
-LANGUAGES = ("en", "bn")
+LANGUAGES = ("en",)
 #: What an owner on a "lines only" plan may change.
 LINES_ONLY_KEYS = frozenset({"lines"})
 

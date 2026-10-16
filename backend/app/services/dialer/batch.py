@@ -25,6 +25,8 @@ logger = structlog.get_logger(__name__)
 
 #: How often a waiting batch re-checks for a free call slot.
 SLOT_POLL_SECONDS = 3.0
+#: A record whose dial keeps finding every line busy this long is skipped (a stuck slot).
+BUSY_GIVE_UP_SECONDS = 600.0
 
 #: Latest batch per merchant (finished ones stay until the next batch replaces them).
 _runs: dict[str, BulkCallRun] = {}
@@ -112,8 +114,8 @@ async def _dial_one(run: BulkCallRun, order_id: str) -> str:
             if exc.status_code == 500:
                 raise BatchAborted(str(exc.detail)) from exc
             if exc.status_code == 429:
-                # All of the account's lines are busy: leave this record for the next round.
-                return "skipped"
+                # All of the plan's lines are busy (this batch's calls, or inbound calls): wait for one.
+                return "busy"
             await logger.awarning("bulk_call_order_failed", run_id=run.id, order_id=order_id, detail=exc.detail)
             return "failed"
         except Exception as exc:  # noqa: BLE001 — one bad number must not stop the batch
@@ -138,15 +140,32 @@ async def _wait_for_slot(run: BulkCallRun) -> bool:
     return False
 
 
+async def _dial_when_a_line_frees(run: BulkCallRun, order_id: str) -> str | None:
+    """``_dial_one``, retried while the plan's lines are all busy (a Starter plan has fewer lines
+    than a batch dials at once). None when cancelled; "skipped" after ``BUSY_GIVE_UP_SECONDS``."""
+    waited = 0.0
+    while True:
+        if not await _wait_for_slot(run):
+            return None
+        result = await _dial_one(run, order_id)
+        if result != "busy":
+            return result
+        if waited >= BUSY_GIVE_UP_SECONDS:
+            return "skipped"
+        with contextlib.suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(run.cancel_event.wait(), timeout=SLOT_POLL_SECONDS)
+        waited += SLOT_POLL_SECONDS
+
+
 async def _run_batch(run: BulkCallRun) -> None:
     run.state = "running"
     gap = max(0.0, float(get_settings().bulk_call_gap_seconds))
     try:
         for order_id in run.order_ids:
-            if not await _wait_for_slot(run):
+            result = await _dial_when_a_line_frees(run, order_id)
+            if result is None:
                 run.state = "cancelled"
                 break
-            result = await _dial_one(run, order_id)
             if result == "started":
                 run.started += 1
             elif result == "failed":

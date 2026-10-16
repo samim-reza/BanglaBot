@@ -23,7 +23,7 @@ from app.flows.base import Instruction
 from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.verticals.common import join_and, join_or
 from app.verticals.restaurant.cart import cart_phrase, make_line, pending_line, picks_of, subtotal
 from app.verticals.restaurant.cart_edit import Report, accept_suggestion, apply_edits, edits_from
@@ -39,7 +39,6 @@ PENDING = "_cart_pending"
 DONE_WORDS = (
     "that's it", "thats it", "that is it", "that's all", "thats all", "that is all", "that'll be all", "that will be all",
     "nothing else", "no thanks", "no thank you", "i'm good", "im good", "i'm done", "all good", "just that", "nope",
-    "আর কিছু না", "আর কিছু লাগবে না", "আর না", "এতটুকুই", "এটুকুই", "ব্যস", "বাস",
 )
 
 UPDATE_CART = {
@@ -96,8 +95,8 @@ def heard_modifiers(edit: dict[str, Any], caller_text: str) -> dict[str, Any]:
 class CartSkill(Skill):
     key = "cart"
     toggleable = False
-    label = L2("Order items", "অর্ডারের আইটেম")
-    description = L2("Takes the order from your menu and prices it.", "মেনু থেকে অর্ডার নেয় ও দাম হিসাব করে।")
+    label = L("Order items")
+    description = L("Takes the order from your menu and prices it.")
     slots = (
         SlotSpec("more_items", "After 'Anything else?': true = they want more, false = that's all.", {"type": "boolean"}),
         SlotSpec("pick_ok", "Answer to 'Did you mean …?': true = yes, false = no.", {"type": "boolean"}),
@@ -108,18 +107,18 @@ class CartSkill(Skill):
     long_answer = frozenset({"cart"})
     passive = frozenset({ASK, PENDING, "pick_ok", "item_option"})
     lines = (
-        line("ask_order", "What would you like to order?", "কী অর্ডার করতে চান?", label="Ask for the order", static=True),
-        line("ask_more", "What else would you like?", "আর কী নেবেন?", label="Ask for more", static=True),
-        line("anything_else", "You have {items}. Anything else?", "আপনার অর্ডারে আছে {items}। আর কিছু লাগবে?", label="Anything else?", variables=("items",)),
-        line("ask_option", "Which {group} would you like for the {item}: {options}?", "{item} এর জন্য কোন {group} নেবেন: {options}?", label="Required choice", variables=("group", "item", "options")),
-        line("did_you_mean", "Did you mean the {item}?", "আপনি কি {item} বলছেন?", label="Did you mean", variables=("item",)),
-        line("choose", "Which one would you like: {options}?", "কোনটা নেবেন: {options}?", label="Several match", variables=("options",)),
-        line("not_found", "Sorry, we don't have {item}.", "দুঃখিত, আমাদের {item} নেই।", label="Not on the menu", variables=("item",)),
-        line("unavailable", "Sorry, the {item} isn't available today.", "দুঃখিত, আজ {item} পাওয়া যাচ্ছে না।", label="Not available", variables=("item",)),
-        line("not_in_order", "There's no {item} in your order.", "আপনার অর্ডারে {item} নেই।", label="Not in the order", variables=("item",)),
-        line("added", "Got it, I've added {items}.", "ঠিক আছে, {items} যোগ করেছি।", label="Added later", variables=("items",)),
-        line("removed", "I've removed {items}.", "{items} বাদ দিয়েছি।", label="Removed later", variables=("items",)),
-        line("changed", "Done, I've updated your order.", "ঠিক আছে, অর্ডার আপডেট করেছি।", label="Changed later", static=True),
+        line("ask_order", "What would you like to order?", label="Ask for the order", static=True),
+        line("ask_more", "What else would you like?", label="Ask for more", static=True),
+        line("anything_else", "You have {items}. Anything else?", label="Anything else?", variables=("items",)),
+        line("ask_option", "Which {group} would you like for the {item}: {options}?", label="Required choice", variables=("group", "item", "options")),
+        line("did_you_mean", "Did you mean the {item}?", label="Did you mean", variables=("item",)),
+        line("choose", "Which one would you like: {options}?", label="Several match", variables=("options",)),
+        line("not_found", "Sorry, we don't have {item}.", label="Not on the menu", variables=("item",)),
+        line("unavailable", "Sorry, the {item} isn't available today.", label="Not available", variables=("item",)),
+        line("not_in_order", "There's no {item} in your order.", label="Not in the order", variables=("item",)),
+        line("added", "Got it, I've added {items}.", label="Added later", variables=("items",)),
+        line("removed", "I've removed {items}.", label="Removed later", variables=("items",)),
+        line("changed", "Done, I've updated your order.", label="Changed later", static=True),
     )
     goal = "Take the order: call update_cart with every item they name."
 

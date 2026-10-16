@@ -3,12 +3,13 @@
 import { isApiRequestError, request } from "./client";
 import type { Direction, FieldSpec, FieldType, Label } from "./types";
 
-export type FlowLanguage = "en" | "bn";
+/** English is the only call language. */
+export type FlowLanguage = "en";
 
 /** ask | gate (yes/no) | router | effect (after the booking) | line (spoken only) | global (any time) | readback */
 export type SkillKind = "ask" | "gate" | "router" | "effect" | "line" | "global" | "readback";
 
-/** A spoken line the owner may reword, per language. */
+/** A spoken line the owner may reword. */
 export type FlowLineSpec = {
   key: string;
   label: string;

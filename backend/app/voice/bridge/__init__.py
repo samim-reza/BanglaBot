@@ -34,11 +34,14 @@ Turn design
   flushes the start of a real interruption.
 * **Caller turns** arrive as ``completed`` STT events, are merged over a short
   window (longer on steps that expect a long answer — an address, a phone
-  number), filtered against echo / prompt echo / noise, and answered one at a
-  time by the agent.
-* **Silence** is two-strike: after ``silence_hangup_secs`` of idle the agent
-  asks whether the caller can hear it; the same again and the call is settled
-  as ``auto_dropped`` (record → ``no_answer``, callable again).
+  number) and held open while the STT still hears words, filtered against echo /
+  prompt echo / noise, and answered one at a time by the agent. A caller who
+  keeps talking while the agent is still thinking cancels that reply and the
+  text is merged; every turn is answered (hold line, deadline, recovery line).
+* **Silence**: after ``silence_hangup_secs`` of idle the agent asks whether the
+  caller can hear it and repeats its last question, ``voice_silence_reprompts``
+  times (default 2); the next silent stretch says goodbye and the call is
+  settled as ``auto_dropped`` (record → ``no_answer``, callable again).
 
 Layout
 ------
@@ -49,7 +52,7 @@ Layout
 ``turns``       caller-turn merging and agent-turn serialization
 ``speaker``     speech queue, synthesis, paced playout, playback marks
 ``transcript``  transcript keeping + console events
-``watchdog``    silence and max-duration limits
+``watchdog``    silence re-prompts / drop, false barge-in resume, max-duration limits
 ``hangup``      goodbye hangup, transfer, closing the socket / phone leg
 """
 

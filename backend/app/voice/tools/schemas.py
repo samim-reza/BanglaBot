@@ -48,8 +48,8 @@ class SchemasMixin:
         tools.append(
             fn(
                 TRANSFER_TO_HUMAN,
-                "The caller wants to talk to a real person, or needs something you cannot handle "
-                "(negotiation, a complaint, anything not in the facts).",
+                "Hand the call to a person: only when the caller asks for a person or manager, makes a complaint, "
+                "or asks something the facts can't answer. Never for unclear or garbled words — ask them to repeat.",
                 {"reason": {"type": "string", "description": "Why the transfer is needed, briefly."}},
             )
         )

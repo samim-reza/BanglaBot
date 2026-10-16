@@ -7,7 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.core.crypto import decrypt_secret, encrypt_secret, is_encrypted, lookup_hash
 from app.db.base import Base, new_id
 
-DEFAULT_SUPPORTED_LANGUAGES = ["en", "bn"]
+DEFAULT_SUPPORTED_LANGUAGES = ["en"]
 #: ``lookup_hash`` purpose of calendar feed tokens.
 CALENDAR_TOKEN_PURPOSE = "calendar-feed"
 
@@ -46,7 +46,7 @@ class Merchant(Base):
     support_phone: Mapped[str] = mapped_column(String(32), default="")
     # Opening sentence spoken verbatim; empty = the default greeting.
     custom_greeting: Mapped[str] = mapped_column(Text, default="")
-    # Call language ("en" | "bn").
+    # Call language ("en"; English is the only one).
     language: Mapped[str] = mapped_column(String(8), default="en")
     supported_languages: Mapped[list] = mapped_column(JSONB, default=lambda: list(DEFAULT_SUPPORTED_LANGUAGES))
     voice_persona: Mapped[str] = mapped_column(String(12), default="female")

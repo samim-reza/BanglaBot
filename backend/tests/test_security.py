@@ -199,8 +199,8 @@ def test_totp_verify_window_and_replay_guard():
     assert totp.verify_totp(secret, code, at=now + 95) is None  # too old
     assert totp.verify_totp(secret, code, at=now, last_step=step) is None  # already used
     assert totp.verify_totp(secret, "12345", at=now) is None
-    uri = totp.provisioning_uri(secret, account="ops@x", issuer="BanglaBot Admin")
-    assert uri.startswith("otpauth://totp/BanglaBot%20Admin%3Aops%40x?") and f"secret={secret}" in uri
+    uri = totp.provisioning_uri(secret, account="ops@x", issuer="Callisa Admin")
+    assert uri.startswith("otpauth://totp/Callisa%20Admin%3Aops%40x?") and f"secret={secret}" in uri
 
 
 # ------------------------------------------------------------------ secrets at rest

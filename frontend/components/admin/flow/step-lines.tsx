@@ -16,7 +16,7 @@ export function StepLines({ skill, controls }: { skill: FlowSkill; controls: Flo
       <ul className="space-y-1.5">
         {skill.lines.map((spec) => {
           const text = effective.en?.[spec.key] || spec.default.en || Object.values(spec.default)[0] || "";
-          const edited = Boolean(owner.en?.[spec.key] || owner.bn?.[spec.key]);
+          const edited = Boolean(owner.en?.[spec.key]);
           return (
             <li key={spec.key} className="rounded-md bg-surface px-2.5 py-1.5 text-[13px]">
               <span className="mr-2 text-xs text-muted-foreground">{spec.label}</span>

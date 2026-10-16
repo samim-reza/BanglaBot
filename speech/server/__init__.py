@@ -1,4 +1,4 @@
-"""BanglaBot local speech server: Parakeet STT + Silero VAD + Kokoro TTS over HTTP/WebSocket."""
+"""Callisa local speech server: Parakeet STT + Silero VAD + Kokoro TTS over HTTP/WebSocket."""
 
 from __future__ import annotations
 

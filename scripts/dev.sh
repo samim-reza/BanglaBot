@@ -91,7 +91,7 @@ if [ "$USE_NGROK" -eq 1 ]; then
     exit 1
   fi
   echo "▶ Starting ngrok tunnel to port 8000..."
-  ngrok http 8000 --log=stdout > /tmp/banglabot-ngrok.log 2>&1 &
+  ngrok http 8000 --log=stdout > /tmp/callisa-ngrok.log 2>&1 &
   for _ in $(seq 1 25); do
     PUBLIC_BASE_URL=$(curl -sf --max-time 2 http://127.0.0.1:4040/api/tunnels 2>/dev/null \
       | python3 -c 'import json,sys
@@ -105,7 +105,7 @@ except Exception:
     sleep 1
   done
   if [ -z "$PUBLIC_BASE_URL" ]; then
-    echo "✖ Could not get the ngrok URL (is ngrok authed? run: ngrok config add-authtoken <token>). See /tmp/banglabot-ngrok.log"
+    echo "✖ Could not get the ngrok URL (is ngrok authed? run: ngrok config add-authtoken <token>). See /tmp/callisa-ngrok.log"
     exit 1
   fi
   export PUBLIC_BASE_URL TELNYX_PUBLIC_BASE_URL="$PUBLIC_BASE_URL"
@@ -118,15 +118,15 @@ fi
 if [ "$USE_SPEECH" -eq 1 ]; then
   pkill -f "python -m server" 2>/dev/null || true
   echo "▶ Starting the local speech server on :8100 (first run downloads ~2 GB of models)..."
-  "$ROOT/scripts/speech.sh" > /tmp/banglabot-speech.log 2>&1 &
+  "$ROOT/scripts/speech.sh" > /tmp/callisa-speech.log 2>&1 &
   for _ in $(seq 1 120); do
     curl -sf --max-time 2 http://127.0.0.1:8100/health >/dev/null 2>&1 && break
     sleep 1
   done
   if curl -sf --max-time 2 http://127.0.0.1:8100/health >/dev/null 2>&1; then
-    echo "✔ Speech server ready (log: /tmp/banglabot-speech.log)"
+    echo "✔ Speech server ready (log: /tmp/callisa-speech.log)"
   else
-    echo "⚠ Speech server not ready yet — calls fall back to the cloud chain. Log: /tmp/banglabot-speech.log"
+    echo "⚠ Speech server not ready yet — calls fall back to the cloud chain. Log: /tmp/callisa-speech.log"
   fi
 fi
 

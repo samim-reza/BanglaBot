@@ -49,9 +49,9 @@ async def status() -> dict[str, Any]:
             ],
             "unconfigured": [entry for entry in parse_chain(pset.llm_chain) if entry not in {link.key for link in links}],
         },
-        "stt": {lang: {"chain": stt_chain_for(lang), "ready": stt_configured(lang)} for lang in ("en", "bn")},
+        "stt": {lang: {"chain": stt_chain_for(lang), "ready": stt_configured(lang)} for lang in ("en",)},
         "tts": {
-            **{lang: {"chain": tts_chain_for(lang), "ready": tts_configured(lang)} for lang in ("en", "bn")},
+            **{lang: {"chain": tts_chain_for(lang), "ready": tts_configured(lang)} for lang in ("en",)},
             "stats": tts_stats(),
         },
         "speech_server": await speech_server_status(),

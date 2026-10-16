@@ -24,6 +24,15 @@ def _base(request: Request) -> str:
     public = str(get_settings().public_base_url or "").rstrip("/")
     return public or str(request.base_url).rstrip("/")
 
+def _booked_kind(vertical: Any) -> str:
+    """The catalog kind a record is booked against (a salon books the stylist, not the
+    service): its feed and busy calendar are per item of THAT kind."""
+    for spec in getattr(vertical, "record_fields", ()) or ():
+        if spec.key == "catalog_item_id" and getattr(spec, "catalog_kind", ""):
+            return str(spec.catalog_kind)
+    return str(vertical.catalog_kind or "")
+
+
 async def _summary(request: Request, merchant: Merchant, db: AsyncSession) -> dict[str, Any]:
     settings = get_settings()
     calendar = calendar_service.settings_of(merchant)
@@ -33,10 +42,11 @@ async def _summary(request: Request, merchant: Merchant, db: AsyncSession) -> di
     from app.verticals import vertical_for
 
     vertical = vertical_for(merchant)
-    if vertical.catalog_kind:
+    booked_kind = _booked_kind(vertical)
+    if booked_kind:
         rows = await db.scalars(
             select(CatalogItem)
-            .where(CatalogItem.merchant_id == merchant.id, CatalogItem.kind == vertical.catalog_kind)
+            .where(CatalogItem.merchant_id == merchant.id, CatalogItem.kind == booked_kind)
             .order_by(CatalogItem.sort_order, CatalogItem.created_at)
         )
         items = [

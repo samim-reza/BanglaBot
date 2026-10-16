@@ -27,6 +27,14 @@ class Preview:
     instruction: Instruction
 
 
+def _same(old: Any, new: Any) -> bool:
+    if old is None or isinstance(old, bool) or isinstance(new, bool):
+        return old is new
+    if isinstance(old, str) and isinstance(new, str):
+        return " ".join(old.split()).casefold() == " ".join(new.split()).casefold()
+    return old == new
+
+
 class FlowRuntime:
     def __init__(
         self,
@@ -109,6 +117,8 @@ class FlowRuntime:
 
     def save(self, fields: dict[str, Any] | None) -> dict[str, Any]:
         accepted, override = self.flow.normalize(self.known_fields(fields), self.slots, self.ctx, self.language)
+        # Re-saying a detail we already have isn't a change (it must not reopen a confirmed read-back).
+        accepted = {key: value for key, value in accepted.items() if not _same(self.slots.get(key), value)}
         self.slots.update(accepted)
         self.flow.on_saved(accepted, self.slots, self.ctx)
         result = self.advance(saved_keys=sorted(accepted), override=override)

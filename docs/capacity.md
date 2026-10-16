@@ -34,7 +34,7 @@ What the platform already does to keep this down:
 | Service | Free allowance | What it means |
 |---|---|---|
 | Groq (LLM: gpt-oss-120b / 20b, qwen) | per model ≈ 8K tokens/min, 200K tokens/day | ~5–6 requests/min per model; 3 models back each other up → a few test calls at a time, a few dozen per day |
-| Gemini (LLM 3.1-flash-lite, TTS) | free tier, limits shown in AI Studio | second provider when Groq is busy; TTS fallback with Bangla |
+| Gemini (LLM 3.1-flash-lite, TTS) | free tier, limits shown in AI Studio | second provider when Groq is busy; TTS fallback |
 | Deepgram | $200 credit, no card (user still has to sign up) | ≈ 25–40K STT minutes or ~6M TTS characters |
 | Local speech server (laptop GPU) | free, open source | Parakeet STT 80–120 ms/utterance, Kokoro TTS 240–450 ms/sentence, ~2.2 GB VRAM, handled 4 parallel streams fine |
 | edge-tts | free, unofficial | last-resort voice for testing only |
@@ -56,7 +56,7 @@ is roughly **100,000–150,000 call-minutes per month**.
 | Telnyx | 100+ concurrent channels (raise the account limit), numbers | usage-based |
 | STT/TTS/LLM | usage-based (§1) | 125K min × $0.027 ≈ **$3,400** (Deepgram path) or ≈ **$1,900** (Telnyx-hosted) |
 
-No GPUs to run, scales to zero at night, and Bangla stays well supported.
+No GPUs to run and it scales to zero at night.
 
 ### Option B — self-host speech-to-text and text-to-speech
 
@@ -74,8 +74,7 @@ and almost never against Telnyx-hosted STT/TTS. It also adds on-call duty (GPU d
 
 **Recommendation:** launch on APIs (option A), keep the provider layer as built so any account or the
 whole platform can switch providers from the admin panel, and move speech in-house only past
-~100K minutes/month or when a customer requires data to stay on your servers. Bangla stays on APIs
-(Azure / Gemini / Deepgram) — there is no strong open real-time Bangla speech model yet.
+~100K minutes/month or when a customer requires data to stay on your servers.
 
 ## 4. Margins at current prices
 

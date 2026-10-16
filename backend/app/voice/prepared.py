@@ -1,6 +1,6 @@
 """Lines composed *before* the customer answers, so the call never waits on the model.
 
-The confirmation question ("You ordered two shirts, total 1,250 taka, cash on
+The confirmation question ("You ordered two shirts, total 45 dollars, cash on
 delivery — shall I confirm?") is the one line the model has to *write* rather
 than the backend having a fixed phrase for. Writing it while the phone is still
 ringing — one short Chat Completions call per supported language, then a TTS
@@ -14,6 +14,7 @@ entries expire after :data:`TTL_SECONDS`.
 
 from __future__ import annotations
 
+import asyncio
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -97,9 +98,64 @@ def pop_call_snapshot(call_log_id: str) -> CallSnapshot | None:
     return _call_snapshots.pop(str(call_log_id), None)
 
 
+#: Calls whose agent already ended them. Telnyx reconnects a media stream that closes while the
+#: phone leg is still up; a reconnect to a finished call must not start a second conversation.
+_ended_calls: dict[str, float] = {}
+
+
+def mark_call_ended(call_log_id: str) -> None:
+    now = time.monotonic()
+    for key, stamp in list(_ended_calls.items()):
+        if now - stamp > TTL_SECONDS:
+            _ended_calls.pop(key, None)
+    _ended_calls[str(call_log_id)] = now
+
+
+_media_started: dict[str, float] = {}
+#: Answered calls waiting for their media stream (set when it connects).
+_media_waits: dict[str, asyncio.Event] = {}
+
+
+def mark_media_started(call_log_id: str) -> None:
+    now = time.monotonic()
+    for key, stamp in list(_media_started.items()):
+        if now - stamp > TTL_SECONDS:
+            _media_started.pop(key, None)
+    _media_started[str(call_log_id)] = now
+    waiting = _media_waits.pop(str(call_log_id), None)
+    if waiting is not None:
+        waiting.set()
+
+
+def media_started(call_log_id: str) -> bool:
+    return str(call_log_id) in _media_started
+
+
+async def wait_for_media(call_log_id: str, timeout: float) -> bool:
+    """True as soon as the call's media stream connects; False after ``timeout`` without it."""
+    if media_started(call_log_id):
+        return True
+    event = _media_waits.setdefault(str(call_log_id), asyncio.Event())
+    try:
+        await asyncio.wait_for(event.wait(), timeout)
+        return True
+    except asyncio.TimeoutError:
+        return media_started(call_log_id)
+    finally:
+        _media_waits.pop(str(call_log_id), None)
+
+
+def call_ended(call_log_id: str) -> bool:
+    stamp = _ended_calls.get(str(call_log_id))
+    return stamp is not None and time.monotonic() - stamp <= TTL_SECONDS
+
+
 def clear() -> None:
     _decision_lines.clear()
     _call_snapshots.clear()
+    _ended_calls.clear()
+    _media_started.clear()
+    _media_waits.clear()
 
 
 def _ctx(order: Any, merchant: Any) -> Any:
@@ -129,26 +185,15 @@ async def compose_decision_line(llm: Any, flow: Any, order: Any, merchant: Any, 
     lang = normalize_language(language)
     facts = flow.order_facts(_ctx(order, merchant), lang)
     business = str(_get(merchant, "business_name", ""))
-    if lang == "bn":
-        system = (
-            f"তুমি {business}-এর পক্ষ থেকে ফোন করা একজন ভদ্র কাস্টমার-কেয়ার সহকারী। "
-            "কাস্টমার এইমাত্র নিশ্চিত করেছেন যে তিনিই অর্ডার দিয়েছেন। এখন তাঁকে অর্ডারটি এক থেকে দুই বাক্যে "
-            "স্বাভাবিক কথ্য বাংলায় বলে জিজ্ঞেস করো তিনি অর্ডারটি কনফার্ম করবেন কি না। "
-            "সম্মানসূচক \"আপনি\" ব্যবহার করো। পণ্যের কাঁচা লেখা হুবহু পড়ো না — মানুষ যেভাবে বলে সেভাবে বলো "
-            "(যেমন \"শার্ট x2\" হলে \"দুইটা শার্ট\")। টাকার অংক দেওয়া কথায় হুবহু রাখো। "
-            "সালাম বা পরিচয় আবার দিও না। ইমোজি, বুলেট বা উদ্ধৃতি চিহ্ন লিখো না। শুধু বলার বাক্যটুকু লেখো, আর কিছু না।"
-        )
-        user = f"পণ্য: {facts['items']}\nমোট দাম: {facts['amount']}\nপেমেন্ট: {facts['cod']}"
-    else:
-        system = (
-            f"You are a polite customer-care assistant calling on behalf of {business}. "
-            "The customer has just confirmed they are the person who placed the order. In one or two natural "
-            "spoken sentences tell them what they ordered and the total, then ask whether they would like to "
-            "confirm the order. Do not read the raw item text — say it the way a person would (\"shirt x2\" → "
-            "\"two shirts\"). Keep the amount exactly as given. Do not greet or introduce yourself again. "
-            "No emoji, bullets or quotation marks. Write only the sentence(s) to be spoken, nothing else."
-        )
-        user = f"Items: {facts['items']}\nTotal: {facts['amount']}\nPayment: {facts['cod']}"
+    system = (
+        f"You are a polite customer-care assistant calling on behalf of {business}. "
+        "The customer has just confirmed they are the person who placed the order. In one or two natural "
+        "spoken sentences tell them what they ordered and the total, then ask whether they would like to "
+        "confirm the order. Do not read the raw item text — say it the way a person would (\"shirt x2\" → "
+        "\"two shirts\"). Keep the amount exactly as given. Do not greet or introduce yourself again. "
+        "No emoji, bullets or quotation marks. Write only the sentence(s) to be spoken, nothing else."
+    )
+    user = f"Items: {facts['items']}\nTotal: {facts['amount']}\nPayment: {facts['cod']}"
     reply = await llm.complete([{"role": "system", "content": system}, {"role": "user", "content": user}])
     line = " ".join(str(getattr(reply, "content", "") or "").split()).strip("\"'“” ")
     if not _acceptable(line, lang):

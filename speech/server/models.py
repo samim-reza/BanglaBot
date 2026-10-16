@@ -83,7 +83,7 @@ def download_url(url: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
     log.info("downloading %s", url)
-    req = urllib.request.Request(url, headers={"User-Agent": "banglabot-speech/0.1"})
+    req = urllib.request.Request(url, headers={"User-Agent": "callisa-speech/0.1"})
     with urllib.request.urlopen(req, timeout=60) as resp, tmp.open("wb") as fh:  # noqa: S310 (fixed https URLs)
         total = int(resp.headers.get("Content-Length") or 0)
         done = 0

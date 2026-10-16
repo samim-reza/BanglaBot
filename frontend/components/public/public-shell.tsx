@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { BanglaBotWordmark } from "@/components/brand";
+import { BrandWordmark } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +12,7 @@ export function PublicShell({ children, wide = false }: { children: React.ReactN
       <div className={cn("mx-auto flex flex-col gap-8 px-4 py-10 sm:px-6", wide ? "max-w-3xl" : "max-w-md")}>
         <div className="flex items-center justify-between">
           <Link href="/" aria-label="Home">
-            <BanglaBotWordmark className="scale-75 origin-left" />
+            <BrandWordmark className="scale-75 origin-left" />
           </Link>
           <ThemeToggle />
         </div>

@@ -11,6 +11,7 @@ import { MerchantCreateDialog } from "@/components/admin/merchant-create-dialog"
 import { MerchantEditDrawer } from "@/components/admin/merchant-edit-drawer";
 import { FilterBar, LoadingRows } from "@/components/admin/states";
 import { useAdminMerchants, useAdminMeta, planName, regionOf, verticalName } from "@/components/admin/use-admin-meta";
+import { useAdminMe } from "@/components/admin/shell/admin-me";
 import { useUrlFilters } from "@/components/admin/url-filters";
 import { ApiError } from "@/components/api-error";
 import { EmptyState, PageHeader } from "@/components/page-header";
@@ -18,7 +19,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { languageLabel } from "@/lib/format";
 import type { Merchant } from "@/services/api";
 
 const FILTER_KEYS = ["vertical", "create"] as const;
@@ -34,6 +34,7 @@ export default function AdminAccountsPage() {
 function AccountsView() {
   const router = useRouter();
   const { meta, error: metaError } = useAdminMeta();
+  const { can } = useAdminMe();
   const { merchants, loading, error, reload } = useAdminMerchants();
   const [filters, setFilters] = useUrlFilters(FILTER_KEYS);
   const [query, setQuery] = useState("");
@@ -148,7 +149,6 @@ function AccountsView() {
                 <TableHead className="hidden 2xl:table-cell">Username</TableHead>
                 <TableHead>Business type</TableHead>
                 <TableHead>Region</TableHead>
-                <TableHead className="hidden 2xl:table-cell">Language</TableHead>
                 <TableHead>Plan</TableHead>
                 <TableHead>Inbound number</TableHead>
                 <TableHead>Status</TableHead>
@@ -181,7 +181,6 @@ function AccountsView() {
                       {region?.label ?? merchant.region}
                       <span className="ml-1 text-xs text-muted-foreground">{merchant.region}</span>
                     </TableCell>
-                    <TableCell className="hidden whitespace-nowrap 2xl:table-cell">{languageLabel(merchant.language)}</TableCell>
                     <TableCell>
                       <Pill tone="teal">{planName(meta, merchant.plan)}</Pill>
                     </TableCell>
@@ -219,16 +218,18 @@ function AccountsView() {
                         >
                           <LogIn className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-destructive hover:text-destructive"
-                          title="Delete account"
-                          aria-label={`Delete ${merchant.business_name}`}
-                          onClick={() => setDeleting(merchant)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {can("deleteAccounts") && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            title="Delete account"
+                            aria-label={`Delete ${merchant.business_name}`}
+                            onClick={() => setDeleting(merchant)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>

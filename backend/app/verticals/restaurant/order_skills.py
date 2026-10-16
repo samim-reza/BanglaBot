@@ -7,14 +7,15 @@ from typing import Any
 from app.flows.base import Instruction
 from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
+from app.flows.timefmt import time_phrase
 from app.skills.base import BoundSkill, Skill
 from app.skills.library.choice import ChoiceSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import line
 from app.verticals.base import FieldSpec, L
-from app.verticals.common import money, when_phrase
+from app.verticals.common import money, notice, when_phrase
 from app.verticals.restaurant.cart import add_line, free_delivery_gap, make_line, subtotal
 from app.verticals.restaurant.config import LEAD, conf, num
-from app.verticals.restaurant.hours import ASAP, can_do_asap, hours_phrase, next_opening, order_time_ok, parse_order_time
+from app.verticals.restaurant.hours import ASAP, can_do_asap, earliest_ready, hours_phrase, next_opening, order_time_ok, parse_order_time
 from app.verticals.restaurant.menu import find_item, match_options
 
 
@@ -30,18 +31,18 @@ class FulfillmentSkill(ChoiceSkill):
     key = "fulfillment"
     slot = "fulfillment"
     toggleable = False
-    label = L2("Pickup or delivery", "পিকআপ না ডেলিভারি")
-    description = L2("Pickup, or delivery when you deliver (Settings).", "পিকআপ, অথবা ডেলিভারি (সেটিংসে চালু থাকলে)।")
+    label = L("Pickup or delivery")
+    description = L("Pickup, or delivery when you deliver (Settings).")
     slots = (SlotSpec("fulfillment", "pickup or delivery, once the caller says.", {"type": "string", "enum": ["pickup", "delivery"]}),)
     volunteerable = frozenset({"fulfillment"})
     synonyms = {
-        "pickup": ("pickup", "pick up", "pick it up", "collect", "collection", "takeaway", "take away", "carry out", "carryout", "to go", "পিকআপ", "নিয়ে যাব"),
-        "delivery": ("delivery", "deliver", "bring it", "ডেলিভারি", "বাসায় দিয়ে"),
+        "pickup": ("pickup", "pick up", "pick it up", "collect", "collection", "takeaway", "take away", "carry out", "carryout", "to go"),
+        "delivery": ("delivery", "deliver", "bring it"),
     }
     lines = (
-        line("ask", "Is that for pickup or delivery?", "পিকআপ করবেন, নাকি ডেলিভারি?", label="Ask pickup or delivery", static=True),
-        line("minimum", "Delivery needs a minimum order of {minimum}. Would you like to add something, or make it pickup?", "ডেলিভারির জন্য সর্বনিম্ন অর্ডার {minimum}। আর কিছু যোগ করবেন, নাকি পিকআপ করবেন?", label="Below the delivery minimum", variables=("minimum",)),
-        line("pickup_only", "Sorry, we don't deliver — orders are for pickup.", "দুঃখিত, আমরা ডেলিভারি দিই না — অর্ডার পিকআপ করতে হবে।", label="No delivery", static=True),
+        line("ask", "Is that for pickup or delivery?", label="Ask pickup or delivery", static=True),
+        line("minimum", "Delivery needs a minimum order of {minimum}, and your order is {subtotal} so far. Would you like to add something, or make it pickup?", label="Below the delivery minimum", variables=("minimum", "subtotal")),
+        line("pickup_only", "Sorry, we don't deliver — orders are for pickup.", label="No delivery", static=True),
     )
     goal = "Pickup or delivery?"
 
@@ -66,7 +67,7 @@ class FulfillmentSkill(ChoiceSkill):
 
     def line(self, b: BoundSkill, stage: str, slots: dict[str, Any], ctx: CallContext, language: str) -> str:
         if self._below_minimum(slots, ctx):
-            return b.text("minimum", language, minimum=money(conf(ctx).get("minimum_order"), ctx, language))
+            return b.text("minimum", language, minimum=money(conf(ctx).get("minimum_order"), ctx, language), subtotal=money(subtotal(slots.get("cart") or []), ctx, language))
         return b.text("ask", language)
 
     def prefetch(self, b: BoundSkill, ctx: CallContext, language: str) -> list[str]:
@@ -76,11 +77,11 @@ class FulfillmentSkill(ChoiceSkill):
 class AddressSkill(Skill):
     key = "address"
     toggleable = False
-    label = L2("Delivery address", "ডেলিভারির ঠিকানা")
+    label = L("Delivery address")
     slots = (SlotSpec("address", "Delivery address as the caller said it (street and number, apartment, area)."),)
     long_answer = frozenset({"address"})
     volunteerable = frozenset({"address"})
-    lines = (line("address", "What's the delivery address?", "ডেলিভারির ঠিকানাটা বলবেন?", label="Ask for the address", static=True),)
+    lines = (line("address", "What's the delivery address?", label="Ask for the address", static=True),)
     goal = "Get the full delivery address."
 
     def applies(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext) -> bool:
@@ -98,20 +99,24 @@ class AddressSkill(Skill):
         return [b.text("address", language)]
 
 
+#: Set (once) when a requested ready time was moved to the earliest the kitchen can do.
+READY_MOVED = "_ready_moved"
+
+
 class OrderTimeSkill(Skill):
     key = "order_time"
-    label = L2("When", "কখন")
-    description = L2("As soon as possible, or a later time within your hours.", "যত দ্রুত সম্ভব, অথবা খোলার সময়ের মধ্যে পরে।")
-    options = (FieldSpec("ask", L("Ask when they want it (off = as soon as possible)", "কখন চান জিজ্ঞেস করবে"), "bool", default=True),)
+    label = L("When")
+    description = L("As soon as possible, or a later time within your hours.")
+    options = (FieldSpec("ask", L("Ask when they want it (off = as soon as possible)"), "bool", default=True),)
     defaults = {"ask": True}
     slots = (SlotSpec("order_time", "asap, or when they want it: HH:MM today, or YYYY-MM-DD HH:MM."),)
     volunteerable = frozenset({"order_time"})
     lines = (
-        line("ask", "Would you like it as soon as possible, or for a later time?", "যত তাড়াতাড়ি সম্ভব চান, নাকি পরে কোনো সময়ে?", label="Ask when", static=True),
-        line("closed", "We're closed right now — we open {next}. What time would you like it?", "এখন বন্ধ আছে — আমরা খুলব {next}। কখন নিতে চান?", label="Closed now", variables=("next",)),
-        line("outside", "We're open {hours}. What time would you like it?", "আমরা খোলা থাকি {hours}। কখন নিতে চান?", label="Outside hours", variables=("hours",)),
+        line("ask", "Would you like it as soon as possible, or for a later time?", label="Ask when", static=True),
+        line("closed", "We're closed right now — we open {next}. What time would you like it?", label="Closed now", variables=("next",)),
+        line("outside", "We're open {hours}. What time would you like it?", label="Outside hours", variables=("hours",)),
     )
-    asap_words = ("asap", "as soon as", "right away", "right now", "now please", "soonest", "quickly", "এখনই", "যত তাড়াতাড়ি", "তাড়াতাড়ি")
+    asap_words = ("asap", "as soon as", "right away", "right now", "now please", "soonest", "quickly")
     goal = "As soon as possible, or a later time?"
 
     def derive(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext) -> None:
@@ -136,8 +141,18 @@ class OrderTimeSkill(Skill):
         if parsed is None or not order_time_ok(parsed, ctx):  # type: ignore[arg-type]
             fields.pop("order_time", None)
             return fields, Instruction("order_time", b.text("outside", language, hours=hours_phrase(ctx, language)), verbatim=True)
+        # Not before the kitchen can have it ready ("11 AM" when it opens at 11 and needs 20 minutes → 11:20).
+        earliest = earliest_ready(parsed, {**slots, **fields}, ctx)  # type: ignore[arg-type]
+        if parsed < earliest:  # type: ignore[operator]
+            parsed = earliest
+            fields[READY_MOVED] = time_phrase(earliest.timetz(), language)
         fields["order_time"] = parsed.isoformat()  # type: ignore[union-attr]
         return fields, None
+
+    def on_saved(self, b: BoundSkill, saved: dict[str, Any], slots: dict[str, Any], ctx: CallContext) -> None:
+        moved = slots.pop(READY_MOVED, None)
+        if moved:
+            notice(slots, "ready_moved", time=moved)  # said before the next line
 
     def line(self, b: BoundSkill, stage: str, slots: dict[str, Any], ctx: CallContext, language: str) -> str:
         return b.text("ask", language) if can_do_asap(slots, ctx) else self._closed_line(b, ctx, language)
@@ -157,21 +172,21 @@ class UpsellSkill(Skill):
 
     key = "upsell"
     kind = "gate"
-    label = L2("Suggest one more thing", "আরেকটি জিনিস প্রস্তাব")
-    description = L2("Once per order: a free-delivery nudge or an item you choose.", "প্রতি অর্ডারে একবার: ফ্রি ডেলিভারি বা আপনার বাছাই করা আইটেম।")
+    label = L("Suggest one more thing")
+    description = L("Once per order: a free-delivery nudge or an item you choose.")
     default_enabled = False
     options = (
-        FieldSpec("mode", L("Suggest", "প্রস্তাব"), "select", options=(("free_delivery", L("Free delivery nudge", "ফ্রি ডেলিভারি")), ("item", L("An item", "একটি আইটেম"))), default="free_delivery"),
-        FieldSpec("item", L("Item to suggest", "যে আইটেম প্রস্তাব করবে"), placeholder="Garlic Bread"),
-        FieldSpec("max_gap", L("Only when this close to free delivery", "ফ্রি ডেলিভারির এত কাছে থাকলে"), "money", default=10),
+        FieldSpec("mode", L("Suggest"), "select", options=(("free_delivery", L("Free delivery nudge")), ("item", L("An item"))), default="free_delivery"),
+        FieldSpec("item", L("Item to suggest"), placeholder="Garlic Bread"),
+        FieldSpec("max_gap", L("Only when this close to free delivery"), "money", default=10),
     )
     defaults = {"mode": "free_delivery", "max_gap": 10}
     slots = (SlotSpec("upsell_ok", "Answer to the one suggestion: true = yes, false = no.", {"type": "boolean"}),)
     yes_no = {"upsell": "upsell_ok"}
     stage_slots = {"upsell": ("upsell_ok",)}
     lines = (
-        line("gap", "You're {gap} away from free delivery. Would you like to add anything?", "আর {gap} এর অর্ডার করলে ডেলিভারি ফ্রি। কিছু যোগ করবেন?", label="Free delivery nudge", variables=("gap",)),
-        line("item", "Would you like to add {item} for {price}?", "{price} দিয়ে {item} যোগ করবেন?", label="Item suggestion", variables=("item", "price")),
+        line("gap", "You're {gap} away from free delivery. Would you like to add anything?", label="Free delivery nudge", variables=("gap",)),
+        line("item", "Would you like to add {item} for {price}?", label="Item suggestion", variables=("item", "price")),
     )
     goal = "The system made one suggestion: save upsell_ok, or call update_cart if they add something."
 

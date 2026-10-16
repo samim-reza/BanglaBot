@@ -105,6 +105,18 @@ def parse_order_time(value: Any, ctx: CallContext) -> str | datetime | None:
     return datetime.combine(day or ctx.today, clock.replace(second=0, microsecond=0), tzinfo=ctx.now.tzinfo)
 
 
+def earliest_ready(at: datetime, slots: dict[str, Any], ctx: CallContext) -> datetime:
+    """The soonest an order for ``at``'s day can be ready: from now (or opening, when closed) plus prep, on a 5-minute mark."""
+    assert ctx.now is not None
+    start = ctx.now
+    window = opening_window(ctx)
+    if window is not None and window.open_on(at.date()):
+        start = max(start, _bounds(window, at.date(), at.tzinfo)[0])
+    ready = start + timedelta(minutes=lead_minutes(slots, ctx))
+    extra = (-ready.minute) % 5
+    return (ready + timedelta(minutes=extra)).replace(second=0, microsecond=0)
+
+
 def order_time_ok(at: datetime, ctx: CallContext) -> bool:
     assert ctx.now is not None
     if at < ctx.now - timedelta(minutes=5) or (at.date() - ctx.today).days > ORDER_DAYS:

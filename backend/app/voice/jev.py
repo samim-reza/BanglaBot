@@ -43,7 +43,7 @@ def http() -> httpx.AsyncClient:
 
 
 def enabled(language: str = "en") -> bool:
-    # English is Jev's strongest language; Bangla stays on the keyword matcher + main model.
+    # Jev answers English yes/no; anything else stays on the keyword matcher + main model.
     return bool(get_settings().typesafe_api_key) and language == "en"
 
 

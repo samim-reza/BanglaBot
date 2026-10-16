@@ -17,6 +17,7 @@ from app.models import CatalogItem, Merchant
 from app.schemas.catalog import CatalogItemIn
 from app.services.context_service import invalidate_catalog
 from app.services.tenancy import owned
+from app.services.calendar.links import check_ics_url
 from app.verticals import vertical_for
 from app.verticals.forms import FieldError, split_catalog
 
@@ -37,6 +38,16 @@ def _vertical_kind(merchant: Merchant, kind: str | None = None) -> str:
 def _fields(merchant: Merchant, kind: str | None = None):  # noqa: ANN202
     spec = vertical_for(merchant).catalog_spec(kind)
     return spec.fields if spec is not None else vertical_for(merchant).catalog_fields
+
+
+def _check_links(values: dict[str, Any]) -> None:
+    """A catalog item's busy-calendar link is fetched by the server: refuse private / non-web addresses."""
+    link = str(values.get("calendar_ics") or "").strip()
+    if link:
+        try:
+            check_ics_url(link)
+        except ValueError as exc:
+            raise FieldError("calendar_ics", str(exc)) from exc
 
 
 def _payload(data: CatalogItemIn) -> dict[str, Any]:
@@ -68,6 +79,7 @@ async def create_item(db: AsyncSession, merchant: Merchant, data: CatalogItemIn,
         raise HTTPException(status_code=409, detail=f"An account can have at most {MAX_ITEMS} catalog items")
     try:
         name, values = split_catalog(vertical_for(merchant), _payload(data), kind=kind)
+        _check_links(values)
     except FieldError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     item = CatalogItem(
@@ -88,6 +100,7 @@ async def create_item(db: AsyncSession, merchant: Merchant, data: CatalogItemIn,
 async def update_item(db: AsyncSession, merchant: Merchant, item: CatalogItem, data: CatalogItemIn) -> CatalogItem:
     try:
         name, values = split_catalog(vertical_for(merchant), _payload(data), partial=True, kind=item.kind or None)
+        _check_links(values)
     except FieldError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if name:
@@ -119,7 +132,7 @@ async def delete_item(db: AsyncSession, item: CatalogItem) -> None:
 
 
 def _header_map(merchant: Merchant, header: list[str], kind: str | None = None) -> dict[int, str]:
-    """CSV column index → field key (headers may be keys or English / Bangla labels)."""
+    """CSV column index → field key (headers may be keys or labels)."""
     specs = _fields(merchant, kind)
     lookup: dict[str, str] = {}
     for spec in specs:
@@ -137,18 +150,18 @@ def _header_map(merchant: Merchant, header: list[str], kind: str | None = None) 
 async def import_csv(db: AsyncSession, merchant: Merchant, text: str, *, replace: bool = False, kind: str | None = None) -> dict[str, Any]:
     kind = _vertical_kind(merchant, kind)
     vertical = vertical_for(merchant)
-    reader = csv.reader(io.StringIO(text.strip()))
-    rows = list(reader)
+    try:
+        rows = list(csv.reader(io.StringIO(text.strip())))
+    except csv.Error as exc:
+        raise HTTPException(status_code=422, detail="The CSV couldn't be read — check its quotes and line breaks") from exc
     if not rows:
         raise HTTPException(status_code=422, detail="The CSV is empty")
     mapping = _header_map(merchant, rows[0], kind)
     if "name" not in mapping.values():
         raise HTTPException(status_code=422, detail="The CSV header must include a 'name' column")
-    if replace:
-        await db.execute(delete(CatalogItem).where(CatalogItem.merchant_id == merchant.id, CatalogItem.kind == kind))
-    existing = int(await db.scalar(select(func.count(CatalogItem.id)).where(CatalogItem.merchant_id == merchant.id)) or 0)
-    created = skipped = 0
+    skipped = 0
     errors: list[str] = []
+    parsed: list[tuple[int, Any, dict[str, Any]]] = []
     for line_no, row in enumerate(rows[1:], start=2):
         if not any(cell.strip() for cell in row):
             continue
@@ -158,10 +171,20 @@ async def import_csv(db: AsyncSession, merchant: Merchant, text: str, *, replace
                 payload[key] = row[index].strip()
         try:
             name, values = split_catalog(vertical, payload, kind=kind)
+            _check_links(values)
         except FieldError as exc:
             skipped += 1
             errors.append(f"line {line_no}: {exc}")
             continue
+        parsed.append((line_no, name, values))
+    if replace:
+        if not parsed:
+            # Validate first: a file with no usable rows must not wipe the catalog.
+            raise HTTPException(status_code=422, detail="No valid rows — the catalog was left as it was")
+        await db.execute(delete(CatalogItem).where(CatalogItem.merchant_id == merchant.id, CatalogItem.kind == kind))
+    existing = int(await db.scalar(select(func.count(CatalogItem.id)).where(CatalogItem.merchant_id == merchant.id)) or 0)
+    created = 0
+    for line_no, name, values in parsed:
         if existing + created >= MAX_ITEMS:
             skipped += 1
             errors.append(f"line {line_no}: catalog limit of {MAX_ITEMS} reached")
@@ -180,12 +203,19 @@ def csv_template(merchant: Merchant, kind: str | None = None) -> str:
     writer.writerow([spec.key for spec in specs])
     example = []
     for spec in specs:
+        placeholder = spec.placeholder or ""
         if spec.type == "days":
             example.append("mon,wed,sat" if spec.key else "")
         elif spec.default is not None and not isinstance(spec.default, list):
             example.append(str(spec.default))
+        elif "…" in placeholder:
+            # An elided hint ("https://calendar.google.com/…/basic.ics"), not a value: importing
+            # the example row as-is must not configure a bogus busy calendar.
+            example.append("")
+        elif not placeholder and spec.required and spec.type in ("money", "number"):
+            example.append("10")  # the example row imports as downloaded
         else:
-            example.append(spec.placeholder or "")
+            example.append(placeholder)
     writer.writerow(example)
     return buffer.getvalue()
 

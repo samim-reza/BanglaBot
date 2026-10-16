@@ -55,8 +55,8 @@ class AmbientNoiseTracker:
         return int(max(minimum, min(max(cap, minimum), self.value * factor)))
 
 
-# Sentence boundary: Latin/Bangla terminators followed by whitespace (decimals like 2.50 survive).
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[।.?!])\s+")
+# Sentence boundary: terminators followed by whitespace (decimals like 2.50 survive).
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.?!])\s+")
 
 
 def split_sentences(text: str, *, max_chars: int = 320) -> list[str]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -22,18 +23,27 @@ from app.flows.context import DIRECTION_INBOUND
 from app.models import CallLog, Merchant, SalesInquiry
 from app.verticals import VERTICALS, flow_for
 from app.voice import text_session
+from app.voice.languages import normalize_language
 
 router = APIRouter(tags=["public"])
 
 _WIDGET_JS = Path(__file__).resolve().parents[2] / "static" / "widget.js"
 #: Widget responses are read by any website the business embeds them on.
 _CORS = {"Access-Control-Allow-Origin": "*"}
+#: Embed keys are ``secrets.token_urlsafe`` strings: anything else never reaches the database.
+_WIDGET_KEY = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+_HEX_COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
+DEFAULT_WIDGET_COLOR = "#0f766e"
+#: Visitor messages per chat; a new chat starts after that (bounds one session's LLM spend).
+MAX_WIDGET_TURNS = 60
 
 
 @router.get("/health")
 async def health():
     settings = get_settings()
-    return {"status": "ok", "service": settings.app_name, "redis": await redis_health()}
+    # Status words only: error details (hosts, ports) stay in the admin console's health view.
+    redis = await redis_health()
+    return {"status": "ok", "service": settings.app_name, "redis": {"status": str(redis.get("status") or "unknown")}}
 
 
 @router.get("/api/public/catalog")
@@ -90,9 +100,12 @@ async def contact_sales(data: SalesInquiryIn, request: Request):
 
 # ------------------------------------------------------------------ calendar feed
 @router.get("/api/public/calendar/{token}.ics")
-async def calendar_feed(token: str, item: str = ""):
+async def calendar_feed(token: str, request: Request, item: str = ""):
     """An account's bookings as an iCalendar feed (subscribe from Google / Outlook / Apple)."""
     from app.services import calendar_service
+
+    # Generous: calendar services (Google, Outlook) poll many feeds from a few addresses.
+    await rate_limit(request, "calendar-feed", max_hits=300, per_seconds=60)
 
     result = await calendar_service.feed(token, item or None)
     if result is None:
@@ -116,7 +129,7 @@ async def widget_script():
 
 
 async def _widget_merchant(key: str) -> Merchant | None:
-    if not key or len(key) > 64:
+    if not _WIDGET_KEY.match(key or ""):
         return None
     async with AsyncSessionLocal() as session:
         merchant = await session.scalar(select(Merchant).where(Merchant.widget_key == key))
@@ -140,30 +153,39 @@ async def _body(request: Request) -> dict:
 
 
 @router.get("/api/public/widget/{key}/config")
-async def widget_config(key: str):
+async def widget_config(key: str, request: Request):
+    await rate_limit(request, "widget-config", max_hits=120, per_seconds=60)
     merchant = await _widget_merchant(key)
     if merchant is None:
         return _json({"enabled": False})
     look = dict(merchant.widget_settings or {})
+    color = str(look.get("color") or "")
     return _json(
         {
             "enabled": True,
             "title": look.get("title") or merchant.business_name,
             "subtitle": look.get("subtitle") or "",
-            "color": look.get("color") or "#0f766e",
-            "position": look.get("position") or "right",
+            # Re-checked on the way out: the widget writes it into a <style> block.
+            "color": color if _HEX_COLOR.match(color) else DEFAULT_WIDGET_COLOR,
+            "position": "left" if look.get("position") == "left" else "right",
         }
     )
 
 
 @router.post("/api/public/widget/{key}/start")
 async def widget_start(key: str, request: Request):
+    # Per visitor across every site, then per site (a random key can't dodge the first).
+    await rate_limit(request, "widget-start", max_hits=60, per_seconds=3600)
+    if not _WIDGET_KEY.match(key or ""):
+        return _json({"detail": "Chat is not available."}, 404)
     await rate_limit(request, f"widget-start:{key}", max_hits=30, per_seconds=3600)
     merchant = await _widget_merchant(key)
     if merchant is None:
         return _json({"detail": "Chat is not available."}, 404)
-    settings = get_settings()
-    if not settings.openai_api_key:
+    from app.voice.providers.llm import llm_configured
+
+    # Any configured link of the LLM chain (Groq / Gemini / OpenAI…), not only an OpenAI key.
+    if not llm_configured(merchant):
         return _json({"detail": "Chat is not available right now."}, 503)
     from app.services.call_service import DbCallStore
     from app.services.context_service import build_context
@@ -174,7 +196,7 @@ async def widget_start(key: str, request: Request):
             order_id=None,
             merchant_id=merchant.id,
             call_status="in-progress",
-            language=merchant.language or "en",
+            language=normalize_language(merchant.language),
             direction="widget",
             flow=flow.key,
         )
@@ -192,11 +214,18 @@ async def widget_start(key: str, request: Request):
 
 @router.post("/api/public/widget/{key}/say")
 async def widget_say(key: str, request: Request):
+    await rate_limit(request, "widget-say", max_hits=240, per_seconds=600)
+    if not _WIDGET_KEY.match(key or ""):
+        return _json({"detail": "This chat has ended — start a new one."}, 404)
     await rate_limit(request, f"widget-say:{key}", max_hits=120, per_seconds=600)
     data = await _body(request)
     chat = text_session.get(str(data.get("session_id") or ""))
     if chat is None or getattr(chat.merchant, "widget_key", None) != key:
         return _json({"detail": "This chat has ended — start a new one."}, 404)
+    turns = int(getattr(chat, "widget_turns", 0) or 0) + 1
+    chat.widget_turns = turns
+    if turns > MAX_WIDGET_TURNS:
+        return _json({"detail": "This chat is very long — please start a new one.", "ended": True}, 429)
     try:
         payload = _SayIn.model_validate({"text": data.get("text", "")})
     except ValidationError:

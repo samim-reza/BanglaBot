@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_admin
 from app.core.config import get_settings
 from app.core.redis import redis_health
+from app.core.security import boot_guard
 from app.db.session import get_db
 from app.services import live_calls, voice_engine_service
 from app.services import telnyx as telnyx_service
@@ -71,7 +72,7 @@ async def health(admin=Depends(require_admin), db: AsyncSession = Depends(get_db
         "database": database,
         "redis": await redis_health(),
         "speech_server": await voice_engine_service.speech_server_status(),
-        "telnyx": {"voice": telnyx_service.voice_ready(), "configured": telnyx_service.configured(), "signatures_enforced": settings.enforce_webhook_signatures},
+        "telnyx": {"voice": telnyx_service.voice_ready(), "configured": telnyx_service.configured(), "signatures_enforced": boot_guard.webhook_signatures_enforced(settings)},
         "live_calls": live_calls.count(),
         "environment": settings.environment,
     }

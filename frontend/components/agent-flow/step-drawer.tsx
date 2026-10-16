@@ -1,15 +1,14 @@
 "use client";
 
-/** Side panel for one step: its spoken lines (per language) and its options. */
+/** Side panel for one step: its spoken lines and its options. */
 
 import { useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/vertical";
-import { useWorkspace } from "@/lib/workspace";
 
-import { LockBadge, Segments } from "./bits";
+import { LockBadge } from "./bits";
 import { LinesEditor } from "./lines-editor";
 import { OptionsEditor } from "./options-editor";
 import { errorsFor, lockedUnder } from "./rules";
@@ -17,15 +16,13 @@ import type { ReadyFlow } from "./step-list";
 
 type Tab = "lines" | "options";
 
-const LANGUAGE_NAMES: Record<string, string> = { en: "English", bn: "Bangla" };
+/** Lines are edited in English, the only call language. */
+const LINE_LANGUAGE = "en";
 
 export function StepDrawer({ state, skillKey, onClose }: { state: ReadyFlow; skillKey: string; onClose: () => void }) {
-  const { merchant } = useWorkspace();
   const skill = state.model.skills[skillKey];
   const tabs: Tab[] = [...(skill?.lines.length ? (["lines"] as Tab[]) : []), ...(skill?.options.length ? (["options"] as Tab[]) : [])];
   const [tab, setTab] = useState<Tab>(tabs[0] ?? "lines");
-  const languages = state.model.languages;
-  const [lang, setLang] = useState<string>(languages.includes(merchant.language) ? merchant.language : languages[0]);
   const panelRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   useEffect(() => {
@@ -100,10 +97,7 @@ export function StepDrawer({ state, skillKey, onClose }: { state: ReadyFlow; ski
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           {tab === "lines" ? (
             <div className="space-y-4">
-              {languages.length > 1 && (
-                <Segments label="Language" size="sm" value={lang} onChange={setLang} options={languages.map((code) => ({ value: code, label: LANGUAGE_NAMES[code] ?? code.toUpperCase() }))} />
-              )}
-              <LinesEditor state={state} skillKey={skillKey} lang={lang} />
+              <LinesEditor state={state} skillKey={skillKey} lang={LINE_LANGUAGE} />
             </div>
           ) : (
             <OptionsEditor state={state} skillKey={skillKey} />

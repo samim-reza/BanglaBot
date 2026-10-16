@@ -1,4 +1,4 @@
-"""End-to-end check against a running speech server (what the BanglaBot backend does).
+"""End-to-end check against a running speech server (what the Callisa backend does).
 
 Usage (from ``speech/``, server already running)::
 

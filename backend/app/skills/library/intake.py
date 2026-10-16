@@ -16,8 +16,7 @@ from app.flows.base import Instruction
 from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
 from app.flows.timefmt import parse_date
-from app.skills.base import BoundSkill, Skill, lang_pick, render
-from app.skills.library.lines import L2
+from app.skills.base import DECLINED, BoundSkill, Skill, lang_pick, render
 from app.verticals.base import FieldSpec, L
 from app.verticals.reception import clean_phone
 
@@ -67,8 +66,8 @@ def custom_field(raw: Mapping[str, Any]) -> IntakeField | None:
     choices = tuple(str(c)[:40] for c in (raw.get("choices") or [])[:10] if str(c).strip()) if kind == "choice" else ()
     return IntakeField(
         key=f"f_{key}",
-        label={"en": label, "bn": label},
-        question={"en": question, "bn": question},
+        label={"en": label},
+        question={"en": question},
         type=kind if kind in CUSTOM_TYPES else "text",
         on=bool(raw.get("on", True)),
         required=bool(raw.get("required", False)),
@@ -78,11 +77,11 @@ def custom_field(raw: Mapping[str, Any]) -> IntakeField | None:
 
 class IntakeSkill(Skill):
     key = "intake"
-    label = L2("Personal details", "ব্যক্তিগত তথ্য")
-    description = L2("Name and the details you choose to collect.", "নাম ও আপনার বেছে নেওয়া তথ্য।")
+    label = L("Personal details")
+    description = L("Name and the details you choose to collect.")
     options = (
-        FieldSpec("fields", L("Fields to collect", "যে তথ্য নেওয়া হবে"), "fields", help=L("Switch fields on, make them required, reword the question.")),
-        FieldSpec("custom", L("Custom fields", "নিজস্ব তথ্য"), "custom_fields", help=L("Up to 12 extra questions.")),
+        FieldSpec("fields", L("Fields to collect"), "fields", help=L("Switch fields on, make them required, reword the question.")),
+        FieldSpec("custom", L("Custom fields"), "custom_fields", help=L("Up to 12 extra questions.")),
     )
     goal = "Get the caller's details for the booking."
 
@@ -116,7 +115,7 @@ class IntakeSkill(Skill):
                 IntakeField(
                     key=base.key,
                     label=base.label,
-                    question={"en": question, "bn": question} if isinstance(question, str) and question.strip() else base.question,
+                    question={"en": question} if isinstance(question, str) and question.strip() else base.question,
                     type=base.type,
                     on=True,
                     required=bool(row.get("required", base.required)),
@@ -167,8 +166,9 @@ class IntakeSkill(Skill):
     # ---- conversation ---------------------------------------------------------------------------
     def stage(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext) -> str | None:
         asked = set(slots.get(ASKED) or ())
+        declined = set(slots.get(DECLINED) or ())
         for f in self.fields(b):
-            if slots.get(f.key) not in (None, ""):
+            if slots.get(f.key) not in (None, "") or f.key in declined:
                 continue
             if f.required or (f.ask and f.key not in asked):
                 return f.key

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.flows.context import DIRECTION_OUTBOUND, CallContext
 from app.models import CallLog, Merchant, Order
 from app.verticals import flow_for
+from app.voice.languages import normalize_language
 
 
 async def open_test_call(
@@ -27,7 +28,7 @@ async def open_test_call(
         order_id=record.id if record is not None else None,
         merchant_id=merchant.id,
         call_status="in-progress",
-        language=merchant.language or "en",
+        language=normalize_language(merchant.language),
         direction=mode,
         flow=flow.key,
         caller_number=caller_number,

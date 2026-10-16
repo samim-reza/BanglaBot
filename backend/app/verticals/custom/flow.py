@@ -36,7 +36,7 @@ class CustomFlow(PipelineFlow):
     def phone_words(self, slots: dict[str, Any], ctx: CallContext, language: str) -> str:
         if slots.get("phone") or not ctx.caller_number:
             return ctx.say_number(caller_phone(slots, ctx), language)
-        return "এই নম্বরে" if language == "bn" else "this number"
+        return "this number"
 
     def details(self, slots: dict[str, Any], language: str) -> list[str]:
         """The caller's answers to the owner's questions, as "Label: value" (name first)."""

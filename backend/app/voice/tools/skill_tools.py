@@ -40,6 +40,8 @@ class SkillToolsMixin:
         if self.runtime.stage == STAGE_COMMIT and not self.outcome:
             return await self._commit(reply)
         said = str(outcome.get("say") or "")
+        if said:
+            reply = ""  # the tool reports what it actually did ("the cannoli isn't available") — not the model's guess
         instruction = self.runtime.last_instruction
         if instruction is not None and instruction.verbatim and not instruction.end_call:
             return self._speak_next(result, _join(reply, said, instruction.text), stage=self.runtime.stage)

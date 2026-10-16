@@ -5,7 +5,7 @@
 - ``runtime``    — per-call slot store that derives the current stage / node
 - ``steps``      — shared machinery for slot-filling business flows (read-back → commit)
 - ``scheduling`` — sessions, slots, serial numbers, free capacity
-- ``timefmt``    — dates and times as callers say and hear them (Bangla / English)
+- ``timefmt``    — dates and times as callers say and hear them
 - ``hearing``    — did the caller's own words actually support an outcome?
 
 The business engines themselves live in ``app.verticals``.

@@ -7,10 +7,11 @@ from typing import Any
 
 import structlog
 
-from app.flows.base import Terminal
+from app.flows import hearing
+from app.flows.base import MAX_REASKS, Terminal
 from app.flows.runtime import FlowRuntime
 from app.voice.tools.store import CallStore, ToolResult
-from app.voice.tools.text import END_CALL, SAVE_DETAILS, TRANSFER_TO_HUMAN
+from app.voice.tools.text import END_CALL, SAVE_DETAILS, TRANSFER_TO_HUMAN, unclear_line
 from app.voice.tools.commit import CommitMixin
 from app.voice.tools.endings import EndingsMixin
 from app.voice.tools.saving import SavingMixin
@@ -31,6 +32,8 @@ class CallTools(SchemasMixin, SavingMixin, SkillToolsMixin, CommitMixin, Endings
         self.record_id: str = str(getattr(runtime.ctx.record, "id", "") or "")
         self.note_lines: list[str] = []
         self.closing_spoken: bool = False
+        #: Outcomes already written this call (a booking, then "anything else?" → a change or another booking).
+        self.completed: list[str] = []
         #: Stage whose backend line was spoken last (a repeated read-back is shortened).
         self._spoken_stage: str = ""
 
@@ -42,12 +45,31 @@ class CallTools(SchemasMixin, SavingMixin, SkillToolsMixin, CommitMixin, Endings
         if name in self._terminals:
             return await self._terminal(self._terminals[name], args, caller_text)
         if name == TRANSFER_TO_HUMAN:
+            if not self._transfer_backed(caller_text):
+                # Models reach for a transfer on garbled audio; that's a re-ask, not a hand-off.
+                return await self._reask_unclear()
             return await self._transfer(args)
         if name == END_CALL:
             return await self._end_call(args, caller_text)
         if name in self._skill_tool_names():
             return await self._skill_tool(name, args, caller_text)
         return ToolResult(payload={"ok": False, "error": f"unknown tool {name}"})
+
+    @staticmethod
+    def _transfer_backed(caller_text: str) -> bool:
+        """A transfer needs the caller's own words: a request for a person / complaint, or a real question."""
+        if not caller_text:
+            return True
+        if hearing.asks_for_human(caller_text):
+            return True
+        return hearing.looks_like_question(caller_text) and len(hearing.tokens(caller_text)) >= 4
+
+    async def _reask_unclear(self) -> ToolResult:
+        self.runtime.reasks += 1
+        if self.runtime.reasks > MAX_REASKS:
+            return await self._settle_unclear()
+        line = unclear_line(self.runtime.reasks, self.runtime.current_instruction(), self.language)
+        return self._speak_next({"ok": False, "reason": "answer_unclear"}, line, stage=self.runtime.stage)
 
     @staticmethod
     def _parse_args(arguments: Any) -> dict[str, Any]:

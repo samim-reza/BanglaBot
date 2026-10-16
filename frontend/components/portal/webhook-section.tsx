@@ -83,7 +83,7 @@ function exampleEvent(merchant: Merchant, vertical: string, recordKind: string):
       caller_number: "+14155550100",
       outcome: "booked",
       duration_secs: 94,
-      language: merchant.language || "en",
+      language: "en",
       transcript: `Agent: Hello, thank you for calling ${merchant.business_name}.\nCustomer: …`,
     },
     record: {

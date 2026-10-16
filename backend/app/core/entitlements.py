@@ -40,7 +40,6 @@ class Entitlements:
     chats: int | None
     sms: int | None
     numbers: int | None
-    languages: int = 1
     #: Calls live at once (tier limit + add-ons); 0 = no phone calls.
     max_concurrent_calls: int = 1
     flow_editing: str = FLOW_LINES
@@ -75,7 +74,6 @@ class Entitlements:
                 "chats": self.chats,
                 "sms": self.sms,
                 "numbers": self.numbers,
-                "languages": self.languages,
                 "max_concurrent_calls": self.max_concurrent_calls,
             },
             "capabilities": self.capabilities,
@@ -119,7 +117,6 @@ def entitlements(merchant: Any) -> Entitlements:
         chats=allowance(plan.included_chats, "chats"),
         sms=allowance(plan.included_sms, "sms"),
         numbers=allowance(plan.phone_numbers, "numbers"),
-        languages=max(1, int(plan.included_languages) + extra.get("languages", 0)),
         max_concurrent_calls=max(0, int(limits.max_concurrent_calls) + extra.get("concurrent_calls", 0)),
         flow_editing=FLOW_FULL if full_flow else FLOW_LINES,
         payments=payments,

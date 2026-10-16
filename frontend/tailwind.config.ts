@@ -43,7 +43,7 @@ const config: Config = {
         sm: "6px",
       },
       fontFamily: {
-        sans: ["var(--font-noto-bengali)", "Noto Sans Bengali", "system-ui", "sans-serif"],
+        sans: ["var(--font-noto-sans)", "Noto Sans", "system-ui", "sans-serif"],
       },
     },
   },

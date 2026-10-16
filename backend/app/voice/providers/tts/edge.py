@@ -1,6 +1,6 @@
 """Microsoft Edge "Read aloud" voices through ``edge-tts`` (free, unofficial).
 
-Same neural voices as Azure (en-US-AvaNeural, bn-BD-NabanitaNeural…) without a
+Same neural voices as Azure (en-US-AvaNeural, en-GB-SoniaNeural…) without a
 key, but it is an undocumented consumer endpoint: fine for testing and as the
 last link of the chain, never something to depend on. It streams MP3, which
 ``miniaudio`` decodes and resamples to 8 kHz before μ-law encoding.

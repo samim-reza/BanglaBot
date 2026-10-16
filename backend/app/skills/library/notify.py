@@ -7,15 +7,15 @@ from typing import Any
 from app.flows.base import CommitAction
 from app.flows.context import CallContext
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 
 
 class NotifySkill(Skill):
     key = "notify"
     kind = "effect"
-    label = L2("Confirmation text", "নিশ্চিতকরণ এসএমএস")
-    description = L2("Mentions the confirmation SMS (turn texts on in Notifications).", "এসএমএস-এর কথা জানায় (নোটিফিকেশনে চালু করুন)।")
-    lines = (line("sms_note", "We'll text you the details.", "বিস্তারিত তথ্য এসএমএস করে পাঠিয়ে দিচ্ছি।", label="Text coming", static=True),)
+    label = L("Confirmation text")
+    description = L("Mentions the confirmation SMS (turn texts on in Notifications).")
+    lines = (line("sms_note", "We'll text you the details.", label="Text coming", static=True),)
 
     def notes(self, b: BoundSkill, action: CommitAction, slots: dict[str, Any], ctx: CallContext, language: str) -> list[str]:
         from app.services.sms_service import planned_kind

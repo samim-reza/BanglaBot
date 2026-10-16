@@ -34,7 +34,7 @@ logger = structlog.get_logger(__name__)
 
 TRANSCRIBE_URL = "https://api.groq.com/openai/v1/audio/transcriptions"
 MIN_BILLED_SECONDS = 10.0
-#: Whisper's prompt window is ~224 tokens; Bangla script is token-hungry.
+#: Whisper's prompt window is ~224 tokens.
 PROMPT_MAX_CHARS = 400
 
 

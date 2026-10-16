@@ -1,6 +1,6 @@
 "use client";
 
-/** The Agent page header: call language, voice and the account greeting (PATCH /api/auth/me). */
+/** The Agent page header: voice and the account greeting (PATCH /api/auth/me). */
 
 import { FormEvent, useMemo } from "react";
 import { Mic } from "lucide-react";
@@ -9,15 +9,14 @@ import { SectionCard, useDraft } from "@/components/portal/kit";
 import { Counter, FormRow, SaveBar, Segmented, useSaver } from "@/components/settings/shared";
 import { Textarea } from "@/components/ui/textarea";
 import { useWorkspace } from "@/lib/workspace";
-import { merchantApi, type Language, type Merchant, type VoicePersona } from "@/services/api";
+import { merchantApi, type Merchant, type VoicePersona } from "@/services/api";
 
 const GREETING_MAX = 300;
 
-type VoiceForm = { language: Language; voice_persona: VoicePersona; custom_greeting: string };
+type VoiceForm = { voice_persona: VoicePersona; custom_greeting: string };
 
 function voiceFrom(merchant: Merchant): VoiceForm {
   return {
-    language: merchant.language === "bn" ? "bn" : "en",
     voice_persona: merchant.voice_persona === "male" ? "male" : "female",
     custom_greeting: merchant.custom_greeting ?? "",
   };
@@ -41,9 +40,6 @@ export function AgentVoiceCard({ editableFlow, onSaved }: { editableFlow: boolea
     }
     void run(async () => {
       const updated = await merchantApi.updateMe({
-        language: draft.language,
-        // The chosen language is the call language (no auto-detect between languages).
-        supported_languages: [draft.language],
         voice_persona: draft.voice_persona,
         custom_greeting: draft.custom_greeting.trim(),
       });
@@ -54,20 +50,10 @@ export function AgentVoiceCard({ editableFlow, onSaved }: { editableFlow: boolea
   };
 
   return (
-    <SectionCard id="voice" icon={Mic} title={hasVoice ? "Language & voice" : "Language & greeting"}>
+    <SectionCard id="voice" icon={Mic} title={hasVoice ? "Voice & greeting" : "Greeting"}>
       <form className="grid gap-5" onSubmit={submit} noValidate>
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Segmented<Language>
-            name="language"
-            label="Language"
-            value={draft.language}
-            options={[
-              { value: "en", label: "English" },
-              { value: "bn", label: "Bangla" },
-            ]}
-            onChange={(language) => patch({ language })}
-          />
-          {hasVoice && (
+        {hasVoice && (
+          <div className="grid gap-5 sm:grid-cols-2">
             <Segmented<VoicePersona>
               name="voice_persona"
               label="Voice"
@@ -78,8 +64,8 @@ export function AgentVoiceCard({ editableFlow, onSaved }: { editableFlow: boolea
               ]}
               onChange={(voice_persona) => patch({ voice_persona })}
             />
-          )}
-        </div>
+          </div>
+        )}
         <FormRow
           id="custom_greeting"
           label="Greeting"

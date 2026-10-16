@@ -9,16 +9,16 @@ from __future__ import annotations
 from app.pipeline.blueprint import Blueprint, Branch
 from app.skills.library.greet import FarewellSkill, GreetSkill
 from app.skills.library.intake import IntakeField, IntakeSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.skills.library.notify import NotifySkill
 from app.skills.library.phone import PhoneSkill
 from app.verticals.reception.flow import ReceptionPipelineFlow
 from app.verticals.reception.skills import HelpSkill, ReceptionConfirmSkill
 
 CALLER_FIELDS = (
-    IntakeField("caller_name", L2("Name", "নাম"), L2("May I have your name, please?", "আপনার নামটা একটু বলবেন?"), required=True, hint="As the caller said it."),
-    IntakeField("email", L2("Email", "ইমেইল"), L2("What email can we reach you on?", "কোন ইমেইলে যোগাযোগ করব?"), type="email", on=False),
-    IntakeField("order_ref", L2("Order number", "অর্ডার নম্বর"), L2("Do you have an order number?", "আপনার অর্ডার নম্বরটা আছে?"), on=False),
+    IntakeField("caller_name", L("Name"), L("May I have your name, please?"), required=True, hint="As the caller said it."),
+    IntakeField("email", L("Email"), L("What email can we reach you on?"), type="email", on=False),
+    IntakeField("order_ref", L("Order number"), L("Do you have an order number?"), on=False),
 )
 
 
@@ -26,10 +26,10 @@ def reception_skills() -> dict:
     skills = [
         GreetSkill(),
         # The closing line already thanks the caller.
-        FarewellSkill(lines=(line("farewell", "Goodbye.", "ভালো থাকবেন।", label="Goodbye", variables=("business",), static=True),)),
+        FarewellSkill(lines=(line("farewell", "Goodbye.", label="Goodbye", variables=("business",), static=True),)),
         ReceptionConfirmSkill(),
         HelpSkill(),
-        IntakeSkill(CALLER_FIELDS, label=L2("Caller details", "কলারের তথ্য"), goal="Get the caller's name."),
+        IntakeSkill(CALLER_FIELDS, label=L("Caller details"), goal="Get the caller's name."),
         PhoneSkill(goal="Get a mobile number to call back."),
         NotifySkill(),
     ]
@@ -47,7 +47,7 @@ def reception_blueprint(vertical: str) -> Blueprint:
             "message": Branch(
                 "message",
                 ("help", "intake", "phone"),
-                label=L2("Message for the team", "টিমের জন্য বার্তা"),
+                label=L("Message for the team"),
                 movable=(frozenset({"intake", "phone"}),),
                 before={"intake": frozenset({"help"}), "phone": frozenset({"help"})},
                 toggleable=False,

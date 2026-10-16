@@ -14,7 +14,6 @@ import {
   formatApiError,
   isApiRequestError,
   type AdminMeta,
-  type Language,
   type Merchant,
   type MerchantAdminUpdate,
   type VoicePersona,
@@ -32,7 +31,7 @@ import {
   phoneError,
   timezoneError,
 } from "./form-bits";
-import { LanguageField, PersonaField, PlanField, RegionFields } from "./merchant-fields";
+import { PersonaField, PlanField, RegionFields } from "./merchant-fields";
 import { DialogError, Overlay } from "./overlay";
 import { verticalOf } from "./use-admin-meta";
 
@@ -50,7 +49,6 @@ type EditForm = {
   timezone: string;
   currency: string;
   emergency_number: string;
-  language: Language;
   voice_persona: VoicePersona;
   custom_greeting: string;
   password: string;
@@ -75,7 +73,6 @@ function formFrom(merchant: Merchant): EditForm {
     timezone: merchant.timezone ?? "",
     currency: merchant.currency ?? "",
     emergency_number: merchant.emergency_number ?? "",
-    language: merchant.language === "bn" ? "bn" : "en",
     voice_persona: merchant.voice_persona === "male" ? "male" : "female",
     custom_greeting: merchant.custom_greeting ?? "",
     password: "",
@@ -123,7 +120,6 @@ function diff(form: EditForm, initial: EditForm): MerchantAdminUpdate {
     if (next !== initial[key].trim()) payload[key] = next;
   }
   if (form.active !== initial.active) payload.active = form.active;
-  if (form.language !== initial.language) payload.language = form.language;
   if (form.voice_persona !== initial.voice_persona) payload.voice_persona = form.voice_persona;
   if (form.password) payload.password = form.password;
   return payload;
@@ -322,7 +318,6 @@ export function MerchantEditDrawer({
 
         <FormSection title="Agent">
           <div className="grid gap-3 sm:grid-cols-2">
-            <LanguageField id="edit-language" meta={meta} value={form.language} onChange={(language) => update({ language })} />
             <PersonaField id="edit-persona" value={form.voice_persona} onChange={(voice_persona) => update({ voice_persona })} />
           </div>
           <FormField

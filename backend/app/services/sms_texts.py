@@ -11,11 +11,10 @@ from typing import Any
 
 
 def vertical_text(vertical: str, record_kind: str, kind: str, v: dict[str, Any], lang: str) -> str:
-    """``v``: business, when, name, address, amount, ref, call, details. Empty = use the generic text."""
+    """``v``: business, when, name, item (the record's catalog item), address, amount, ref, call, details.
+    Empty = use the generic text."""
     details = v.get("details") or {}
     b, when, call = v["business"], v["when"], v["call"]
-    if lang == "bn":
-        return _bangla(vertical, record_kind, kind, v, details)
     if vertical == "restaurant":
         if record_kind == "order" and kind == "confirmation":
             total = f" ({v['amount']})" if v["amount"] else ""
@@ -34,7 +33,10 @@ def vertical_text(vertical: str, record_kind: str, kind: str, v: dict[str, Any],
                 "reminder": f"Reminder from {b}: your {table} is booked for {when}.{call}",
             }.get(kind, "")
     if vertical == "salon" and record_kind == "booking":
-        name = v["name"] or "appointment"
+        # The record's catalog item is the stylist (capacity is per person): the service is in the details.
+        service = str(details.get("service") or "") or v["name"] or "appointment"
+        staff = str(details.get("staff") or v.get("item") or "")
+        name = f"{service} with {staff}" if staff and staff not in service else service
         return {
             "confirmation": f"{b}: your {name} is booked for {when}.{call}",
             "change": f"{b}: your {name} has moved to {when}.{call}",
@@ -58,20 +60,6 @@ def vertical_text(vertical: str, record_kind: str, kind: str, v: dict[str, Any],
             }.get(kind, "")
         if record_kind in ("lead", "message") and kind == "lead":
             return f"Thanks for contacting {b} - we got your details and will be in touch shortly."
-    return ""
-
-
-def _bangla(vertical: str, record_kind: str, kind: str, v: dict[str, Any], details: dict[str, Any]) -> str:
-    b, when, call = v["business"], v["when"], v["call"]
-    if vertical == "restaurant" and record_kind == "order" and kind == "confirmation":
-        how = "ডেলিভারি দেওয়া হবে" if details.get("fulfillment") == "delivery" else "পিকআপের জন্য তৈরি থাকবে"
-        return f"{b}: ধন্যবাদ! আপনার অর্ডার কনফার্ম হয়েছে, {when} নাগাদ {how}।{call}"
-    if vertical == "restaurant" and record_kind == "booking" and kind == "confirmation":
-        return f"{b}: আপনার টেবিল বুক হয়েছে — {when}। ১৫ মিনিট ধরে রাখা হবে।{call}"
-    if vertical in ("salon", "custom") and record_kind == "booking" and kind == "confirmation":
-        return f"{b}: আপনার বুকিং কনফার্ম হয়েছে — {when}।{call}"
-    if vertical == "custom" and kind == "lead":
-        return f"{b} এ যোগাযোগের জন্য ধন্যবাদ। আমরা শীঘ্রই যোগাযোগ করব।"
     return ""
 
 

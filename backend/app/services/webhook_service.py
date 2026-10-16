@@ -2,7 +2,9 @@
 
 Body: ``{"event": "call.completed", "account": {...}, "call": {...}, "record": {...} | null}``.
 Header ``X-Agent-Signature: sha256=<hex>`` is HMAC-SHA256 of the raw body with the
-account's webhook secret, so the receiver can verify it came from us.
+account's webhook secret, so the receiver can verify it came from us. The owner types
+the URL, so it goes through the SSRF guard (public addresses only, pinned DNS, no
+redirects).
 """
 
 from __future__ import annotations
@@ -15,13 +17,15 @@ from typing import Any
 import structlog
 
 from app.core.datetime_utils import utcnow
+from app.core.security import outbound
 from app.db.session import AsyncSessionLocal
 from app.models import CallLog, Merchant, Order
-from app.voice.llm import shared_client
 
 logger = structlog.get_logger(__name__)
 
 TIMEOUT_SECONDS = 6.0
+#: The receiver's answer is only read for its status.
+MAX_RESPONSE_BYTES = 64_000
 
 
 def sign(secret: str, body: bytes) -> str:
@@ -29,6 +33,11 @@ def sign(secret: str, body: bytes) -> str:
 
 
 async def post_event(merchant: Merchant, payload: dict[str, Any]) -> dict[str, Any]:
+    from app.core.addons import entitlements
+
+    if not entitlements(merchant).api_webhooks:
+        # A URL saved before a downgrade: the plan no longer includes webhooks.
+        return {"ok": False, "error": "Webhooks aren't included in this plan"}
     body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
     headers = {"Content-Type": "application/json", "User-Agent": "voice-agent-webhooks/1"}
     # Stored encrypted; the property decrypts (legacy plaintext rows read as-is).
@@ -38,13 +47,17 @@ async def post_event(merchant: Merchant, payload: dict[str, Any]) -> dict[str, A
     elif getattr(merchant, "webhook_secret_stored", ""):
         await logger.awarning("webhook_secret_unreadable", merchant_id=merchant.id, hint="ENCRYPTION_SECRET changed; rotate the secret")
     try:
-        response = await shared_client().post(merchant.webhook_url, content=body, headers=headers, timeout=TIMEOUT_SECONDS)
+        response = await outbound.request(
+            "POST", merchant.webhook_url, content=body, headers=headers, timeout=TIMEOUT_SECONDS, max_bytes=MAX_RESPONSE_BYTES
+        )
         ok = 200 <= response.status_code < 300
-        await logger.ainfo("webhook_sent", merchant_id=merchant.id, status=response.status_code, event=payload.get("event"))
+        # Not ``event=``: that is structlog's message argument (a TypeError that made every delivery look failed).
+        await logger.ainfo("webhook_sent", merchant_id=merchant.id, status=response.status_code, webhook_event=payload.get("event"))
         return {"ok": ok, "status": response.status_code}
     except Exception as exc:  # noqa: BLE001 — the business's endpoint being down never affects calls
-        await logger.awarning("webhook_failed", merchant_id=merchant.id, error=str(exc))
-        return {"ok": False, "error": str(exc)[:200]}
+        await logger.awarning("webhook_failed", merchant_id=merchant.id, error=outbound.describe_error(exc), error_type=type(exc).__name__)
+        # A generic reason only: the owner must not learn what an internal address answered.
+        return {"ok": False, "error": outbound.describe_error(exc)}
 
 
 def _record(order: Order | None) -> dict[str, Any] | None:

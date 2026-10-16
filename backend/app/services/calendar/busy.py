@@ -13,9 +13,9 @@ import structlog
 
 from app.core import memo
 from app.core.config import get_settings
+from app.core.security import outbound
 from app.flows.context import CatalogEntry
 from app.models import Merchant
-from app.services.calendar import common
 from app.services.calendar.common import FETCH_TIMEOUT, _tz, settings_of
 from app.services.calendar.google_oauth import google_available
 from app.services.calendar.google_sync import google_busy
@@ -34,10 +34,10 @@ def _normalize_url(url: str) -> str:
 
 
 async def fetch_ics_busy(url: str, *, window_start: datetime, window_end: datetime, timezone_name: str) -> list[tuple[datetime, datetime]]:
-    response = await common.http().get(_normalize_url(url), timeout=FETCH_TIMEOUT, follow_redirects=True)
+    """Busy times of an owner-typed iCal link — fetched through the SSRF guard (public
+    addresses only, every redirect re-checked, body capped)."""
+    response = await outbound.request("GET", _normalize_url(url), timeout=FETCH_TIMEOUT, max_bytes=MAX_ICS_BYTES, follow_redirects=True)
     response.raise_for_status()
-    if len(response.content) > MAX_ICS_BYTES:
-        raise ValueError("calendar feed too large")
     return busy_intervals(response.text, window_start=window_start, window_end=window_end, timezone_name=timezone_name)
 
 

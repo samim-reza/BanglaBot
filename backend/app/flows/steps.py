@@ -10,7 +10,7 @@ What this base adds on top of :class:`~app.flows.base.Flow`:
 - the ``save_details`` schema built from the slot specs (stable per flow, so the
   tool list stays in the cached prompt prefix);
 - yes/no stages answered without the model (``yes_no_stages``) — a clean
-  "হ্যাঁ"/"না" fills the stage's boolean slot straight from the hearing module;
+  "yes"/"no" fills the stage's boolean slot straight from the hearing module;
 - the read-back loop: changing any detail after the read-back clears
   ``confirmed`` so the summary is read again; a "no" at the read-back asks what
   to change (``amend``);
@@ -106,8 +106,11 @@ class StepFlow(Flow):
     def gated_slots(self) -> tuple[str, ...]:  # type: ignore[override]
         return tuple(spec.key for spec in self.slot_specs if spec.gated) + (CONFIRMED,)
 
+    #: Details the read-back doesn't say aloud: giving them with a "yes" keeps the yes.
+    readback_quiet: frozenset[str] = frozenset({"phone", "email"})
+
     def on_saved(self, saved: dict[str, Any], slots: dict[str, Any], ctx: CallContext) -> None:
-        changed = {key for key in saved if key not in (CONFIRMED, *self.passive_slots)}
+        changed = {key for key in saved if key not in (CONFIRMED, *self.passive_slots, *self.readback_quiet)}
         # A changed detail means the summary must be read again — even when the
         # same turn also said "yes" ("yes, but make it 7 pm" is not a yes to the old time).
         if changed and slots.get(CONFIRMED) is not None:
@@ -143,7 +146,7 @@ class StepFlow(Flow):
             return None
         if not labels or labels & {"repeat", "later", "not_me", "wrong_number"} or hearing.looks_like_question(text):
             return None
-        # Only a short, pure answer: "হ্যাঁ, কিন্তু সময়টা বদলাতে হবে" carries more than a yes.
+        # Only a short, pure answer: "yes, but the time needs to change" carries more than a yes.
         if not hearing.is_pure_answer(text):
             return None
         if "yes" in labels and "no" not in labels:
@@ -168,12 +171,7 @@ class StepFlow(Flow):
         if identity is not None:
             return identity
         if stage in (STAGE_DONE, STAGE_COMMIT):
-            text = (
-                "আর কিছু জিজ্ঞেস করার নেই। কিছু না বলে end_call টুল কল করুন।"
-                if normalize_language(language) == "bn"
-                else "Nothing more to ask. Call the end_call tool without saying anything."
-            )
-            return Instruction(stage, text, end_call=True)
+            return Instruction(stage, "Nothing more to ask. Call the end_call tool without saying anything.", end_call=True)
         if stage == STAGE_AMEND:
             return Instruction(stage, phrase("amend_question", language), verbatim=True)
         line = self.stage_line(stage, slots, ctx, language)

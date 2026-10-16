@@ -71,7 +71,7 @@ export function FieldErrors({ errors, id }: { errors: FlowFieldError[]; id?: str
   );
 }
 
-/** Segmented choice (direction, language). */
+/** Segmented choice (e.g. the call direction). */
 export function Segments<T extends string>({ label, value, options, onChange, size = "md" }: { label: string; value: T; options: { value: T; label: string }[]; onChange: (value: T) => void; size?: "sm" | "md" }) {
   return (
     <div role="radiogroup" aria-label={label} className="inline-flex rounded-md border border-input bg-card p-0.5">

@@ -97,7 +97,7 @@ async def _account(session: AsyncSession, *, username: str, password: str, **fie
         username=username,
         password_hash=hash_password(password),
         language="en",
-        supported_languages=["en", "bn"],
+        supported_languages=["en"],
         voice_persona="female",
         widget_enabled=True,
         widget_key=secrets.token_urlsafe(18),

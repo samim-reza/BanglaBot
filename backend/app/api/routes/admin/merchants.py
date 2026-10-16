@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import AdminPrincipal, require_admin
-from app.api.routes.admin.common import _addon_request, _merchant_or_404, admin_out
+from app.api.routes.admin.common import _addon_request, _merchant_or_404, account_editors, admin_out, superadmin_only
 from app.api.routes.auth import apply_settings
 from app.core.addons import entitlements
 from app.core.plans import PLANS
@@ -41,7 +41,7 @@ async def list_merchants(_: dict = Depends(require_admin), db: AsyncSession = De
 
 
 @router.post("/merchants", response_model=MerchantOut, status_code=201)
-async def create_merchant(data: MerchantCreate, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+async def create_merchant(data: MerchantCreate, _: dict = Depends(account_editors), db: AsyncSession = Depends(get_db)):
     auth_service.require_password_policy(data.password, username=data.username, email=data.email)
     exists = await db.scalar(select(Merchant.id).where(Merchant.username == data.username.strip()))
     if exists:
@@ -68,7 +68,7 @@ async def create_merchant(data: MerchantCreate, _: dict = Depends(require_admin)
         currency=(data.currency or preset["currency"]).strip().upper(),
         emergency_number=(data.emergency_number or preset["emergency_number"]).strip(),
         language=data.language,
-        supported_languages=[data.language] + [code for code in ("en", "bn") if code != data.language],
+        supported_languages=[data.language],
         voice_persona=data.voice_persona,
         plan=data.plan if data.plan in PLANS else "trial",
         widget_settings={},
@@ -103,7 +103,7 @@ async def update_merchant(
     merchant_id: str,
     data: MerchantAdminUpdate,
     request: Request,
-    admin: AdminPrincipal = Depends(require_admin),
+    admin: AdminPrincipal = Depends(account_editors),
     db: AsyncSession = Depends(get_db),
 ):
     merchant = await _merchant_or_404(db, merchant_id)
@@ -153,7 +153,7 @@ async def _whatsapp_taken(db: AsyncSession, number: str, merchant_id: str) -> bo
 
 
 @router.delete("/merchants/{merchant_id}", status_code=204)
-async def delete_merchant(merchant_id: str, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+async def delete_merchant(merchant_id: str, _: dict = Depends(superadmin_only), db: AsyncSession = Depends(get_db)):
     merchant = await _merchant_or_404(db, merchant_id)
     calling = await db.scalar(
         select(func.count(Order.id)).where(Order.merchant_id == merchant.id, Order.status == OrderStatus.calling)

@@ -267,14 +267,15 @@ async def test_reservation_uses_covers_capacity_and_books_the_table():
     full = slot_key(None, datetime(2026, 10, 3, 19, 0, tzinfo=NY))
     tools, runtime, store = _call(booked={full: 10})  # 40 covers ÷ party of 4 = 10 tables: 7 PM is full
     result = await tools.execute(
-        "save_details", {"intent": "reservation", "party_size": 4, "date": "2026-10-03", "time_pref": "19:00"}, caller_text="a table for four tomorrow at 7"
+        "save_details", {"intent": "reservation", "party_size": 4, "date": "2026-10-03", "time_pref": "19:00"}, caller_text="a table for four tomorrow, Saturday at 7"
     )
     assert runtime.slots["slot"] == datetime(2026, 10, 3, 19, 30, tzinfo=NY).isoformat()
-    assert result.say == "What name should I put the reservation under?"
+    # The caller hears that 7 PM was full before the next question (it used to move silently).
+    assert result.say == "7 PM isn't free, so here is the nearest open time. What name should I put the reservation under?"
     result = await tools.execute("save_details", {"customer_name": "Lee"}, caller_text="Lee")
-    assert "So that's a table for 4 tomorrow at 7:30 PM, under Lee." in result.say and result.say.endswith("Shall I book it?")
+    assert "So that's a table for 4 tomorrow, Saturday at 7:30 PM, under Lee." in result.say and result.say.endswith("Shall I book it?")
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes")
-    assert result.outcome == "booked" and "Your table is booked for tomorrow at 7:30 PM." in result.say
+    assert result.outcome == "booked" and "Your table is booked for tomorrow, Saturday at 7:30 PM." in result.say
     action = store.commits[0]["action"]
     assert action.fields["kind"] == "booking" and action.fields["details"]["party_size"] == 4
     assert action.capacity == (None, datetime(2026, 10, 3, 19, 30, tzinfo=NY), 10)

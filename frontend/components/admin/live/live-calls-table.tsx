@@ -8,7 +8,7 @@ import { fmtClock } from "@/components/admin/numbers";
 import { verticalName, useAdminMeta } from "@/components/admin/use-admin-meta";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { humanize, languageLabel } from "@/lib/format";
+import { humanize } from "@/lib/format";
 import type { LiveCall } from "@/services/api/admin/system";
 
 export function LiveCallsTable({
@@ -32,7 +32,6 @@ export function LiveCallsTable({
             <TableHead>Caller</TableHead>
             <TableHead className="text-right">Time</TableHead>
             <TableHead>Stage</TableHead>
-            <TableHead>Language</TableHead>
             <TableHead>Models</TableHead>
             {canHangUp && (
               <TableHead className="w-24">
@@ -66,7 +65,6 @@ export function LiveCallsTable({
                 <TableCell className="whitespace-nowrap">
                   {call.closing ? <Pill tone="amber">Ending</Pill> : <span>{call.stage ? humanize(call.stage) : "—"}</span>}
                 </TableCell>
-                <TableCell className="whitespace-nowrap">{call.language ? languageLabel(call.language) : "—"}</TableCell>
                 <TableCell className="min-w-[10rem]">
                   <div className="truncate font-mono text-xs" title={call.llm}>
                     {call.llm || "—"}

@@ -14,12 +14,12 @@ class FakeMerchant:
     business_name: str = "Demo Shop"
     owner_name: str = "Owner"
     username: str = "demo"
-    phone: str = "+8801700000000"
+    phone: str = "+14155550100"
     email: str = ""
     support_phone: str = ""
     custom_greeting: str = ""
-    language: str = "bn"
-    supported_languages: list[str] = field(default_factory=lambda: ["bn", "en"])
+    language: str = "en"
+    supported_languages: list[str] = field(default_factory=lambda: ["en"])
     voice_persona: str = "female"
     verify_address: bool = False
     max_call_seconds: int = 0
@@ -29,10 +29,10 @@ class FakeMerchant:
     vertical_config: dict = field(default_factory=dict)
     knowledge: str = ""
     inbound_number: str = ""
-    region: str = "BD"
-    timezone: str = "Asia/Dhaka"
-    currency: str = "BDT"
-    emergency_number: str = "999"
+    region: str = "US"
+    timezone: str = "America/New_York"
+    currency: str = "USD"
+    emergency_number: str = "911"
 
 
 @dataclass
@@ -40,12 +40,12 @@ class FakeOrder:
     id: str = "o1"
     merchant_id: str = "m1"
     order_ref: str = "A-1"
-    customer_name: str = "রাহিম উদ্দিন"
-    customer_phone: str = "01711111111"
-    address: str = "বাড়ি ১২, রোড ৫, ধানমন্ডি, ঢাকা"
-    items_summary: str = "পাঞ্জাবি (L) x1"
-    total_amount: Decimal = Decimal("1850.00")
-    currency: str = "BDT"
+    customer_name: str = "Rahim Uddin"
+    customer_phone: str = "4155550111"
+    address: str = "12 Oak Street, Springfield"
+    items_summary: str = "Cotton kurta (L) x1"
+    total_amount: Decimal = Decimal("45.00")
+    currency: str = "USD"
     status: str = "pending"
     notes: str = ""
     kind: str = "order"

@@ -9,7 +9,7 @@ from app.flows.base import STAGE_DONE
 from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.verticals.common import when_phrase
 from app.verticals.restaurant.config import KIND_ORDER, LEAD, conf, whole
 
@@ -17,13 +17,13 @@ from app.verticals.restaurant.config import KIND_ORDER, LEAD, conf, whole
 class PartySizeSkill(Skill):
     key = "party_size"
     toggleable = False
-    label = L2("Party size", "কতজন")
-    description = L2("How many guests; groups over your maximum become a message for your team.", "কতজন অতিথি; বড় দল হলে টিমের জন্য বার্তা।")
+    label = L("Party size")
+    description = L("How many guests; groups over your maximum become a message for your team.")
     slots = (SlotSpec("party_size", "How many people the table is for (a number).", {"type": "integer"}),)
     volunteerable = frozenset({"party_size"})
     lines = (
-        line("party_size", "How many people is the table for?", "কতজনের জন্য টেবিল লাগবে?", label="Ask how many", static=True),
-        line("too_big", "For groups larger than {max}, our team arranges it personally — I'll pass on your details.", "{max} জনের বেশি দলের জন্য আমাদের টিম নিজে ব্যবস্থা করে — আমি আপনার তথ্য পৌঁছে দিচ্ছি।", label="Group too large", variables=("max",)),
+        line("party_size", "How many people is the table for?", label="Ask how many", static=True),
+        line("too_big", "For groups larger than {max}, our team arranges it personally — I'll pass on your details.", label="Group too large", variables=("max",)),
     )
     goal = "How many people is the table for?"
 
@@ -57,8 +57,8 @@ class StatusSkill(Skill):
 
     key = "status"
     toggleable = False
-    label = L2("Order status", "অর্ডারের অবস্থা")
-    description = L2("Tells callers where their order is.", "কলারকে অর্ডারের অবস্থা জানায়।")
+    label = L("Order status")
+    description = L("Tells callers where their order is.")
     slots = (
         SlotSpec("more_help", "After the order status: true = they need something else, false = no.", {"type": "boolean"}, directions=("inbound",)),
         SlotSpec("order_instead", "No order found: true = they want to order now, false = no.", {"type": "boolean"}, directions=("inbound",)),
@@ -66,15 +66,15 @@ class StatusSkill(Skill):
     yes_no = {"order_status": "more_help", "no_order_found": "order_instead"}
     stage_slots = {"order_status": ("more_help",), "no_order_found": ("order_instead",)}
     lines = (
-        line("preparing", "Your order of {items} is being prepared — it should be ready {when}.", "আপনার অর্ডার ({items}) তৈরি হচ্ছে — {when} রেডি হওয়ার কথা।", label="Being prepared (pickup)", variables=("items", "when")),
-        line("preparing_delivery", "Your order of {items} is being prepared — it should arrive {when}.", "আপনার অর্ডার ({items}) তৈরি হচ্ছে — {when} পৌঁছানোর কথা।", label="Being prepared (delivery)", variables=("items", "when")),
-        line("ready", "Your order is ready for pickup.", "আপনার অর্ডার রেডি, এসে নিয়ে যেতে পারেন।", label="Ready", static=True),
-        line("on_the_way", "Your order is on its way.", "আপনার অর্ডার পথে আছে।", label="On the way", static=True),
-        line("completed", "That order has been completed.", "অর্ডারটি সম্পন্ন হয়েছে।", label="Completed", static=True),
-        line("cancelled", "That order was cancelled.", "অর্ডারটি বাতিল করা হয়েছে।", label="Cancelled", static=True),
-        line("review", "Our team is checking your order and will call you if anything's needed.", "আমাদের টিম আপনার অর্ডার দেখছে, দরকার হলে ফোন করবে।", label="Being checked", static=True),
-        line("more", "Is there anything else I can help with?", "আর কিছুতে সাহায্য করতে পারি?", label="Anything else", static=True),
-        line("none", "I can't find a recent order for this number. Would you like to place one?", "এই নম্বরে সাম্প্রতিক কোনো অর্ডার পাচ্ছি না। নতুন অর্ডার করবেন?", label="Nothing found", static=True),
+        line("preparing", "Your order of {items} is being prepared — it should be ready {when}.", label="Being prepared (pickup)", variables=("items", "when")),
+        line("preparing_delivery", "Your order of {items} is being prepared — it should arrive {when}.", label="Being prepared (delivery)", variables=("items", "when")),
+        line("ready", "Your order is ready for pickup.", label="Ready", static=True),
+        line("on_the_way", "Your order is on its way.", label="On the way", static=True),
+        line("completed", "That order has been completed.", label="Completed", static=True),
+        line("cancelled", "That order was cancelled.", label="Cancelled", static=True),
+        line("review", "Our team is checking your order and will call you if anything's needed.", label="Being checked", static=True),
+        line("more", "Is there anything else I can help with?", label="Anything else", static=True),
+        line("none", "I can't find a recent order for this number. Would you like to place one?", label="Nothing found", static=True),
     )
     goal = "The system read the order status: save more_help (or the new intent if they want something else)."
 

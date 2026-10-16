@@ -9,7 +9,7 @@ from app.flows.base import Instruction
 from app.flows.context import DIRECTION_INBOUND, CallContext
 from app.flows.steps import SlotSpec
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.skills.library.schedule import ScheduleSkill
 from app.verticals.common import NOTICE, join_and, schedule_phrase
 from app.verticals.salon.catalog import (
@@ -26,20 +26,20 @@ from app.verticals.salon.catalog import (
     staff_phrase,
 )
 
-ANY_WORDS = ("any", "anyone", "anybody", "no preference", "whoever", "doesn't matter", "first available", "যে কেউ", "যেকোনো", "যে কোনো")
+ANY_WORDS = ("any", "anyone", "anybody", "no preference", "whoever", "doesn't matter", "first available")
 
 
 class SalonServiceSkill(Skill):
     key = "service"
-    label = L2("Service", "সার্ভিস")
-    description = L2("Finds the service the caller wants on your list.", "কলার কোন সার্ভিস চান তা তালিকা থেকে খোঁজে।")
+    label = L("Service")
+    description = L("Finds the service the caller wants on your list.")
     toggleable = False
     slots = (SlotSpec("service", "The service, as the ref from the service list (S1, S2, …) — or its name if unsure.", directions=("inbound",)),)
     volunteerable = frozenset({"service"})
     lines = (
-        line("service", "What would you like to book? We do {services}.", "কোন সার্ভিসটা নিতে চান? আমাদের এখানে {services} আছে।", label="Ask for the service", variables=("services",)),
-        line("choose", "Which one — {names}?", "এর মধ্যে কোনটা — {names}?", label="Several match", variables=("names",)),
-        line("unknown", "Sorry, we don't offer that. We do {services}. What would you like?", "দুঃখিত, এটা আমাদের এখানে হয় না। আমাদের এখানে {services} আছে। কোনটা নিতে চান?", label="Not offered", variables=("services",)),
+        line("service", "What would you like to book? We do {services}.", label="Ask for the service", variables=("services",)),
+        line("choose", "Which one — {names}?", label="Several match", variables=("names",)),
+        line("unknown", "Sorry, we don't offer that. We do {services}. What would you like?", label="Not offered", variables=("services",)),
     )
     goal = "Which service do they want (save the S-ref)?"
 
@@ -71,15 +71,15 @@ class StaffSkill(Skill):
     """Who does it. Skipped when only one person offers the service (or there is no staff list)."""
 
     key = "staff"
-    label = L2("Stylist / therapist", "স্টাইলিস্ট / থেরাপিস্ট")
-    description = L2("Asks who they'd like — or anyone available.", "কাকে দিয়ে করাতে চান জিজ্ঞেস করে — বা যে কেউ।")
+    label = L("Stylist / therapist")
+    description = L("Asks who they'd like — or anyone available.")
     slots = (SlotSpec("staff", "Who the caller wants (ref T1, T2, … from the staff list), or 'any' when they have no preference."),)
     volunteerable = frozenset({"staff"})
     lines = (
-        line("staff", "Do you have someone in mind — {names} — or is anyone fine?", "কাউকে পছন্দ আছে — {names} — নাকি যে কেউ হলেই হবে?", label="Ask who", variables=("names",)),
-        line("not_offered", "Sorry, {name} doesn't do {service}. {names} can — or is anyone fine?", "দুঃখিত, {name} {service} করেন না। {names} করেন — নাকি যে কেউ হলেই হবে?", label="They don't do that service", variables=("name", "service", "names")),
-        line("choose", "We have {names} — who would you like?", "আমাদের এখানে {names} আছেন — কাকে চান?", label="Several match", variables=("names",)),
-        line("unknown", "Sorry, I can't find that name. We have {names} — or is anyone fine?", "দুঃখিত, এই নামে কাউকে পাচ্ছি না। আমাদের এখানে {names} আছেন — নাকি যে কেউ হলেই হবে?", label="No match", variables=("names",)),
+        line("staff", "Do you have someone in mind — {names} — or is anyone fine?", label="Ask who", variables=("names",)),
+        line("not_offered", "Sorry, {name} doesn't do {service}. {names} can — or is anyone fine?", label="They don't do that service", variables=("name", "service", "names")),
+        line("choose", "We have {names} — who would you like?", label="Several match", variables=("names",)),
+        line("unknown", "Sorry, I can't find that name. We have {names} — or is anyone fine?", label="No match", variables=("names",)),
     )
     goal = "Who would they like (save the T-ref), or 'any' if anyone is fine?"
 
@@ -126,6 +126,13 @@ class StaffSkill(Skill):
 class SalonScheduleSkill(ScheduleSkill):
     """The day: the chosen person's working days, or just "which day" when anyone will do."""
 
+    who_notice = "closed_day_person"
+
+    def __init__(self, key: str | None = None, **kwargs: Any) -> None:
+        # A day the chosen stylist is off is about them, not the salon ("Maya isn't in on Monday").
+        kwargs.setdefault("notice_who", _chosen_staff_name)
+        super().__init__(key, **kwargs)
+
     def line(self, b: BoundSkill, stage: str, slots: dict[str, Any], ctx: CallContext, language: str) -> str:
         if slots.get(NOTICE):
             return b.text("ask_short", language)
@@ -139,25 +146,30 @@ class SalonScheduleSkill(ScheduleSkill):
         return [b.text("ask_short", language), b.text("ask_any", language)]
 
 
+def _chosen_staff_name(slots: dict[str, Any], ctx: CallContext, language: str) -> str:
+    person = staff_by_ref(slots.get("staff"), ctx)
+    return person.name if person is not None else ""
+
+
 class SalonConfirmSkill(Skill):
     """Holds the read-back and closing wording (editable); the flow assembles them."""
 
     key = "confirm"
     kind = "line"
     toggleable = False
-    label = L2("Read-back and closing", "পড়ে শোনানো ও সমাপ্তি")
-    description = L2("What is read back before booking, and what is said after.", "বুকিংয়ের আগে যা পড়ে শোনানো হয় ও পরে যা বলা হয়।")
+    label = L("Read-back and closing")
+    description = L("What is read back before booking, and what is said after.")
     lines = (
-        line("readback_book", "So that's {service} with {staff}, {when}. {price_part}", "তাহলে {when} {staff} এর কাছে {service}। {price_part}", label="Read-back (new)", variables=("service", "staff", "when", "price_part", "minutes")),
-        line("readback_book_any", "So that's {service}, {when}. {price_part}", "তাহলে {when} {service}। {price_part}", label="Read-back (no staff list)", variables=("service", "when", "price_part", "minutes")),
-        line("price_part", "It's {price}.", "দাম {price}।", label="Price", variables=("price",)),
-        line("confirm_book", "Shall I book it?", "বুক করব?", label="Confirm question (new)", static=True),
-        line("readback_reschedule", "So I'll move your {service} with {staff} to {when}.", "তাহলে আপনার {service} সরিয়ে {when} {staff} এর কাছে করে দিচ্ছি।", label="Read-back (move)", variables=("service", "staff", "when")),
-        line("confirm_reschedule", "Is that right?", "ঠিক আছে?", label="Confirm question (move)", static=True),
-        line("readback_cancel", "Shall I cancel your {service} with {staff}, {when}?", "{when} {staff} এর কাছে আপনার {service} বাতিল করব?", label="Read-back (cancel)", variables=("service", "staff", "when")),
-        line("closing_booked", "You're all set — {service} with {staff}, {when}.", "আপনার বুকিং কনফার্ম হয়েছে — {when}, {staff} এর কাছে {service}।", label="After booking", variables=("service", "staff", "when")),
-        line("closing_rescheduled", "Your booking is now {when}.", "আপনার বুকিং {when} করা হয়েছে।", label="After moving", variables=("when",)),
-        line("closing_cancelled", "Alright, your booking has been cancelled.", "ঠিক আছে, আপনার বুকিং বাতিল করা হলো।", label="After cancelling", static=True),
+        line("readback_book", "So that's {service} with {staff}, {when}. {price_part}", label="Read-back (new)", variables=("service", "staff", "when", "price_part", "minutes")),
+        line("readback_book_any", "So that's {service}, {when}. {price_part}", label="Read-back (no staff list)", variables=("service", "when", "price_part", "minutes")),
+        line("price_part", "It's {price}.", label="Price", variables=("price",)),
+        line("confirm_book", "Shall I book it?", label="Confirm question (new)", static=True),
+        line("readback_reschedule", "So I'll move your {service} with {staff} to {when}.", label="Read-back (move)", variables=("service", "staff", "when")),
+        line("confirm_reschedule", "Is that right?", label="Confirm question (move)", static=True),
+        line("readback_cancel", "Shall I cancel your {service} with {staff}, {when}?", label="Read-back (cancel)", variables=("service", "staff", "when")),
+        line("closing_booked", "You're all set — {service} with {staff}, {when}.", label="After booking", variables=("service", "staff", "when")),
+        line("closing_rescheduled", "Your booking is now {when}.", label="After moving", variables=("when",)),
+        line("closing_cancelled", "Alright, your booking has been cancelled.", label="After cancelling", static=True),
     )
 
     def prefetch(self, b: BoundSkill, ctx: CallContext, language: str) -> list[str]:

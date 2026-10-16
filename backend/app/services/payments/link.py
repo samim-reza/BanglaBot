@@ -1,7 +1,7 @@
 """The owner's own payment link, and the account's payment settings.
 
 An owner who already takes payments elsewhere (a Stripe Payment Link, PayPal.me,
-bKash merchant page, ...) gives a URL template; ``{amount}``, ``{currency}`` and
+Square checkout, ...) gives a URL template; ``{amount}``, ``{currency}`` and
 ``{ref}`` are filled in per booking. Nothing reports back from such a link: the
 owner marks the booking paid in the portal.
 

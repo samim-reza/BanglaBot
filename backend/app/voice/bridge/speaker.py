@@ -20,8 +20,9 @@ from app.voice.audio import (
     speech_units,
     trim_ulaw_silence,
 )
-from app.voice.bridge.utterance import _Utterance
-from app.voice.languages import ack_lines
+from app.flows.base import OUTCOME_AUTO_DROPPED
+from app.voice.bridge.utterance import _Utterance, unheard_text
+from app.voice.languages import ack_lines, phrase
 from app.voice.providers.tts import get_tts_for
 from app.voice.tts import TTSError
 
@@ -29,6 +30,11 @@ logger = structlog.get_logger(__name__)
 
 # How far ahead of real time outbound audio may run.
 PLAYOUT_LEAD_SECONDS = 0.6
+# A queued line holds the silence clock this long (covers synthesis before it plays).
+QUEUED_LINE_SILENCE_PAUSE_SECONDS = 3.0
+# Replies in a row that produced no audio at all (every TTS provider failed): the caller
+# is in dead air, so the call is ended (record stays callable) instead of running on.
+TTS_SILENT_LINES_LIMIT = 2
 
 
 class SpeakerMixin:
@@ -47,13 +53,30 @@ class SpeakerMixin:
         text = clean_spoken_text(text)
         if not text or self.closed:
             return None
+        if self.closing and not (close_after or transfer_to):
+            # The goodbye is queued: a reply still being thought out must not play after it.
+            logger.info("speech_dropped_after_closing", call_log_id=self.call_log_id, preview=text[:80])
+            return None
         if close_after or transfer_to:
             allow_barge_in = False
             self._goodbye_hangup_delay_seconds = goodbye_hangup_delay_seconds(text)
-        utterance = _Utterance(text=text, allow_barge_in=allow_barge_in, message_ref=message_ref, close_after=close_after, transfer_to=transfer_to)
-        self._pause_silence_counting(3.0)
+        filler = self._is_filler(text, message_ref)
+        utterance = _Utterance(
+            text=text, allow_barge_in=allow_barge_in, message_ref=message_ref, close_after=close_after, transfer_to=transfer_to, filler=filler
+        )
+        if not filler:
+            # A real reply: the turn is answered, and a line a noise burst cut off is moot.
+            self._replies_queued += 1
+            self._unheard.clear()
+        self._pause_silence_counting(QUEUED_LINE_SILENCE_PAUSE_SECONDS)
         self._speech_queue.put_nowait(utterance)
         return utterance
+
+    def _is_filler(self, text: str, message_ref: dict[str, Any] | None) -> bool:
+        """The instant ack / hold line (never part of the model's history) — not an answer."""
+        if message_ref is not None:
+            return False
+        return text in ack_lines(self.active_language) or text == phrase("working", self.active_language)
 
     def schedule_hangup(self) -> None:
         self._schedule_hangup(None)
@@ -130,9 +153,11 @@ class SpeakerMixin:
         self._recent_agent_lines.append((utterance.text, time.monotonic()))
         spoken: list[str] = []
         played_any = False
+        cut_at, cut_fraction = len(sentences), 1.0
         try:
             for index, task in enumerate(synth_tasks):
                 if utterance.interrupted or self.closed:
+                    cut_at, cut_fraction = index, 0.0
                     break
                 audio = trim_ulaw_silence(await task)
                 if not audio:
@@ -142,10 +167,16 @@ class SpeakerMixin:
                 if fraction >= 0.5:
                     spoken.append(sentences[index])
                 if fraction < 1.0:
+                    cut_at, cut_fraction = index, fraction
                     break
             if played_any and not utterance.interrupted and not self.closed:
                 await self._await_playback_mark()
+            self._note_tts_outcome(utterance, played_any)
         finally:
+            if utterance.barged_in and not utterance.filler:
+                rest = unheard_text(sentences, cut_at, cut_fraction)
+                if rest:
+                    self._unheard.insert(0, (utterance, rest))
             for task in synth_tasks:
                 if not task.done():
                     task.cancel()
@@ -209,10 +240,39 @@ class SpeakerMixin:
                 self._pending_playback_mark = None
                 await logger.awarning("playback_mark_timeout", call_log_id=self.call_log_id, mark_name=mark_name)
 
+    def _note_tts_outcome(self, utterance: _Utterance, played_any: bool) -> None:
+        """Count replies that made no sound at all; enough in a row ends the call."""
+        if utterance.filler or utterance.interrupted or self.closed:
+            return
+        if played_any:
+            self._tts_silent_lines = 0
+            return
+        self._tts_silent_lines += 1
+        if self._tts_silent_lines >= TTS_SILENT_LINES_LIMIT and not self._hangup_scheduled:
+            asyncio.create_task(self._speech_failed())
+
+    async def _speech_failed(self) -> None:
+        """Every TTS provider failed line after line: settle (callable again) and hang up."""
+        if self.closed:
+            return
+        await logger.awarning("bridge_tts_dead", call_log_id=self.call_log_id, lines=self._tts_silent_lines)
+        self.closing = True
+        self._hangup_scheduled = True
+        try:
+            await self.agent.settle(OUTCOME_AUTO_DROPPED)
+        except Exception as exc:  # noqa: BLE001 — the hangup matters more than the record
+            await logger.awarning("bridge_settle_failed", call_log_id=self.call_log_id, error=str(exc))
+        await self._safe_close()
+
     async def _interrupt_playback(self, reason: str) -> None:
+        barge_in = reason == "caller_barge_in"
+        if barge_in:
+            self._unheard.clear()
+            self._unheard_at = time.monotonic()
         current = self._current_utterance
         if current is not None and not current.interrupted:
             current.interrupted = True
+            current.barged_in = barge_in
             if self.stream_sid and not self.closed:
                 try:
                     await self.websocket.send_json(self._frame("clear"))
@@ -226,6 +286,11 @@ class SpeakerMixin:
             queued = self._speech_queue.get_nowait()
             if queued.allow_barge_in:
                 queued.interrupted = True
+                if queued.message_ref is not None:
+                    # The model must not believe the caller heard a line that never played.
+                    queued.message_ref["content"] = "(interrupted before speaking)"
+                if barge_in and not queued.filler:
+                    self._unheard.append((queued, queued.text))
                 queued.done.set()
             else:
                 kept.append(queued)

@@ -25,7 +25,7 @@ from app.skills.library.consent import ConsentSkill
 from app.skills.library.emergency import EmergencySkill
 from app.skills.library.greet import FarewellSkill, GreetSkill
 from app.skills.library.intake import IntakeField, IntakeSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.skills.library.lookup import LookupSkill
 from app.skills.library.notify import NotifySkill
 from app.skills.library.payment import PaymentSkill
@@ -49,7 +49,6 @@ EMERGENCY_LINES = (
     line(
         "emergency",
         "This could be dangerous. Get everyone to a safe place now, don't touch any switch or flame, and call {emergency} right away.",
-        "এটা বিপজ্জনক হতে পারে। এখনই সবাই নিরাপদ জায়গায় সরে যান, কোনো সুইচ বা আগুন জ্বালাবেন না, আর সাথে সাথে {emergency} নম্বরে ফোন করুন।",
         label="Emergency line",
         variables=("emergency",),
         required=("emergency",),
@@ -57,9 +56,9 @@ EMERGENCY_LINES = (
 )
 
 CUSTOMER_FIELDS = (
-    IntakeField("customer_name", L2("Name", "নাম"), L2("May I have your name?", "আপনার নামটা বলবেন?"), required=True, hint="The caller's name."),
-    IntakeField("email", L2("Email", "ইমেইল"), L2("What email should we send the details to?", "কোন ইমেইলে বিস্তারিত পাঠাব?"), type="email", on=False),
-    IntakeField("access", L2("Access notes", "প্রবেশের তথ্য"), L2("Anything the technician should know to get in — a gate code or parking?", "টেকনিশিয়ানের ঢোকার জন্য কিছু জানার আছে — গেট কোড বা পার্কিং?"), on=False, long_answer=True),
+    IntakeField("customer_name", L("Name"), L("May I have your name?"), required=True, hint="The caller's name."),
+    IntakeField("email", L("Email"), L("What email should we send the details to?"), type="email", on=False),
+    IntakeField("access", L("Access notes"), L("Anything the technician should know to get in — a gate code or parking?"), on=False, long_answer=True),
 )
 
 SCHEDULE_SLOTS = (
@@ -86,8 +85,8 @@ def schedule_skill(needed) -> ScheduleSkill:  # noqa: ANN001
         window_key="time_window",
         slots=SCHEDULE_SLOTS,
         lines=(
-            line("ask", "Which day suits you?", "কোন দিন আসলে সুবিধা হয়?", label="Ask for a day", static=True),
-            line("ask_short", "Which day suits you?", "কোন দিন আসলে সুবিধা হয়?", label="Ask again", static=True),
+            line("ask", "Which day suits you?", label="Ask for a day", static=True),
+            line("ask_short", "Which day suits you?", label="Ask again", static=True),
         ),
         goal="Which day (and a preferred arrival window if they say one).",
     )
@@ -99,30 +98,30 @@ def emergency_skill() -> EmergencySkill:
 
 def inbound_skills() -> dict[str, Any]:
     skills = [
-        GreetSkill(lines=(*GreetSkill.lines[:2], line("opening_question", "What service do you need today?", "কী ধরনের সার্ভিস প্রয়োজন, বলুন?", label="First question", variables=("business",), static=True))),
+        GreetSkill(lines=(*GreetSkill.lines[:2], line("opening_question", "What service do you need today?", label="First question", variables=("business",), static=True))),
         FarewellSkill(),
         HomeConfirmSkill(),
         BookFirstIntentSkill(
             {"book": "a new technician visit", "reschedule": "move an existing booking", "cancel": "cancel an existing booking"},
             lines=(
-                line("intent", "Would you like to book a technician, or change or cancel a booking?", "আপনি কি টেকনিশিয়ান বুক করতে চান, নাকি কোনো বুকিং বদলাতে বা বাতিল করতে চান?", label="Ask what they need", static=True),
-                line("branch_off", "Sorry, I can't do that over the phone, but our team can help you.", "দুঃখিত, এটা ফোনে করা যাচ্ছে না, আমাদের টিম সাহায্য করবে।", label="Not offered by phone", static=True),
+                line("intent", "Would you like to book a technician, or change or cancel a booking?", label="Ask what they need", static=True),
+                line("branch_off", "Sorry, I can't do that over the phone, but our team can help you.", label="Not offered by phone", static=True),
             ),
             goal="Book a visit unless the caller asks to move or cancel an existing booking.",
         ),
         emergency_skill(),
         ServiceSkill(),
         ProblemSkill(),
-        IntakeSkill(CUSTOMER_FIELDS, label=L2("Customer details", "কাস্টমারের তথ্য"), goal="The caller's name."),
+        IntakeSkill(CUSTOMER_FIELDS, label=L("Customer details"), goal="The caller's name."),
         AddressSkill(),
         schedule_skill(lambda slots, ctx: slots.get("intent", "book") in ("book", "reschedule")),
-        PhoneSkill(lines=(line("phone", "What's your mobile number?", "আপনার মোবাইল নম্বরটা বলবেন?", label="Ask for the number", static=True),), goal="A mobile number."),
-        PaymentSkill(amount=_visit_charge, label=L2("Call-out charge", "ভিজিটিং চার্জ")),
+        PhoneSkill(lines=(line("phone", "What's your mobile number?", label="Ask for the number", static=True),), goal="A mobile number."),
+        PaymentSkill(amount=_visit_charge, label=L("Call-out charge")),
         ConsentSkill(
             lines=(
-                line("terms", "Please note: the call-out charge applies even if you decide not to go ahead with the repair.", "দয়া করে মনে রাখবেন: কাজ না করালেও ভিজিটিং চার্জ দিতে হবে।", label="Your terms", static=True),
-                line("ask", "Is that okay?", "ঠিক আছে?", label="Ask to agree (own question)", static=True),
-                line("declined", "No problem. Without that I can't book the visit, but our team can help you. Goodbye.", "ঠিক আছে। এটা ছাড়া বুকিং করা যাচ্ছে না, আমাদের টিম সাহায্য করবে। ভালো থাকবেন।", label="If they don't agree", static=True),
+                line("terms", "Please note: the call-out charge applies even if you decide not to go ahead with the repair.", label="Your terms", static=True),
+                line("ask", "Is that okay?", label="Ask to agree (own question)", static=True),
+                line("declined", "No problem. Without that I can't book the visit, but our team can help you. Goodbye.", label="If they don't agree", static=True),
             ),
         ),
         LookupSkill(
@@ -141,7 +140,7 @@ def inbound_skills() -> dict[str, Any]:
 BOOK_BRANCH = Branch(
     "book",
     ("service", "problem", "intake", "address", "schedule", "phone", "payment", "consent"),
-    label=L2("Book a visit", "ভিজিট বুকিং"),
+    label=L("Book a visit"),
     movable=(frozenset({"problem", "intake", "address", "schedule", "phone"}),),
     before={"problem": frozenset({"service"}), "payment": frozenset({"service", "schedule"}), "consent": frozenset({"payment"})},
     toggleable=False,
@@ -158,8 +157,8 @@ def inbound_blueprint() -> Blueprint:
         router_slot="intent",
         branches={
             "book": BOOK_BRANCH,
-            "reschedule": Branch("reschedule", ("lookup", "schedule"), label=L2("Move a booking", "বুকিং বদল")),
-            "cancel": Branch("cancel", ("lookup",), label=L2("Cancel a booking", "বুকিং বাতিল")),
+            "reschedule": Branch("reschedule", ("lookup", "schedule"), label=L("Move a booking")),
+            "cancel": Branch("cancel", ("lookup",), label=L("Cancel a booking")),
         },
         default_branch="book",
         globals=("emergency",),
@@ -184,7 +183,7 @@ def outbound_blueprint() -> Blueprint:
         vertical="home_service",
         direction="outbound",
         skills={skill.key: skill for skill in skills},
-        branches={"confirm_visit": Branch("confirm_visit", ("time_ok", "new_time", "schedule"), label=L2("Visit confirmation", "ভিজিট কনফার্মেশন"), toggleable=False)},
+        branches={"confirm_visit": Branch("confirm_visit", ("time_ok", "new_time", "schedule"), label=L("Visit confirmation"), toggleable=False)},
         default_branch="confirm_visit",
         globals=("emergency",),
         effects=("notify",),

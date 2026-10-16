@@ -5,6 +5,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import structlog
 from fastapi import HTTPException
 
 from app.core.config import get_settings
@@ -48,4 +49,5 @@ async def fetch_recording(log: CallLog) -> tuple[bytes, str]:
     except telnyx.TelnyxError as exc:
         if exc.status_code == 404:
             raise HTTPException(status_code=404, detail="Recording not available yet") from exc
-        raise HTTPException(status_code=502, detail=f"Telnyx recording fetch failed: {exc.detail}") from exc
+        structlog.get_logger(__name__).warning("recording_fetch_failed", status=exc.status_code, error=str(exc.detail)[:300])
+        raise HTTPException(status_code=502, detail="The recording couldn't be fetched — try again shortly") from exc

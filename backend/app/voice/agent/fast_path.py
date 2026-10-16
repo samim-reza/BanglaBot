@@ -13,12 +13,21 @@ from app.flows.base import STAGE_COMMIT, STAGE_DONE, STAGE_RELAY, STAGE_WRONG_NU
 from app.pipeline import faq_cache
 from app.voice import jev
 from app.voice.tools import SAVE_DETAILS, ToolResult
+from app.voice.tools.text import END_CALL
 
 logger = structlog.get_logger(__name__)
 
 
 class FastPathMixin:
     """Mixed into :class:`~app.voice.agent.core.CallAgent`."""
+
+    def _keep_spoken_name(self, text: str) -> None:
+        """A name in the goodbye line ("I'm Emma — thanks, bye") still reaches the record."""
+        name = hearing.spoken_name(text)
+        props = self.flow.slot_properties()
+        key = next((k for k in ("customer_name", "patient_name", "caller_name", "owner_name") if k in props), "")
+        if name and key and not self.runtime.slots.get(key):
+            self.runtime.slots[key] = name
 
     async def _cached_answer(self, text: str) -> bool:
         """A general question another caller already asked: reuse the answer, then re-ask the current step."""
@@ -43,6 +52,24 @@ class FastPathMixin:
         if self.speaker.closing:
             return False
         stage = self.runtime.stage
+        inbound = not getattr(self.flow, "identity_gate", False)
+        if inbound and (hearing.says_goodbye(text) or hearing.dialed_wrong(text)) and stage not in (STAGE_COMMIT,):
+            # "Thanks, that's all I needed — bye": end politely instead of asking the next question.
+            self.interruptible = False  # a tool runs: the turn now acts
+            self._keep_spoken_name(text)
+            result = await self.tools.execute(END_CALL, {"reason": "caller said goodbye"}, caller_text=text)
+            if result.say:
+                self._record_turn(text, result)
+                logger.info("turn_fast_path", call_log_id=self.call_log_id, stage=stage, ended="goodbye")
+                return True
+            return False
+        if hearing.declines_detail(text) and stage in getattr(self.flow, "stage_slots", {}):
+            # "I'd rather not say": explain once, then go on without it — never a third ask.
+            result = await self.tools.declined(stage)
+            if result.say:
+                self._record_turn(text, result)
+                logger.info("turn_fast_path", call_log_id=self.call_log_id, stage=stage, declined=True)
+                return True
         labels = hearing.classify(text)
         if not labels:
             # Nothing the keyword matcher recognises: maybe a natural yes/no Jev can settle.
@@ -54,6 +81,7 @@ class FastPathMixin:
         if terminal is not None:
             name = terminal(stage, text, labels, self.runtime.slots, self.ctx)
             if name:
+                self.interruptible = False  # a tool runs: the turn now acts
                 result = await self.tools.execute(name, {}, caller_text=text)
                 if result.say:
                     self._record_turn(text, result)
@@ -106,6 +134,7 @@ class FastPathMixin:
         )
         if not speakable:
             return False
+        self.interruptible = False  # a tool runs: the turn now acts
         result = await self.tools.execute(SAVE_DETAILS, fields, caller_text=heard or text)
         if not result.say:
             return False

@@ -20,11 +20,11 @@ export function formatDate(value: string | null | undefined): string {
   return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" }).format(date);
 }
 
-export function formatMoney(amount: string | number | null | undefined, currency = "BDT"): string {
+export function formatMoney(amount: string | number | null | undefined, currency = "USD"): string {
   if (amount === null || amount === undefined || amount === "") return "—";
   const numeric = typeof amount === "number" ? amount : Number(amount);
   if (Number.isNaN(numeric)) return String(amount);
-  const symbol = currency === "BDT" ? "৳" : `${currency} `;
+  const symbol = currency === "USD" ? "$" : `${currency} `;
   return `${symbol}${numeric.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
 
@@ -43,8 +43,3 @@ export function humanize(value: string | null | undefined): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-export function languageLabel(code: string | null | undefined): string {
-  if (code === "bn") return "Bangla";
-  if (code === "en") return "English";
-  return code ? code.toUpperCase() : "—";
-}

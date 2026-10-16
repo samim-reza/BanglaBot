@@ -77,8 +77,8 @@ export const FEATURES: Feature[] = [
   },
   {
     icon: Globe,
-    title: "Your region, your language",
-    body: "Currency, time zone, emergency number and accent per account. English today, Bangla available.",
+    title: "Your region, your accent",
+    body: "Currency, time zone, emergency number and English accent per account.",
   },
   {
     icon: Zap,

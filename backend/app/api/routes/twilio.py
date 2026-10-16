@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+import structlog
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from twilio.request_validator import RequestValidator
 
 from app.core.config import get_settings
+from app.core.security import boot_guard
 from app.voice.twiml import PublicUrlMissing, public_base_url
 
 router = APIRouter(prefix="/twilio", tags=["twilio"])
+logger = structlog.get_logger(__name__)
 
 
 async def _form_dict(request: Request) -> dict[str, str]:
@@ -18,11 +21,14 @@ async def _form_dict(request: Request) -> dict[str, str]:
 
 
 def _validate_signature(request: Request, values: dict[str, str]) -> None:
+    """X-Twilio-Signature is checked whenever TWILIO_AUTH_TOKEN is set; without it the
+    webhook is refused in production (anyone could post as any customer's number)."""
     settings = get_settings()
-    if not settings.enforce_webhook_signatures:
-        return
     if not settings.twilio_auth_token:
-        raise HTTPException(status_code=500, detail="Twilio auth token is not configured")
+        if boot_guard.webhook_signatures_enforced(settings):
+            raise HTTPException(status_code=503, detail="WhatsApp is not configured")
+        logger.warning("twilio_unsigned_webhook", hint="set TWILIO_AUTH_TOKEN")
+        return
     try:
         base = public_base_url()
     except PublicUrlMissing:

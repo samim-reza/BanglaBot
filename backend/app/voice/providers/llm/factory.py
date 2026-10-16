@@ -39,7 +39,8 @@ def llm_for_call(
     return RoutedLLM(
         chain_for(merchant),
         max_output_tokens=max_output_tokens or pset.llm_max_output_tokens,
-        timeout_seconds=pset.llm_timeout_seconds,
+        # A caller is listening to dead air: a stalled link hands over to the next one sooner.
+        timeout_seconds=pset.llm_voice_timeout_seconds if channel == "voice" else pset.llm_timeout_seconds,
         prompt_cache_key=cache_key,
         prompt_cache_retention=get_settings().openai_prompt_cache_retention,
     )

@@ -134,11 +134,11 @@ class LifecycleMixin:
 
     async def _teardown(self) -> None:
         self.closed = True
-        for task in (self._pending_user_turn_task, self._speaker_task, self._agent_turn_task):
+        for task in (self._pending_user_turn_task, self._speaker_task, self._agent_turn_task, self._agent_handle_task):
             if task and not task.done():
                 task.cancel()
         if self._stt is not None:
-            await self._stt.close()
+            await self._close_stt(self._stt)
             self._retire_stt(self._stt)
         await self._finalize()
         if self._llm is not None:
@@ -148,6 +148,7 @@ class LifecycleMixin:
         if self._finalized:
             return
         self._finalized = True
+        prepared.mark_call_ended(self.call_log_id)
         try:
             if not self.outcome and self.ctx.direction == DIRECTION_INBOUND:
                 # The caller hung up first: keep what they told us when the flow can

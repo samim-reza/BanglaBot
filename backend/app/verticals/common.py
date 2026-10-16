@@ -18,7 +18,6 @@ from app.flows.scheduling import Availability, pick_slot
 from app.flows.steps import lang_text
 from app.flows.timefmt import (
     PART_TARGETS,
-    WEEKDAY_BN,
     WEEKDAY_EN,
     date_phrase,
     days_phrase,
@@ -34,40 +33,49 @@ NOTICE = "_notice"
 
 _NOTICES: dict[str, dict[str, str]] = {
     "date_unclear": {
-        "bn": "দুঃখিত, তারিখটা ঠিক বুঝতে পারিনি।",
         "en": "Sorry, I didn't catch the date.",
     },
     "date_past": {
-        "bn": "ওই তারিখটা তো পার হয়ে গেছে।",
         "en": "That date has already passed.",
     },
     "date_too_far": {
-        "bn": "আমরা আগামী {days} দিনের মধ্যে বুকিং নিই।",
         "en": "We take bookings for the next {days} days only.",
     },
     "closed_day": {
-        "bn": "{weekday} বন্ধ থাকে। {open} খোলা — যেমন {next}।",
         "en": "We're closed on {weekday}. We're open {open} — for example {next}.",
     },
     "closed_day_doctor": {
-        "bn": "{who} {weekday} বসেন না, উনি {open} বসেন — যেমন {next}।",
         "en": "{who} doesn't see patients on {weekday}; only {open} — for example {next}.",
     },
+    "closed_day_resource": {
+        "en": "{who} isn't available on {weekday}; only {open} — for example {next}.",
+    },
+    "closed_day_person": {
+        "en": "{who} isn't in on {weekday}; {who} works {open} — for example {next}.",
+    },
     "day_full": {
-        "bn": "দুঃখিত, {day} সব সময় বুক হয়ে গেছে। {next} খালি আছে।",
         "en": "Sorry, {day} is fully booked. {next} has openings.",
     },
     "day_full_none": {
-        "bn": "দুঃখিত, সামনের কয়েক দিন সব সময় বুক হয়ে গেছে।",
         "en": "Sorry, the next few days are fully booked.",
     },
+    "order_cancel_request": {
+        "en": "I'll pass your request to cancel order {ref} to the team right away.",
+    },
+    "order_status": {
+        "en": "Your order {ref} — {items}, {total} — is {status}.",
+    },
     "slot_taken": {
-        "bn": "দুঃখিত, ওই সময়টা এইমাত্র অন্য কেউ নিয়ে নিয়েছেন।",
         "en": "Sorry, that time was just taken by someone else.",
     },
     "pref_moved": {
-        "bn": "{pref} সময়টা খালি নেই, সবচেয়ে কাছের খালি সময় দিচ্ছি।",
         "en": "{pref} isn't free, so here is the nearest open time.",
+    },
+    "ready_moved": {
+        "en": "The earliest we can have it ready is {time}.",
+    },
+    "window_moved": {
+        "en": "Sorry, the {pref} is fully booked, so here is the next open time.",
     },
 }
 
@@ -90,9 +98,9 @@ def render_notice(slots: dict[str, Any], ctx: CallContext, language: str) -> str
     rendered: dict[str, str] = {}
     for key, value in params.items():
         if key == "open" and isinstance(value, list):
-            rendered[key] = days_phrase(value, lang, saturday_first=ctx.saturday_first)
+            rendered[key] = days_phrase(value, lang)
         elif key == "weekday" and isinstance(value, date):
-            rendered[key] = (WEEKDAY_BN if lang == "bn" else WEEKDAY_EN)[weekday_key(value)]
+            rendered[key] = WEEKDAY_EN[weekday_key(value)]
         elif key == "pref" and isinstance(value, str) and parse_time(value) is not None:
             rendered[key] = time_phrase(parse_time(value), lang)  # type: ignore[arg-type]
         elif isinstance(value, date):
@@ -119,16 +127,14 @@ def join_or(parts: list[str], language: str) -> str:
     parts = [part for part in parts if part]
     if len(parts) <= 1:
         return parts[0] if parts else ""
-    word = "বা" if normalize_language(language) == "bn" else "or"
-    return f"{', '.join(parts[:-1])} {word} {parts[-1]}"
+    return f"{', '.join(parts[:-1])} or {parts[-1]}"
 
 
 def join_and(parts: list[str], language: str) -> str:
     parts = [part for part in parts if part]
     if len(parts) <= 1:
         return parts[0] if parts else ""
-    word = "আর" if normalize_language(language) == "bn" else "and"
-    return f"{', '.join(parts[:-1])} {word} {parts[-1]}"
+    return f"{', '.join(parts[:-1])} and {parts[-1]}"
 
 
 def money(amount: Any, ctx: CallContext, language: str) -> str:
@@ -137,21 +143,19 @@ def money(amount: Any, ctx: CallContext, language: str) -> str:
 
 
 def window_phrase(start: Any, end: Any, language: str) -> str:
-    """``সন্ধ্যা ছয়টা থেকে রাত নয়টা`` / ``6 PM to 9 PM``."""
+    """``6 PM to 9 PM``."""
     s, e = parse_time(start), parse_time(end)
     if s is None or e is None:
         return ""
-    if normalize_language(language) == "bn":
-        return f"{time_phrase(s, 'bn')} থেকে {time_phrase(e, 'bn')}"
     return f"{time_phrase(s, 'en')} to {time_phrase(e, 'en')}"
 
 
 def schedule_phrase(availability: Availability, language: str, ctx: CallContext | None = None) -> str:
-    """``শনি, সোম ও বুধবার সন্ধ্যা পাঁচটা থেকে রাত নয়টা`` / ``Monday, Wednesday and Friday 10 AM to 4 PM``."""
+    """``Monday, Wednesday and Friday 10 AM to 4 PM``."""
     if not availability.windows:
         return ""
     window = availability.windows[0]
-    days = days_phrase(availability.working_days(), language, saturday_first=ctx.saturday_first if ctx else None)
+    days = days_phrase(availability.working_days(), language)
     hours = window_phrase(window.start.strftime("%H:%M"), window.end.strftime("%H:%M"), language)
     return f"{days} {hours}".strip()
 
@@ -167,21 +171,31 @@ def slot_start(slots: dict[str, Any]) -> datetime | None:
 
 
 def when_phrase(start: datetime, ctx: CallContext, language: str, *, window_label: str = "", on: bool = False) -> str:
-    """``আগামীকাল, রবিবার সন্ধ্যা ছয়টা বিশ মিনিটে`` (or a window label instead of the clock).
+    """``tomorrow at 6:20 PM`` (or a window label instead of the clock).
 
-    ``on=True`` reads "on Monday, October 5 at 9 AM" in English (for "… is coming {when}");
+    ``on=True`` reads "on Monday, October 5 at 9 AM" (for "… is coming {when}");
     relative days stay "tomorrow at 9 AM"."""
     lang = normalize_language(language)
     delta = (start.date() - ctx.today).days
-    if lang == "en" and delta in (0, 1):
-        day = "today" if delta == 0 else "tomorrow"
+    if delta == 0:
+        day = "today"
+    elif delta == 1:
+        # "tomorrow, Friday" — callers who think in weekdays shouldn't have to work out what "tomorrow" is.
+        day = date_phrase(start.date(), ctx.today, lang, month_first=ctx.month_first)
     else:
         day = date_phrase(start.date(), ctx.today, lang, month_first=ctx.month_first)
-        if lang == "en" and on:
+        if on:
             day = f"on {day}"
     if window_label:
         return f"{day} {window_label}"
     return f"{day} {time_phrase(start.time(), lang, at=True)}"
+
+
+def _part_of(start: datetime, window_key: str = "") -> str:
+    """morning / afternoon / evening of a slot (its window's own name when it has one)."""
+    if window_key in ("morning", "afternoon", "evening"):
+        return window_key
+    return "morning" if start.hour < 12 else ("afternoon" if start.hour < 17 else "evening")
 
 
 def plan_booking(
@@ -193,6 +207,7 @@ def plan_booking(
     pref_key: str = "time_pref",
     window_key: str = "",
     who: str = "",
+    who_notice: str = "closed_day_doctor",
 ) -> None:
     """Validate ``slots[date_key]`` and propose a slot (``slot``/``serial``/``window``),
     or clear the date and leave a notice explaining why."""
@@ -220,7 +235,7 @@ def plan_booking(
         nxt = availability.next_days(now=ctx.now, booked=ctx.booked, start=ctx.today, limit=2)
         open_days = availability.working_days()
         if who:
-            notice(slots, "closed_day_doctor", who=who, weekday=day, open=open_days, next=nxt)
+            notice(slots, who_notice, who=who, weekday=day, open=open_days, next=nxt)
         else:
             notice(slots, "closed_day", weekday=day, open=open_days, next=nxt)
         return
@@ -240,10 +255,15 @@ def plan_booking(
     slots["serial"] = chosen.serial
     if chosen.window.key:
         slots["window"] = chosen.window.key
+    if slots.get(NOTICE):
+        return  # a sharper notice is already set ("that time was just taken")
+    wanted = (str(slots.get(window_key) or "") if window_key else "") or (str(pref) if pref and str(pref) in PART_TARGETS else "")
+    if wanted and _part_of(chosen.start, chosen.window.key) != wanted:
+        notice(slots, "window_moved", pref=wanted)
     target = parse_time(pref) if pref and str(pref) not in PART_TARGETS else None
     if target is not None:
         gap = abs((chosen.start.hour * 60 + chosen.start.minute) - (target.hour * 60 + target.minute))
-        if gap > 30:
+        if gap >= 10:
             notice(slots, "pref_moved", pref=target.strftime("%H:%M"))
 
 

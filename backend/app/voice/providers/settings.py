@@ -35,6 +35,8 @@ class ProviderSettings(BaseSettings):
     )
     llm_allow_paid: bool = False
     llm_timeout_seconds: float = 20.0
+    #: One link's timeout on a live call (the next link is tried after it); chat keeps the one above.
+    llm_voice_timeout_seconds: float = 8.0
     llm_max_output_tokens: int = 300
     #: compact | cached | auto (auto = cached for OpenAI, compact for free tiers).
     llm_prompt_profile: str = "auto"
@@ -42,8 +44,6 @@ class ProviderSettings(BaseSettings):
     # --- STT / TTS chains (names resolved by providers/stt and providers/tts) -------------
     stt_chain: str = "local,deepgram,groq,openai"
     tts_chain: str = "local,deepgram,azure,gemini,edge"
-    stt_chain_bn: str = "deepgram,openai"
-    tts_chain_bn: str = "azure,gemini,edge"
 
     # --- local open-source speech server (speech/, laptop GPU) ---------------------------
     speech_server_url: str | None = None

@@ -7,7 +7,7 @@ import { KeyRound } from "lucide-react";
 
 import { ApiError } from "@/components/api-error";
 import { useAppToast } from "@/components/app-toast";
-import { BanglaBotWordmark } from "@/components/brand";
+import { BrandWordmark } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,7 +55,7 @@ export default function MerchantLoginPage() {
       <div className="mx-auto flex max-w-md flex-col gap-6 px-6 py-12">
         <div className="flex items-center justify-between">
           <Link href="/">
-            <BanglaBotWordmark />
+            <BrandWordmark />
           </Link>
           <ThemeToggle />
         </div>

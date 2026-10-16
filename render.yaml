@@ -3,6 +3,7 @@
 # Secrets (sync: false) are entered in the Render dashboard, never committed.
 services:
   - type: web
+    # Service name kept from before the Callisa rename: it is the live banglabot-api.onrender.com host.
     name: banglabot-api
     runtime: docker
     plan: free
@@ -15,7 +16,7 @@ services:
       - key: ENVIRONMENT
         value: production
       - key: APP_NAME
-        value: BanglaBot
+        value: Callisa
       - key: TTS_CACHE_DIR
         value: /app/.tts-cache
       - key: DATABASE_URL

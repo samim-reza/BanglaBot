@@ -10,15 +10,10 @@ from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
 from app.skills.base import BoundSkill, LineSpec, Skill, lang_pick
 from app.skills.library.intent import IntentSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.verticals.real_estate.catalog import KIND_PROPERTY, interest_phrase, listing_facts, matching_listings, number
 
 _PITCH_GUIDE = {
-    "bn": (
-        "এখন তালিকা থেকে কলারের চাহিদার (ধরন, এলাকা, বাজেট) সাথে মেলে এমন সর্বোচ্চ দুটি প্রপার্টি এক-দুই ছোট বাক্যে বলুন — "
-        "এলাকা, আকার আর দাম কথায় — তারপর জিজ্ঞেস করুন সাইট ভিজিট করতে চান কি না। মিলে যাওয়ার মতো কিছু না থাকলে সৎভাবে বলুন "
-        "এবং জিজ্ঞেস করুন প্রতিনিধি অন্য অপশন নিয়ে ফোন করলে ঠিক আছে কি না (তখন wants_visit=false)। কলার কোনো প্রপার্টি বাছলে property=<ref> সেভ করুন।"
-    ),
     "en": (
         "Now tell the caller, in one or two short sentences, about at most two listings that fit their needs (type, area, budget) — "
         "area, size and price in words — then ask whether they'd like a site visit. If nothing fits, say so honestly and ask whether "
@@ -71,8 +66,8 @@ class PitchSkill(Skill):
 
     key = "listings"
     kind = "gate"
-    label = L2("Matching listings", "মিলে যাওয়া প্রপার্টি")
-    description = L2("Presents up to two listings that fit and offers a site visit.", "মিলে যাওয়া সর্বোচ্চ দুটি প্রপার্টি বলে সাইট ভিজিটের প্রস্তাব দেয়।")
+    label = L("Matching listings")
+    description = L("Presents up to two listings that fit and offers a site visit.")
     toggleable = False
     slots = (
         SlotSpec("property", "The listing the caller is interested in (ref P1, P2, …)."),
@@ -102,11 +97,20 @@ class PitchSkill(Skill):
         if saved.get("visit_date") or saved.get("visit_time_pref"):
             slots["wants_visit"] = True  # naming a day is a yes to the visit
 
+    def derive(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext) -> None:
+        """A listing the caller named answers the type / area questions."""
+        found = ctx.find_items(slots.get("property"), KIND_PROPERTY) if slots.get("property") else []
+        if len(found) != 1:
+            return
+        listing = found[0]
+        for key, value in (("property_type", listing.get("property_type")), ("location", listing.get("location"))):
+            if value and slots.get(key) in (None, ""):
+                slots[key] = value
+
+
     def line(self, b: BoundSkill, stage: str, slots: dict[str, Any], ctx: CallContext, language: str) -> Instruction:
-        bn = language == "bn"
-        refs = ", ".join(item.ref for item in matching_listings(slots, ctx)) or ("কোনোটিই নয়" if bn else "none")
-        lead = "মিলতে পারে এমন" if bn else "Listings that may fit"
-        return Instruction("listings", f"{lang_pick(_PITCH_GUIDE, language)} ({lead}: {refs})")
+        refs = ", ".join(item.ref for item in matching_listings(slots, ctx)) or "none"
+        return Instruction("listings", f"{lang_pick(_PITCH_GUIDE, language)} (Listings that may fit: {refs})")
 
     def facts(self, b: BoundSkill, ctx: CallContext, language: str) -> list[str]:
         return listing_facts(ctx)
@@ -117,7 +121,7 @@ class InterestedSkill(Skill):
 
     key = "interested"
     kind = "gate"
-    label = L2("Still interested?", "এখনও আগ্রহী?")
+    label = L("Still interested?")
     toggleable = False
     slots = (SlotSpec("still_interested", "Follow-up call: true = still interested, false = not interested any more.", {"type": "boolean"}, directions=("outbound",)),)
     gated = ("still_interested",)
@@ -126,7 +130,6 @@ class InterestedSkill(Skill):
         line(
             "still_interested",
             "You had asked us about {interest}. Are you still interested?",
-            "আপনি আমাদের কাছে {interest} নিয়ে জানতে চেয়েছিলেন। এখনও কি আগ্রহী আছেন?",
             label="Follow-up question",
             variables=("interest",),
         ),
@@ -149,29 +152,27 @@ class RealtyConfirmSkill(Skill):
     key = "confirm"
     kind = "line"
     toggleable = False
-    label = L2("Read-back and closing", "পড়ে শোনানো ও সমাপ্তি")
-    description = L2("What is read back before booking a viewing or passing a lead on, and what is said after.", "ভিজিট বুক বা লিড জমার আগে যা পড়ে শোনানো হয় ও পরে যা বলা হয়।")
+    label = L("Read-back and closing")
+    description = L("What is read back before booking a viewing or passing a lead on, and what is said after.")
     lines = (
         line(
             "readback_visit",
             "So, {name}, a viewing of {what} {when} — our agent will call the day before with the meeting point.",
-            "তাহলে {name}, {when} {what} দেখতে সাইট ভিজিট — আমাদের প্রতিনিধি আগের দিন ফোন করে ঠিকানা জানিয়ে দেবেন।",
             label="Read-back (viewing)",
             variables=("name", "what", "when"),
         ),
-        line("confirm_visit", "Shall I confirm it?", "ভিজিটটা কনফার্ম করব?", label="Confirm question (viewing)", static=True),
+        line("confirm_visit", "Shall I confirm it?", label="Confirm question (viewing)", static=True),
         line(
             "readback_sell",
             "So your {type} in {area}, {size}, asking {price}. Our agent will get in touch with you — is that right?",
-            "তাহলে {area}-এ আপনার {type}, {size}, দাম আশা করছেন {price}। আমাদের প্রতিনিধি আপনার সাথে যোগাযোগ করবেন — ঠিক আছে?",
             label="Read-back (seller)",
             variables=("type", "area", "size", "price"),
         ),
-        line("closing_visit", "Your viewing is confirmed — {when}. Our agent will call you the day before.", "আপনার সাইট ভিজিট কনফার্ম হয়েছে — {when}। আমাদের প্রতিনিধি আগের দিন ফোন করবেন।", label="After booking a viewing", variables=("when",)),
-        line("closing_lead", "One of our agents will call you shortly with more options.", "আমাদের একজন প্রতিনিধি শীঘ্রই আপনাকে ফোন করে আরও অপশন জানাবেন।", label="Buyer / renter lead", static=True),
-        line("closing_seller", "One of our agents will call you shortly about selling your property.", "আমাদের একজন প্রতিনিধি শীঘ্রই আপনার প্রপার্টি বিক্রির ব্যাপারে ফোন করবেন।", label="Seller lead", static=True),
-        line("closing_not_interested", "Alright, no problem. Call us any time you need.", "ঠিক আছে। কখনো দরকার হলে ফোন করবেন।", label="Not interested any more", static=True),
-        line("knows_person", "{name} had asked us about a property. Do you know them?", "{name} আমাদের কাছে একটি প্রপার্টির ব্যাপারে জানতে চেয়েছিলেন। আপনি কি ওনাকে চেনেন?", label="Someone else answered", variables=("name",)),
+        line("closing_visit", "Your viewing is confirmed — {when}. Our agent will call you the day before.", label="After booking a viewing", variables=("when",)),
+        line("closing_lead", "One of our agents will call you shortly with more options.", label="Buyer / renter lead", static=True),
+        line("closing_seller", "One of our agents will call you shortly about a valuation and selling your property.", label="Seller lead", static=True),
+        line("closing_not_interested", "Alright, no problem. Call us any time you need.", label="Not interested any more", static=True),
+        line("knows_person", "{name} had asked us about a property. Do you know them?", label="Someone else answered", variables=("name",)),
     )
 
     def prefetch(self, b: BoundSkill, ctx: CallContext, language: str) -> list[str]:

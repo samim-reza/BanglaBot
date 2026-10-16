@@ -16,12 +16,12 @@ class _Log:
 
 
 def test_normalize_phone_per_region():
-    assert normalize_phone("01712345678", "BD") == "+8801712345678"
-    assert normalize_phone("017-1234 5678", "BD") == "+8801712345678"
-    assert normalize_phone("8801712345678", "BD") == "+8801712345678"
-    assert normalize_phone("+8801712345678", "BD") == "+8801712345678"
-    assert normalize_phone("+1 (415) 555-0100", "BD") == "+14155550100"
-    assert normalize_phone("0044 20 7946 0958", "BD") == "+442079460958"
+    assert normalize_phone("07700 900123", "GB") == "+447700900123"
+    assert normalize_phone("077-0090 0123", "GB") == "+447700900123"
+    assert normalize_phone("447700900123", "GB") == "+447700900123"
+    assert normalize_phone("+447700900123", "GB") == "+447700900123"
+    assert normalize_phone("+1 (415) 555-0100", "GB") == "+14155550100"
+    assert normalize_phone("0044 20 7946 0958", "US") == "+442079460958"
     assert normalize_phone("(415) 555-0100", "US") == "+14155550100"
     assert normalize_phone("07700 900123", "GB") == "+447700900123"
     assert normalize_phone("0412 345 678", "AU") == "+61412345678"
@@ -60,7 +60,7 @@ def test_stream_twiml_carries_signed_parameters(monkeypatch):
     assert '<Parameter name="media_token" value="' in body
     assert "<Say" not in body
     assert twiml.status_callback_url("o1") == "https://example.ngrok-free.app/telnyx/status/o1"
-    assert "<Dial" in twiml.dial_twiml("+8801999999999", caller_id="+15550000000")
+    assert "<Dial" in twiml.dial_twiml("+14155550199", caller_id="+15550000000")
 
 
 def test_public_base_url_missing_is_a_clear_error(monkeypatch):

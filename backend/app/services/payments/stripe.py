@@ -68,15 +68,15 @@ def verify_signature(payload: bytes, signature_header: str, secret: str, *, tole
             signatures.append(value)
     if not stamp or not signatures:
         raise WebhookSignatureError("missing signature")
-    try:
-        signed_at = int(stamp)
-    except ValueError as exc:
-        raise WebhookSignatureError("bad signature timestamp") from exc
+    if not (stamp.isascii() and stamp.isdigit()):
+        raise WebhookSignatureError("bad signature timestamp")
+    signed_at = int(stamp)
     expected = hmac.new(secret.encode("utf-8"), stamp.encode("ascii") + b"." + payload, hashlib.sha256).hexdigest()
     if not any(hmac.compare_digest(expected, candidate) for candidate in signatures if candidate.isascii()):
         raise WebhookSignatureError("signature mismatch")
     current = time.time() if now is None else now
-    if tolerance and abs(current - signed_at) > tolerance:
+    # A zero / negative tolerance still keeps the default replay window.
+    if abs(current - signed_at) > (tolerance if tolerance and tolerance > 0 else DEFAULT_TOLERANCE_SECONDS):
         raise WebhookSignatureError("signature too old")
     return signed_at
 

@@ -142,7 +142,7 @@ async def export_csv(
     _: AdminPrincipal = Depends(finance_admin),
 ):
     period = _month(month)
-    filename = f"banglabot-finance-{kind}-{period.key}.csv"
+    filename = f"callisa-finance-{kind}-{period.key}.csv"
     return StreamingResponse(
         export.stream_own_session(period, kind),
         media_type="text/csv; charset=utf-8",

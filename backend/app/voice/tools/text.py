@@ -16,7 +16,7 @@ from app.flows.base import (
     OUTCOME_VOICEMAIL,
     OUTCOME_WRONG_NUMBER,
 )
-from app.voice.languages import normalize_language
+from app.voice.languages import normalize_language, phrase
 
 logger = structlog.get_logger(__name__)
 
@@ -31,39 +31,30 @@ def _note(outcome: str, language: str, **fields: Any) -> str:
     lang = normalize_language(language)
     templates = {
         OUTCOME_RELAY: {
-            "bn": "কলে অন্য কেউ ধরেছেন যিনি কাস্টমারকে চেনেন; তাঁকে জানাতে বলা হয়েছে।",
             "en": "Someone who knows the customer answered; asked them to pass the message on.",
         },
         OUTCOME_WRONG_NUMBER: {
-            "bn": "ফোন ধরা ব্যক্তি জানিয়েছেন নম্বরটি ভুল / কাস্টমারকে চেনেন না।",
             "en": "The person who answered said this is the wrong number / does not know the customer.",
         },
         OUTCOME_TRANSFER: {
-            "bn": "কাস্টমার প্রতিনিধির সাথে কথা বলতে চেয়েছেন।",
             "en": "Customer asked to speak with a team member.",
         },
         OUTCOME_DIVERTED: {
-            "bn": "কাস্টমার কল ধরেননি / কেটে দিয়েছেন; অপারেটর কলটি অন্যত্র ফরোয়ার্ড করেছে। আবার কল করা যাবে।",
             "en": "The customer did not answer / rejected the call and the carrier forwarded it. They can be called again.",
         },
         OUTCOME_VOICEMAIL: {
-            "bn": "কলটি ভয়েসমেইলে গেছে; কথা না বলে কেটে দেওয়া হয়েছে। আবার কল করা যাবে।",
             "en": "The call went to voicemail; hung up without speaking. They can be called again.",
         },
         OUTCOME_UNCLEAR: {
-            "bn": "কাস্টমারের উত্তর স্পষ্ট ছিল না; ফলো-আপ দরকার।",
             "en": "The customer's answer was unclear; needs a follow-up.",
         },
         "later": {
-            "bn": "কাস্টমার পরে কথা বলতে চেয়েছেন।",
             "en": "Customer asked to be called later.",
         },
         OUTCOME_AUTO_DROPPED: {
-            "bn": "কাস্টমারের সাড়া পাওয়া যায়নি; কল ছেড়ে দেওয়া হয়েছে।",
             "en": "No response from the customer; the call was dropped.",
         },
         "commit_failed": {
-            "bn": "বুকিং সেভ করা যায়নি (সিস্টেম সমস্যা); কাস্টমারকে ফোন করে নিশ্চিত করুন।",
             "en": "The booking could not be saved (system error); call the customer back to confirm.",
         },
     }
@@ -76,6 +67,13 @@ def _note(outcome: str, language: str, **fields: Any) -> str:
 
 def _join(*parts: str) -> str:
     return " ".join(part.strip() for part in parts if part and part.strip())
+
+
+def unclear_line(attempt: int, instruction: Any, language: str) -> str:
+    """A re-ask that doesn't sound like a broken record: a rotating lead-in + the current question."""
+    lead = phrase(f"unclear_{(max(attempt, 1) - 1) % 3 + 1}", language)
+    question = instruction.text if instruction is not None and instruction.verbatim and not instruction.end_call else ""
+    return _join(lead, question)
 
 
 _SENTENCE_RE = re.compile(r"[^.!?।]+[.!?।]?")

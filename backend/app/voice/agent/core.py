@@ -51,6 +51,11 @@ class CallAgent(TurnMixin, FastPathMixin, PromptProfileMixin):
         self.turns = 0
         self.fast_turns = 0
         self._ack_index = 0
+        #: True while the running turn has changed nothing yet (no tool run, no reply queued):
+        #: the transport may cancel it when the caller keeps talking (see ``handle_turn``).
+        self.interruptible = False
+        #: The transport already spoke this turn's instant ack (a resumed, merged turn).
+        self.skip_ack = False
 
     # ------------------------------------------------------------------ setup
     def opening(self) -> str:
@@ -77,7 +82,8 @@ class CallAgent(TurnMixin, FastPathMixin, PromptProfileMixin):
 
     @property
     def outcome(self) -> str:
-        return self.tools.outcome
+        """The call's outcome so far — including a request completed before "anything else?"."""
+        return self.tools.outcome or (self.tools.completed[-1] if self.tools.completed else "")
 
     def next_ack(self) -> str:
         lines = ack_lines(self.language)
@@ -98,7 +104,7 @@ class CallAgent(TurnMixin, FastPathMixin, PromptProfileMixin):
             "stage": self.runtime.stage,
             "node": self.runtime.current_node,
             "slots": self.runtime.flow_data(),
-            "outcome": self.tools.outcome,
+            "outcome": self.outcome,
             "record_id": self.tools.record_id,
         }
 

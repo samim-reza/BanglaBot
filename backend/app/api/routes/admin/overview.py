@@ -30,12 +30,11 @@ async def admin_login(data: AdminLoginIn, request: Request, db: AsyncSession = D
 
 @router.get("/meta")
 async def meta(_: dict = Depends(require_admin)):
-    """Choices for the account forms: business engines, regions, plans, languages."""
+    """Choices for the account forms: business engines, regions, plans."""
     return {
         "verticals": [v.as_json() for v in VERTICALS.values()],
         "regions": regions_json(),
         "plans": [plan.as_json() for plan in PLANS.values()],
-        "languages": [{"code": "en", "label": "English"}, {"code": "bn", "label": "Bangla (বাংলা)"}],
     }
 
 

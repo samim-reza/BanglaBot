@@ -34,13 +34,14 @@ from app.flows.context import DIRECTION_INBOUND
 from app.models import CallLog, Merchant
 from app.verticals import flow_for
 from app.voice import text_session
+from app.voice.languages import normalize_language
 
 logger = structlog.get_logger(__name__)
 
 GRAPH_URL = "https://graph.facebook.com"
 #: Messenger rejects text over 2,000 characters; WhatsApp allows 1,600 per Twilio message.
 MAX_REPLY_CHARS = {CHANNEL_MESSENGER: 2000, CHANNEL_WHATSAPP: 1600}
-GREETING_ONLY = re.compile(r"^\s*(hi+|hello+|hey+|hiya|good (morning|afternoon|evening)|salam|assalamu ?alaikum|হ্যালো|সালাম)[\s!.,]*$", re.I)
+GREETING_ONLY = re.compile(r"^\s*(hi+|hello+|hey+|hiya|good (morning|afternoon|evening)|salam|assalamu ?alaikum)[\s!.,]*$", re.I)
 
 _threads: dict[tuple[str, str, str], str] = {}
 _client: httpx.AsyncClient | None = None
@@ -101,7 +102,7 @@ async def _start(merchant: Merchant, channel: str, customer: str, caller_number:
             order_id=None,
             merchant_id=merchant.id,
             call_status="in-progress",
-            language=merchant.language or "en",
+            language=normalize_language(merchant.language),
             direction=channel,
             flow=flow.key,
             caller_number=caller_number,
@@ -182,7 +183,8 @@ def verify_signature(body: bytes, header: str) -> bool:
     if not secret:
         return False
     expected = "sha256=" + hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, str(header or ""))
+    # Bytes: a non-ASCII header is a mismatch, not a TypeError.
+    return hmac.compare_digest(expected.encode(), str(header or "").encode("utf-8", "replace"))
 
 
 async def messenger_merchant(page_id: str) -> Merchant | None:

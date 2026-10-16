@@ -1,9 +1,8 @@
 """Speech-to-text providers and the chain walk that opens one per call.
 
-``open_stt(language=...)`` tries the language's chain (``STT_CHAIN`` /
-``STT_CHAIN_BN``) in order: providers without a key (or without a speech
-server URL) are skipped, a paused provider (recent auth/quota/connect failure)
-is skipped, the local server must answer a cached health probe, and the first
+``open_stt(language=...)`` tries the chain (``STT_CHAIN``) in order: providers
+without a key (or without a speech server URL) are skipped, a paused provider
+(recent auth/quota/connect failure) goes last, the local server must answer a cached health probe, and the first
 session that connects serves the call. If it dies mid-call the bridge simply
 calls ``open_stt`` again and lands on the next healthy provider.
 """
@@ -17,7 +16,7 @@ from dataclasses import dataclass
 import structlog
 
 from app.voice.providers.spend import over_cap
-from app.voice.languages import BANGLA, normalize_language
+from app.voice.languages import normalize_language
 from app.voice.providers.base import ProviderUnavailable, STTSession
 from app.voice.providers.settings import get_provider_settings, parse_chain
 from app.voice.providers.stt import health
@@ -100,9 +99,8 @@ PROVIDERS: dict[str, STTProvider] = {
 
 
 def stt_chain_for(language: str | None) -> list[str]:
-    settings = get_provider_settings()
-    raw = settings.stt_chain_bn if normalize_language(language) == BANGLA else settings.stt_chain
-    return parse_chain(raw)
+    """The platform STT chain (one chain; ``language`` kept for the callers' plumbing)."""
+    return parse_chain(get_provider_settings().stt_chain)
 
 
 def configured_providers(language: str | None, chain: Sequence[str] | None = None) -> list[str]:
@@ -142,10 +140,11 @@ async def open_stt(
     names = configured_providers(lang, chain)
     # Providers over today's spend cap go last (still better than no transcription at all).
     names = [n for n in names if not over_cap(n)] + [n for n in names if over_cap(n)]
-    for name in names:
-        if health.is_down(name):
-            skipped.append(f"{name}:paused")
-            continue
+    # A paused provider (recent failure) is tried last instead of never: a call that
+    # reconnects mid-conversation on a single-provider chain still beats a dropped call.
+    paused = [n for n in names if health.is_down(n)]
+    skipped.extend(f"{n}:paused" for n in paused)
+    for name in [n for n in names if n not in paused] + paused:
         if name == "local" and not await _local_ready():
             skipped.append("local:unhealthy")
             continue

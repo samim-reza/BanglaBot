@@ -1,8 +1,8 @@
 """Text-to-speech providers and the per-language engine the calls use.
 
 ``get_tts_for(language)`` returns a :class:`FallbackTTS` over the configured
-providers of that language's chain (``TTS_CHAIN`` / ``TTS_CHAIN_BN``); unknown
-or unconfigured names are skipped. Provider engines are process-wide
+providers of the chain (``TTS_CHAIN``); unknown or unconfigured names are
+skipped. Provider engines are process-wide
 singletons sharing one tiered cache (L1 memory, L2 disk, L3 Supabase Storage),
 so a clip synthesized by any call is reused by every other one.
 """
@@ -17,7 +17,7 @@ from typing import Any
 import structlog
 
 from app.core.config import get_settings
-from app.voice.languages import BANGLA, normalize_language
+from app.voice.languages import normalize_language
 from app.voice.providers.settings import get_provider_settings, parse_chain
 from app.voice.providers.tts.base import CachedTTSEngine, TTSError
 from app.voice.providers.tts.fallback import FallbackTTS
@@ -138,9 +138,8 @@ def engine(name: str) -> CachedTTSEngine | None:
 
 # ------------------------------------------------------------------ chains
 def tts_chain_for(language: str | None) -> list[str]:
-    provider = get_provider_settings()
-    raw = provider.tts_chain_bn if normalize_language(language) == BANGLA else provider.tts_chain
-    return parse_chain(raw)
+    """The platform TTS chain (one chain; ``language`` kept for the callers' plumbing)."""
+    return parse_chain(get_provider_settings().tts_chain)
 
 
 def configured_providers(language: str | None, chain: Sequence[str] | None = None) -> list[str]:

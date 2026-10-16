@@ -15,10 +15,8 @@ PHONE_HINT = "Digits only, as the caller said them; keep a leading + and the cou
 
 def clean_phone(value: Any) -> str:
     """A spoken / typed phone number as digits (with a leading + kept); '' when it cannot be one."""
-    from app.flows.timefmt import ascii_digits
-
-    text = ascii_digits(value).strip()
-    digits = "".join(ch for ch in text if ch.isdigit())
+    text = str(value or "").strip()
+    digits = "".join(ch for ch in text if "0" <= ch <= "9")
     if not 7 <= len(digits) <= 15:
         return ""
     return f"+{digits}" if text.startswith("+") else digits

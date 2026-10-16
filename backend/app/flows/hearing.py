@@ -1,11 +1,11 @@
 """Did the caller's own words support an outcome?
 
 The model is good at *extracting* intent but happy to over-commit: a mumbled
-"হুম", an echo of the agent's own question, or a decoder hallucination can all
+"hmm", an echo of the agent's own question, or a decoder hallucination can all
 turn into ``confirm_order``. This module is the backend's second opinion.
-Nothing here is clever — small vocabularies of Bangla, romanised Bangla and
-English answer words, scored so that a phrase ("লাগবে না", "no problem")
-outweighs the single word inside it that points the other way.
+Nothing here is clever — small vocabularies of English answer words, scored so
+that a phrase ("don't need", "no problem") outweighs the single word inside it
+that points the other way.
 
 Labels produced by :func:`classify`:
 
@@ -26,9 +26,8 @@ import re
 from collections import Counter
 from typing import Any, Iterable
 
-_BANGLA = "ঀ-৿"
-_TOKEN_RE = re.compile(rf"[{_BANGLA}]+|[a-z']+|\d+")
-_PUNCT_RE = re.compile(rf"[^\w\s{_BANGLA}']+")
+_TOKEN_RE = re.compile(r"[a-z']+|\d+")
+_PUNCT_RE = re.compile(r"[^\w\s']+")
 
 PHRASE_SCORE = 2
 WORD_SCORE = 1
@@ -37,110 +36,81 @@ WORD_SCORE = 1
 # (phrases are matched on the normalised text; words on exact tokens)
 
 YES_PHRASES: tuple[str, ...] = (
-    "ঠিক আছে", "ঠিকাছে", "পাঠিয়ে দেন", "পাঠিয়ে দিন", "পাঠায় দেন", "দিয়ে দেন", "দিয়ে দিন", "রেখে দেন",
-    "কনফার্ম করেন", "কনফার্ম করুন", "কনফার্ম করে দেন", "কনফার্ম করে দিন", "নিয়ে নিব", "নিয়ে নেব",
-    "অর্ডার করেছি", "অর্ডার দিয়েছি", "সমস্যা নাই", "সমস্যা নেই", "অসুবিধা নাই", "অসুবিধা নেই",
-    "থিক আছে", "thik ase", "thik ache", "thik acche", "thik ase", "no problem", "no worries", "go ahead",
-    "send it", "keep it", "that's right", "that is right", "i'll take it", "i will take it", "i want it",
-    "i ordered", "i did order", "please send", "all good", "sounds good", "of course",
+    "no problem", "no worries", "go ahead", "send it", "keep it", "that's right", "that is right",
+    "i'll take it", "i will take it", "i want it", "i ordered", "i did order", "please send", "all good",
+    "sounds good", "of course",
     # bookings / reminders / follow-ups
-    "বুক করেন", "বুক করুন", "বুক করে দেন", "বুক করে দিন", "হ্যাঁ চলবে", "সুবিধা হবে", "আসতে পারব", "আসতে পারবো",
-    "দেখতে চাই", "ভিজিট করতে চাই", "অবশ্যই আসব", "ইনশাআল্লাহ আসব", "book it", "that works", "works for me",
-    "i'll come", "i will come", "i'll be there", "still interested", "i am interested", "i'm interested",
-    "sounds great", "sounds perfect", "that's perfect", "that's great", "please do", "go for it", "do it",
-    "yes please", "yeah sure", "sure thing", "that's fine", "that is fine", "works for me", "let's do it",
+    "book it", "that works", "works for me", "i'll come", "i will come", "i'll be there", "still interested",
+    "i am interested", "i'm interested", "sounds great", "sounds perfect", "that's perfect", "that's great",
+    "please do", "go for it", "do it", "yes please", "yeah sure", "sure thing", "that's fine", "that is fine",
+    "let's do it",
 )
 YES_WORDS: tuple[str, ...] = (
-    "হ্যাঁ", "হ্যা", "হা", "হুঁ", "জি", "জ্বি", "জী", "জ্বী", "অবশ্যই", "কনফার্ম", "নিশ্চিত", "ওকে",
-    "রাখেন", "রাখুন", "রাখব", "রাখবো", "নিব", "নেব", "নিবো", "নেবো", "লাগবে", "পাঠান", "পাঠাবেন", "চাই",
-    "সঠিক", "একদম", "অবশ্যই", "হবে", "চলবে", "আসব", "আসবো", "আসছি", "আগ্রহী", "বুক", "interested",
     "yes", "yeah", "yep", "yup", "ya", "sure", "ok", "okay", "correct", "right", "confirm", "confirmed",
-    "fine", "absolutely", "definitely", "alright", "exactly", "yes'", "confirmed",
+    "fine", "absolutely", "definitely", "alright", "exactly", "yes'", "interested",
     "perfect", "great", "awesome", "excellent", "lovely", "brilliant", "wonderful", "cool", "certainly",
-    "ji", "jee", "jii", "hya", "hyan", "hae", "ha", "thik",
 )
 
 NO_PHRASES: tuple[str, ...] = (
-    "লাগবে না", "লাগবেনা", "লাগবে নাহ", "নিব না", "নেব না", "নিবো না", "নেবো না", "চাই না", "চাইনা",
-    "বাতিল করেন", "বাতিল করুন", "বাতিল করে দেন", "বাতিল করে দিন", "ক্যান্সেল করেন", "ক্যান্সেল করে দেন",
-    "ক্যান্সেল করুন", "অর্ডার করিনি", "অর্ডার করি নাই", "অর্ডার দেইনি", "অর্ডার দেই নাই", "পাঠাবেন না",
-    "পাঠানোর দরকার নাই", "দরকার নাই", "দরকার নেই", "নিতে চাই না", "রাখব না", "রাখবো না", "নিব না",
-    "lagbe na", "lagbena", "nibo na", "nib na", "chai na", "chaina", "cancel koren", "batil koren",
     "don't want", "do not want", "dont want", "don't need", "do not need", "dont need", "not needed",
     "didn't order", "did not order", "never ordered", "cancel it", "not interested", "don't send",
     "do not send", "cancel the order", "cancel this", "cancel my order", "i don't", "i do not",
     # bookings / reminders / follow-ups
-    "আসব না", "আসবো না", "আসতে পারব না", "আসতে পারবো না", "পারব না", "পারবো না", "যেতে পারব না", "হবে না",
-    "চলবে না", "সুবিধা হবে না", "আগ্রহী না", "আগ্রহী নই", "আগ্রহ নেই", "আগ্রহ নাই", "ইন্টারেস্টেড না",
     "can't come", "cannot come", "won't come", "not coming", "can't make it", "doesn't work", "does not work",
     "no longer interested", "not great", "not good", "not really", "not fine", "not perfect", "not ok", "not okay",
     "doesn't suit", "does not suit", "not that time", "not that day",
+    "can't make that", "cannot make that", "can't make it then", "won't make it", "won't be able", "unable to make",
+    "can't do that", "cannot do that", "can't come in", "not going to make",
 )
-NO_WORDS: tuple[str, ...] = (
-    "না", "নাহ", "নাহ্", "বাতিল", "ক্যান্সেল", "ক্যানসেল", "ক্যান্সেল",
-    "no", "nope", "nah", "cancel", "cancelled", "canceled",
-    "na", "nah", "batil",
-)
+NO_WORDS: tuple[str, ...] = ("no", "nope", "nah", "cancel", "cancelled", "canceled")
 
 LATER_PHRASES: tuple[str, ...] = (
-    "পরে বলব", "পরে বলবো", "পরে কল", "পরে ফোন", "এখন না", "এখন পারব না", "এখন পারবো না", "এখন বলতে পারছি না",
-    "একটু পরে", "আবার কল", "আবার ফোন", "পরে জানাব", "পরে জানাবো", "ব্যস্ত আছি",
-    "pore bolbo", "pore call", "ekhon na", "call back", "call me later", "call later", "call me back",
-    "not now", "another time", "in a bit", "call again", "later please", "little later",
+    "call back", "call me later", "call later", "call me back", "not now", "another time", "in a bit",
+    "call again", "later please", "little later",
 )
-LATER_WORDS: tuple[str, ...] = ("পরে", "ব্যস্ত", "later", "busy", "pore")
+LATER_WORDS: tuple[str, ...] = ("later", "busy")
+#: "an hour later", "later than mine", "later that day" — a time the caller wants, not "call me later".
+_TIME_LATER_RE = re.compile(
+    r"\b(?:\d+|an?|one|two|three|half an?|a few|few|couple of)\s+(?:hours?|minutes?|mins?|days?)\s+later\b"
+    r"|\blater\s+(?:than|that|in the|on|time|slot|appointment|today|tonight)\b|\ba (?:little|bit) later\s+(?:in|on)\b"
+)
 
 WRONG_NUMBER_PHRASES: tuple[str, ...] = (
-    "রং নাম্বার", "রং নম্বর", "ভুল নাম্বার", "ভুল নম্বর", "চিনি না", "চিনিনা", "চিনি নাই", "চিননা", "চিনিনাই",
-    "এই নামে কেউ নাই", "এই নামে কেউ নেই", "কেউ নাই", "কেউ নেই", "এখানে নাই", "এখানে নেই", "এই নামের কেউ",
     "wrong number", "wrong person", "don't know", "do not know", "dont know", "no one by that name",
     "nobody by that name", "no such person", "never heard", "doesn't live here", "does not live here",
-    "not here", "chini na", "chinina", "vul number", "bhul number", "wrong no",
+    "not here", "wrong no",
 )
 NOT_ME_PHRASES: tuple[str, ...] = (
-    "আমি না", "আমি নই", "আমি নাই", "আমি সে না", "আমি উনি না", "উনি না", "ও না", "আমি অন্য", "অন্য কেউ",
-    "উনি নাই", "উনি নেই", "উনি বাইরে", "উনি বাসায় নাই", "উনি বাসায় নেই", "ও নাই", "ও নেই", "ও বাইরে",
     "not me", "i am not", "i'm not", "im not", "this is not", "this isn't", "that's not me", "that is not me",
     "he's not here", "she's not here", "he is not here", "she is not here", "he's out", "she's out",
-    "not available", "ami na", "ami noi", "ami nai",
+    "not available",
 )
 KNOWS_PHRASES: tuple[str, ...] = (
-    "ওর ভাই", "ওর বোন", "ওর মা", "ওর বাবা", "ওর স্ত্রী", "ওর স্বামী", "ওর হাজবেন্ড", "ওর ওয়াইফ", "ওর বউ",
-    "ওনার ভাই", "ওনার বোন", "ওনার স্ত্রী", "ওনার স্বামী", "তার ভাই", "তার বোন", "তার স্ত্রী", "তার স্বামী",
-    "আমার ভাই", "আমার বোন", "আমার স্বামী", "আমার স্ত্রী", "আমার ছেলে", "আমার মেয়ে", "আমার বাবা", "আমার মা",
-    "চিনি", "হ্যাঁ চিনি", "জি চিনি", "বলে দিব", "বলে দিবো", "বলে দেব", "জানিয়ে দিব",
     "his brother", "her brother", "his sister", "her sister", "his wife", "her husband", "his mother",
     "her mother", "his father", "her father", "my brother", "my sister", "my husband", "my wife", "my son",
-    "my daughter", "i know", "yes i know", "i'll tell", "i will tell", "i'll let", "i will let", "chini",
+    "my daughter", "i know", "yes i know", "i'll tell", "i will tell", "i'll let", "i will let",
 )
-KNOWS_WORDS: tuple[str, ...] = ("চিনি", "চেনা", "chini")
+KNOWS_WORDS: tuple[str, ...] = ()
 
 IS_ME_PHRASES: tuple[str, ...] = (
-    "আমি বলছি", "জি বলছি", "হ্যাঁ বলছি", "আমিই", "আমি নিজেই", "আমিই বলছি",
-    "ami bolchi", "bolchi", "speaking", "this is me", "that's me", "it's me", "its me", "yes it's me",
+    "speaking", "this is me", "that's me", "it's me", "its me", "yes it's me",
     "this is he", "this is she", "yes speaking", "yes this is", "you are speaking",
 )
-IS_ME_WORDS: tuple[str, ...] = ("বলছি", "আমিই", "bolchi")
+IS_ME_WORDS: tuple[str, ...] = ()
 
 # "I didn't catch that" — a request to repeat, never a yes or a no.
 REPEAT_PHRASES: tuple[str, ...] = (
-    "বুঝলাম না", "বুঝি নাই", "বুঝিনি", "বুঝতে পারলাম না", "বুঝতে পারিনি", "বুঝতে পারছি না", "শুনতে পাইনি",
-    "শুনি নাই", "শুনতে পারিনি", "শুনতে পাচ্ছি না", "আবার বলেন", "আবার বলুন", "কী বললেন", "কি বললেন", "কিসের কথা",
-    "কী বলছেন", "কি বলছেন",
     "didn't get that", "didn't understand", "don't understand", "didn't hear", "couldn't hear", "can't hear",
     "cannot hear", "say again", "come again", "pardon", "what did you say", "sorry what", "excuse me",
-    "bujhlam na", "bujhi nai", "abar bolen",
 )
-REPEAT_WORDS: tuple[str, ...] = ("মানে", "pardon", "what", "huh")
+REPEAT_WORDS: tuple[str, ...] = ("pardon", "what", "huh")
 
 # Filler that carries no answer at all.
-BACKCHANNEL_WORDS: frozenset[str] = frozenset(
-    {"hmm", "hm", "mm", "mhm", "uh", "um", "er", "ah", "oh", "হুম", "হু", "উম", "আ", "এ", "হ্যালো", "hello", "hallo"}
-)
+BACKCHANNEL_WORDS: frozenset[str] = frozenset({"hmm", "hm", "mm", "mhm", "uh", "um", "er", "ah", "oh", "hello", "hallo"})
 # Lines transcription models are known to invent from silence / music.
 NOISE_PHRASES: tuple[str, ...] = (
     "thank you for watching", "thanks for watching", "subscribe", "like and subscribe", "see you in the next",
-    "সাবস্ক্রাইব", "দেখার জন্য ধন্যবাদ", "ধন্যবাদ দেখার জন্য", "www.", ".com", "transcribed by", "amara.org",
+    "transcribed by", "amara.org",
 )
 
 
@@ -148,7 +118,7 @@ NOISE_PHRASES: tuple[str, ...] = (
 
 
 def normalize(text: Any) -> str:
-    lowered = str(text or "").lower().replace("।", " ").replace("’", "'")
+    lowered = str(text or "").lower().replace("’", "'")
     lowered = _PUNCT_RE.sub(" ", lowered)
     return " ".join(lowered.split())
 
@@ -174,7 +144,7 @@ def scores(text: Any) -> dict[str, int]:
     return {
         "yes": _score(norm, toks, YES_PHRASES, YES_WORDS),
         "no": _score(norm, toks, NO_PHRASES, NO_WORDS),
-        "later": _score(norm, toks, LATER_PHRASES, LATER_WORDS),
+        "later": _score(_TIME_LATER_RE.sub(" ", norm), tokens(_TIME_LATER_RE.sub(" ", norm)), LATER_PHRASES, LATER_WORDS),
         "wrong_number": _score(norm, toks, WRONG_NUMBER_PHRASES, ()),
         "not_me": _score(norm, toks, NOT_ME_PHRASES, ()),
         "knows": _score(norm, toks, KNOWS_PHRASES, KNOWS_WORDS),
@@ -190,9 +160,9 @@ def classify(text: Any) -> set[str]:
     s = scores(text)
     labels: set[str] = set()
     if s["repeat"] >= PHRASE_SCORE or (s["repeat"] and not (s["yes"] or s["no"])):
-        # "বুঝলাম না" carries a "না" but is a request to repeat, not an answer.
+        # "didn't understand" carries a negation but is a request to repeat, not an answer.
         return {"repeat"}
-    # "no" inside "চিনি না" / "don't know" belongs to the wrong-number reading, not a cancel.
+    # "no" inside "don't know" belongs to the wrong-number reading, not a cancel.
     if s["wrong_number"]:
         labels.add("wrong_number")
         labels.add("not_me")
@@ -205,7 +175,7 @@ def classify(text: Any) -> set[str]:
         labels.add("later")
     yes, no = s["yes"], s["no"]
     if "wrong_number" in labels:
-        # "চিনি না" scores a "না" — it is not a cancellation.
+        # "no, don't know them" scores a "no" — it is not a cancellation.
         no = max(0, no - WORD_SCORE)
     if yes > no and yes >= WORD_SCORE:
         labels.add("yes")
@@ -222,7 +192,7 @@ def classify(text: Any) -> set[str]:
 
 def _relationship_phrase(text: Any) -> bool:
     norm = f" {normalize(text)} "
-    return any(f" {normalize(p)} " in norm for p in KNOWS_PHRASES if p not in ("চিনি", "হ্যাঁ চিনি", "জি চিনি", "i know", "yes i know", "chini"))
+    return any(f" {normalize(p)} " in norm for p in KNOWS_PHRASES if p not in ("i know", "yes i know"))
 
 
 _OUTCOME_LABEL: dict[str, str] = {
@@ -238,7 +208,6 @@ _OUTCOME_LABEL: dict[str, str] = {
 }
 
 
-_QUESTION_TAIL_RE = re.compile(r"(?:\sকি|\sকি\s?না|\sনাকি|\?)$")
 _QUESTION_HEAD_RE = re.compile(
     r"^(?:am i|is this|is it|are you|do you|would you|should i|can i|could you|will you|what|which|when|where|how|why)\b"
 )
@@ -249,31 +218,30 @@ def looks_like_question(text: Any) -> bool:
     norm = normalize(text)
     if len(norm.split()) < 3:
         return False
-    return bool(_QUESTION_TAIL_RE.search(norm) or _QUESTION_HEAD_RE.match(norm) or "?" in str(text or ""))
+    return bool(_QUESTION_HEAD_RE.match(norm) or "?" in str(text or ""))
 
 
-def supports(text: Any, outcome: str) -> bool:
-    """True when the caller's line carries the answer ``outcome`` needs."""
+def supports(text: Any, outcome: str, *, identity: bool = True) -> bool:
+    """True when the caller's line carries the answer ``outcome`` needs.
+
+    ``identity=False`` (inbound calls, no "is this X?" check): "my husband" is not identity talk."""
     label = _OUTCOME_LABEL.get(str(outcome or "").lower())
     if label is None:
         return False
     labels = classify(text)
-    identity_talk = bool(labels & {"not_me", "knows", "wrong_number"})
+    identity_talk = identity and bool(labels & {"not_me", "knows", "wrong_number"})
     if label == "yes":
-        # A yes with a "later" attached ("হ্যাঁ, কিন্তু পরে") is not a confirmation,
+        # A yes with a "later" attached ("yes, but later") is not a confirmation,
         # and neither is a question that merely contains "confirm".
         return "yes" in labels and "later" not in labels and not identity_talk and not looks_like_question(text)
     if label == "no":
-        # "আমি না, ওর ভাই" is about identity, not about the order.
+        # "not me, I'm his brother" is about identity, not about the order.
         return "no" in labels and "later" not in labels and not identity_talk and not looks_like_question(text)
     return label in labels
 
 
-_CANCEL_WORDS = ("cancel", "cancelled", "canceled", "বাতিল", "ক্যান্সেল", "ক্যানসেল")
-_KEEP_PHRASES = (
-    "don't cancel", "do not cancel", "dont cancel", "no don't", "keep it", "keep the appointment", "keep my",
-    "বাতিল করবেন না", "বাতিল করো না", "বাতিল কইরেন না", "রেখে দিন", "রেখে দেন", "থাক",
-)
+_CANCEL_WORDS = ("cancel", "cancelled", "canceled")
+_KEEP_PHRASES = ("don't cancel", "do not cancel", "dont cancel", "no don't", "keep it", "keep the appointment", "keep my")
 
 
 def declines_cancel(text: Any) -> bool:
@@ -286,7 +254,7 @@ def declines_cancel(text: Any) -> bool:
 
 
 def affirms_cancel(text: Any) -> bool:
-    """A yes to "shall I cancel it?" — including "yes, cancel it" / "বাতিল করে দিন"."""
+    """A yes to "shall I cancel it?" — including "yes, cancel it"."""
     if is_unusable(text) or declines_cancel(text) or looks_like_question(text):
         return False
     norm = normalize(text)
@@ -314,8 +282,8 @@ def looks_like_noise(text: Any) -> bool:
     if any(marker in norm for marker in NOISE_PHRASES):
         return True
     toks = norm.split()
-    if all(tok.isdigit() for tok in toks) and len(toks) > 3:
-        return True
+    if all(tok.isdigit() for tok in toks) and len(toks) > 15:
+        return True  # a phone number read out (≤ 15 groups) is an answer, a long digit run is not
     return _has_repetition_loop(toks)
 
 
@@ -326,7 +294,8 @@ def _has_repetition_loop(toks: list[str]) -> bool:
             return True
     if len(toks) >= 8:
         bigrams = Counter(zip(toks, toks[1:]))
-        if bigrams.most_common(1)[0][1] >= 4:
+        # "and then" four times in a long story is speech; the same pair making up most of a short line is a loop.
+        if bigrams.most_common(1)[0][1] >= max(4, len(toks) // 4):
             return True
     return False
 
@@ -397,3 +366,164 @@ def is_prompt_echo(text: Any, prompt: Any, *, min_tokens: int = 3) -> bool:
         return True
     text_set, prompt_set = set(norm.split()), set(prompt_norm.split())
     return len(prompt_set) >= 6 and len(text_set & prompt_set) >= int(len(prompt_set) * 0.75)
+
+
+# --- "I'm done" and "get me a person" ------------------------------------------------
+
+_DONE_PHRASES = (
+    "that's all", "that is all", "that's it", "that is it", "nothing else", "no thanks", "no thank you",
+    "i'm good", "i am good", "i'm fine", "all set", "that's everything", "that'll be all", "that will be all",
+    "nope that's", "no that's", "that was all", "i'm all set", "we're good", "thats all", "thats it",
+)
+_BYE_WORDS = ("bye", "goodbye", "byebye", "cheers", "thanks", "thank", "you", "no", "nope", "nah", "that's", "all", "ok", "okay")
+_HUMAN_PHRASES = (
+    "real person", "a person", "a human", "speak to someone", "talk to someone", "speak with someone",
+    "talk with someone", "speak to a", "talk to a", "the manager", "a manager", "representative", "operator",
+    "receptionist", "someone else", "a real", "staff member", "customer service", "complaint", "complain",
+    "refund", "speak to the", "talk to the", "call me back", "have someone call",
+)
+
+
+def is_done(text: Any) -> bool:
+    """The caller has nothing more ("no thanks, that's all", "bye") — not a "no" with a new request in it."""
+    norm = normalize(text)
+    toks = tokens(norm)
+    if not toks or len(toks) > 8:
+        return False
+    if any(phrase in norm for phrase in _DONE_PHRASES):
+        return True
+    return "bye" in toks or "goodbye" in toks or all(tok in _BYE_WORDS for tok in toks)
+
+
+def asks_for_human(text: Any) -> bool:
+    """The caller asked for a person, a callback, or made a complaint (a transfer is justified)."""
+    norm = normalize(text)
+    return bool(norm) and any(phrase in norm for phrase in _HUMAN_PHRASES)
+
+
+_GOODBYE_PHRASES = (
+    "that's all i needed", "that is all i needed", "that's all i wanted", "that's all i need", "talk to you later",
+    "have a good day", "have a nice day", "have a great day", "see you", "take care", "thank you for your time",
+    "thanks for your time", "thanks anyway", "thank you anyway", "i'll look elsewhere", "i will look elsewhere",
+    "thank you for your help", "thanks for your help", "thank you for checking", "thanks for checking",
+)
+_REFUSAL_PHRASES = (
+    "rather not", "prefer not", "don't want to give", "dont want to give", "don't want to say", "dont want to say",
+    "not comfortable", "won't give", "wont give", "no comment", "skip that", "skip it", "not telling", "none of your business",
+    "don't want to share", "do not want to share", "i won't say", "not going to say", "not gonna say", "i'd rather keep",
+    "rather get a valuation", "rather get the valuation", "rather get your valuation", "not naming", "not sure yet", "haven't decided", "have not decided", "no idea",
+    "don't know yet", "dont know yet", "not ready to say", "would rather not", "prefer to wait", "rather wait",
+    "before naming", "rather not guess", "not guess", "not sure about that",
+)
+
+
+def says_goodbye(text: Any) -> bool:
+    """An explicit goodbye ("thanks, that's all I needed — bye")."""
+    norm = normalize(text)
+    toks = tokens(norm)
+    if not toks or len(toks) > 20:
+        return False
+    return bool({"bye", "goodbye", "byebye"} & set(toks)) or any(phrase in norm for phrase in _GOODBYE_PHRASES)
+
+
+def declines_detail(text: Any) -> bool:
+    """The caller won't give what was asked ("I'd rather not say")."""
+    norm = normalize(text)
+    return bool(norm) and any(phrase in norm for phrase in _REFUSAL_PHRASES)
+
+
+_ANOTHER_PHRASES = (
+    "another appointment", "another booking", "another visit", "another one", "another viewing", "another order",
+    "a second", "second one", "second appointment", "second booking", "second visit", "one more", "separate",
+    "also book", "book one for", "one for my",
+)
+_FAMILY_RE = re.compile(r"\bfor (?:my|our) (?:husband|wife|son|daughter|mom|mum|mother|dad|father|partner|friend|kid|child|children|brother|sister|boss|colleague)\b")
+
+
+def wants_another(text: Any) -> bool:
+    """A new, separate request ("a second visit for my husband") — not a change to the one just made."""
+    norm = normalize(text)
+    return bool(norm) and (any(phrase in norm for phrase in _ANOTHER_PHRASES) or bool(_FAMILY_RE.search(norm)))
+
+
+_REQUEST_WORDS = frozenset({
+    "book", "booking", "order", "reserve", "reservation", "table", "cancel", "change", "move", "reschedule", "message",
+    "appointment", "schedule", "buy", "rent", "sell", "selling", "need", "want", "like", "looking", "leave", "pickup",
+    "delivery", "deliver", "visit", "viewing", "repair", "fix", "check", "status", "help", "speak", "talk",
+})
+
+
+def states_request(text: Any) -> bool:
+    """The caller says what they want ("I'd like to order", "can I book …") — not just "is this the pizza place?"."""
+    return bool(set(tokens(text)) & _REQUEST_WORDS)
+
+
+_CHECK_PHRASES = ("is this", "is that", "are you", "am i speaking", "am i talking", "can you hear", "hello", "hi there", "anyone there")
+
+
+def is_greeting_check(text: Any) -> bool:
+    """"Hello? Is this the pizza place?" — checking who answered, not asking for anything."""
+    norm = normalize(text)
+    return bool(norm) and len(tokens(norm)) <= 8 and any(p in norm for p in _CHECK_PHRASES) and not states_request(norm)
+
+
+def dialed_wrong(text: Any) -> bool:
+    """An inbound caller who reached the wrong business ("sorry, wrong number")."""
+    norm = normalize(text)
+    return any(p in norm for p in ("wrong number", "dialed the wrong", "dialled the wrong", "misdialed", "misdialled", "called the wrong"))
+
+
+_EARLIEST_PHRASES = ("first available", "earliest", "soonest", "next available", "first opening", "whichever day", "any day", "first free")
+
+
+def wants_earliest(text: Any) -> bool:
+    """"Whatever's first available" — the caller leaves the day to us."""
+    norm = normalize(text)
+    return bool(norm) and any(p in norm for p in _EARLIEST_PHRASES)
+
+
+_CHANGE_WORDS = frozenset({"move", "change", "reschedule", "instead", "switch", "push", "earlier", "later", "different"})
+
+
+def wants_change(text: Any) -> bool:
+    """"Can you move it to Thursday instead?" — a change to something already arranged."""
+    return bool(set(tokens(text)) & _CHANGE_WORDS)
+
+
+_ASKING_PHRASES = (
+    "just looking", "just asking", "just wanted to ask", "just wondering", "quick question", "how much", "pricing",
+    "what does it cost", "what do you charge", "what's your price", "only wanted to know", "just want to know", "not booking",
+)
+_BOOKING_WORDS = frozenset({"book", "booking", "schedule", "appointment", "come", "visit", "reserve", "order"})
+
+
+def just_asking(text: Any) -> bool:
+    """A question about prices or details with no wish to book ("just looking for pricing — how much is it?")."""
+    norm = normalize(text)
+    if not norm or not any(p in norm for p in _ASKING_PHRASES):
+        return False
+    return "not booking" in norm or not (set(tokens(norm)) & _BOOKING_WORDS)
+
+
+_NAME_RE = re.compile(r"(?i:\b(?:i'?m|i am|my name is|this is|it's|name's))\s+([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]+)?)")
+_NOT_NAMES = frozenset({"Just", "Calling", "Looking", "Not", "Sorry", "Fine", "Good", "Done", "Here", "Busy", "Interested", "Happy", "Okay", "Ok"})
+
+
+def spoken_name(text: Any) -> str:
+    """"I'm Emma Stone" / "my name is Emma" → the name as said (capitalised words only), else ""."""
+    match = _NAME_RE.search(str(text or "").replace("\u2019", "'"))
+    if not match or match.group(1).split()[0] in _NOT_NAMES:
+        return ""
+    return match.group(1)
+
+
+_FOR_SOMEONE_RE = re.compile(
+    r"(?i:\bfor (?:my|our) (?:husband|wife|son|daughter|mom|mum|mother|dad|father|partner|friend|kid|child|brother|sister|boss|colleague))"
+    r"\s*,?\s*(?:named\s+|called\s+)?([A-Z][a-z'-]+(?:\s+[A-Z][a-z'-]+)?)"
+)
+
+
+def named_other(text: Any) -> str:
+    """"…for my husband, Mark Stone" → "Mark Stone" (the person a new request is for), else ""."""
+    match = _FOR_SOMEONE_RE.search(str(text or "").replace("\u2019", "'"))
+    return match.group(1) if match else ""

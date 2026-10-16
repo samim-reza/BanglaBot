@@ -27,7 +27,8 @@
   }).catch(function () {});
 
   function build(cfg) {
-    var color = cfg.color || "#0f766e";
+    // Only a plain hex colour may reach the <style> block below.
+    var color = /^#[0-9a-fA-F]{6}$/.test(String(cfg.color || "")) ? cfg.color : "#0f766e";
     var host = document.createElement("div");
     host.setAttribute("data-agent-widget", key);
     host.style.cssText = "position:fixed;bottom:20px;" + (cfg.position === "left" ? "left" : "right") + ":20px;z-index:2147483000;";

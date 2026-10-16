@@ -11,7 +11,6 @@ import { Pagination } from "@/components/pagination";
 import { RecordingPlayer } from "@/components/recording-player";
 import { OutcomeBadge } from "@/components/status-badge";
 import { Select } from "@/components/ui/select";
-import { languageLabel } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { channelLabel, formatInZone, outcomeLabel, t } from "@/lib/vertical";
 import { useWorkspace } from "@/lib/workspace";
@@ -93,7 +92,6 @@ function CallRow({ log, timezone, recordLabel }: { log: CallLog; timezone: strin
             ) : (
               <span>No {recordLabel.toLowerCase()} linked</span>
             )}
-            {log.language && <span>{languageLabel(log.language)}</span>}
           </div>
           <ConversationTranscript transcript={log.transcript} className="max-h-96 overflow-y-auto" />
           {log.recording_sid && <RecordingPlayer logId={log.id} load={callsApi.recordingObjectUrl} />}

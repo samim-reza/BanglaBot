@@ -11,50 +11,51 @@ from typing import Any, Callable, Mapping
 
 from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
+from app.services.sms import policy as sms_policy
 from app.skills.base import BoundSkill
 from app.skills.library.choice import ChoiceSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import line
 from app.verticals.base import FieldSpec, L
 from app.verticals.common import money
 
 MODES = (
-    ("off", L("No payment on the call", "কলে কোনো পেমেন্ট নয়")),
-    ("at_venue", L("Pay on arrival", "এসে পেমেন্ট")),
-    ("caller_choice", L("Caller chooses: online or on arrival", "কলার বেছে নেবেন")),
-    ("online_required", L("Online payment required", "অনলাইন পেমেন্ট বাধ্যতামূলক")),
+    ("off", L("No payment on the call")),
+    ("at_venue", L("Pay on arrival")),
+    ("caller_choice", L("Caller chooses: online or on arrival")),
+    ("online_required", L("Online payment required")),
 )
 SOURCES = (
-    ("fee", L("The item's price / fee", "ফি / দাম")),
-    ("deposit", L("A deposit", "অগ্রিম")),
-    ("fixed", L("A fixed amount", "নির্দিষ্ট অঙ্ক")),
+    ("fee", L("The item's price / fee")),
+    ("deposit", L("A deposit")),
+    ("fixed", L("A fixed amount")),
 )
 
 
 class PaymentSkill(ChoiceSkill):
     key = "payment"
     slot = "payment_method"
-    label = L2("Payment", "পেমেন্ট")
-    description = L2("Collect payment: on arrival, online by text link, or the caller's choice.", "এসে, অনলাইন লিংকে, বা কলারের পছন্দে পেমেন্ট।")
+    label = L("Payment")
+    description = L("Collect payment: on arrival, online by text link, or the caller's choice.")
     default_enabled = False
     options = (
-        FieldSpec("mode", L("How callers pay", "পেমেন্ট পদ্ধতি"), "select", options=MODES, default="at_venue"),
-        FieldSpec("amount_source", L("Amount", "অঙ্ক"), "select", options=SOURCES, default="fee"),
-        FieldSpec("deposit_amount", L("Deposit", "অগ্রিম"), "money"),
-        FieldSpec("fixed_amount", L("Fixed amount", "নির্দিষ্ট অঙ্ক"), "money"),
-        FieldSpec("hold_minutes", L("Hold an unpaid booking (minutes)", "অপরিশোধিত বুকিং ধরে রাখা (মিনিট)"), "number", default=30),
+        FieldSpec("mode", L("How callers pay"), "select", options=MODES, default="at_venue"),
+        FieldSpec("amount_source", L("Amount"), "select", options=SOURCES, default="fee"),
+        FieldSpec("deposit_amount", L("Deposit"), "money"),
+        FieldSpec("fixed_amount", L("Fixed amount"), "money"),
+        FieldSpec("hold_minutes", L("Hold an unpaid booking (minutes)"), "number", default=30),
     )
     defaults = {"mode": "at_venue", "amount_source": "fee", "hold_minutes": 30}
     slots = (SlotSpec("payment_method", "online = pay now by a texted link, at_venue = pay on arrival. Only if they choose.", {"type": "string", "enum": ["online", "at_venue"]}),)
     lines = (
-        line("ask", "Would you like to pay {amount} online now by a link we text you, or pay when you arrive?", "আপনি কি এখনই অনলাইনে লিংকে {amount} পরিশোধ করবেন, নাকি এসে দেবেন?", label="Ask how to pay", variables=("amount",)),
-        line("readback_venue", "The {amount} is paid when you arrive.", "{amount} এসে পরিশোধ করবেন।", label="Read-back (on arrival)", variables=("amount",)),
-        line("readback_online", "We'll text you a payment link for {amount}.", "{amount} পরিশোধের লিংক এসএমএস করে পাঠাব।", label="Read-back (online)", variables=("amount",)),
-        line("readback_required", "To confirm, we'll text you a payment link for {amount}; we hold the booking for {hold} minutes.", "নিশ্চিত করতে {amount} পরিশোধের লিংক এসএমএস করব; বুকিং {hold} মিনিট ধরে রাখব।", label="Read-back (online required)", variables=("amount", "hold")),
-        line("closing_online", "Please pay using the link in your texts.", "এসএমএস-এর লিংক থেকে পেমেন্টটা করে নেবেন।", label="Closing (online)", static=True),
+        line("ask", "Would you like to pay {amount} online now by a link we text you, or pay when you arrive?", label="Ask how to pay", variables=("amount",)),
+        line("readback_venue", "The {amount} is paid when you arrive.", label="Read-back (on arrival)", variables=("amount",)),
+        line("readback_online", "We'll text you a payment link for {amount}.", label="Read-back (online)", variables=("amount",)),
+        line("readback_required", "To confirm, we'll text you a payment link for {amount}; we hold the booking for {hold} minutes.", label="Read-back (online required)", variables=("amount", "hold")),
+        line("closing_online", "Please pay using the link in your texts.", label="Closing (online)", static=True),
     )
     synonyms = {
-        "online": ("online", "link", "now", "card", "bkash", "অনলাইন", "লিংক", "বিকাশ", "এখনই"),
-        "at_venue": ("arrive", "there", "cash", "later", "on arrival", "in person", "এসে", "ক্যাশ", "পরে"),
+        "online": ("online", "link", "now", "card"),
+        "at_venue": ("arrive", "there", "cash", "later", "on arrival", "in person"),
     }
     goal = "Find out whether they pay online now (texted link) or on arrival."
 
@@ -71,8 +72,18 @@ class PaymentSkill(ChoiceSkill):
         except (TypeError, ValueError):
             return 0.0
 
-    def method(self, b: BoundSkill, slots: dict[str, Any]) -> str:
+    @staticmethod
+    def link_reaches(ctx: CallContext, slots: dict[str, Any] | None = None) -> bool:
+        """A payment link goes out by text: the account's texts are on, the platform can send, and we have a number
+        (caller ID, or one given during the call — a website chat has no caller ID)."""
+        phone = str((slots or {}).get("phone") or "") or ctx.caller_number or str(ctx.record_value("customer_phone", "") or "")
+        return bool(phone) and bool(sms_policy.settings_of(ctx.merchant)["enabled"]) and sms_policy.platform_ready()
+
+    def method(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext | None = None) -> str:
         mode = b.opt("mode", "at_venue")
+        if ctx is not None and mode in ("online_required", "caller_choice") and not self.link_reaches(ctx, slots):
+            # No way to send the link: never promise one — the visit is paid in person.
+            return "at_venue"
         if mode == "online_required":
             return "online"
         if mode == "at_venue":
@@ -92,7 +103,7 @@ class PaymentSkill(ChoiceSkill):
         return b.opt("mode", "at_venue") != "off" and self.amount(b, slots, ctx) > 0
 
     def stage(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext) -> str | None:
-        if b.opt("mode", "at_venue") == "caller_choice" and not slots.get("payment_method"):
+        if b.opt("mode", "at_venue") == "caller_choice" and not slots.get("payment_method") and self.link_reaches(ctx, slots):
             return "payment_method"
         return None
 
@@ -103,16 +114,16 @@ class PaymentSkill(ChoiceSkill):
         if not self.applies(b, slots, ctx):
             return ""
         amount = money(self.amount(b, slots, ctx), ctx, language)
-        if b.opt("mode") == "online_required":
+        if b.opt("mode") == "online_required" and self.link_reaches(ctx, slots):
             return b.text("readback_required", language, amount=amount, hold=int(b.opt("hold_minutes", 30) or 30))
-        if self.method(b, slots) == "online":
+        if self.method(b, slots, ctx) == "online":
             return b.text("readback_online", language, amount=amount)
         return b.text("readback_venue", language, amount=amount)
 
     def commit_details(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext) -> dict[str, Any]:
         if not self.applies(b, slots, ctx):
             return {"payment": {"status": "not_required"}}
-        method = self.method(b, slots) or "at_venue"
+        method = self.method(b, slots, ctx) or "at_venue"
         details: dict[str, Any] = {
             "payment": {
                 "mode": b.opt("mode"),
@@ -124,11 +135,14 @@ class PaymentSkill(ChoiceSkill):
             }
         }
         if b.opt("mode") == "online_required":
-            details["_status"] = "pending"  # holds the slot until the link is paid
+            if method == "online":
+                details["_status"] = "pending"  # holds the slot until the link is paid
+            else:
+                details["payment"]["note"] = "Online payment is required, but texts can't be sent — take payment at the visit."
         return details
 
     def notes(self, b: BoundSkill, action, slots: dict[str, Any], ctx: CallContext, language: str) -> list[str]:  # noqa: ANN001
-        return [b.text("closing_online", language)] if self.applies(b, slots, ctx) and self.method(b, slots) == "online" else []
+        return [b.text("closing_online", language)] if self.applies(b, slots, ctx) and self.method(b, slots, ctx) == "online" else []
 
 
 __all__ = ["PaymentSkill"]

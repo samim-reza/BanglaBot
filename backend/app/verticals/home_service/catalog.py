@@ -8,7 +8,6 @@ from app.flows.context import CallContext, CatalogEntry
 from app.flows.scheduling import Availability, window_from_config
 from app.flows.timefmt import normalize_days
 from app.verticals.common import join_and, money, slot_start, when_phrase, window_phrase
-from app.voice.languages import normalize_language
 
 KIND_SERVICE = "service"
 KIND_BOOKING = "booking"
@@ -63,7 +62,7 @@ def window_label(key: str, ctx: CallContext, language: str) -> str:
     for raw in service_config(ctx).get("time_windows") or DEFAULT_WINDOWS:
         if isinstance(raw, dict) and raw.get("key") == key:
             span = window_phrase(raw.get("start"), raw.get("end"), language)
-            return f"{span}র মধ্যে" if normalize_language(language) == "bn" else f"between {span.replace(' to ', ' and ')}"
+            return f"between {span.replace(' to ', ' and ')}"
     return ""
 
 

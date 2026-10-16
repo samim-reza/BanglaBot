@@ -43,18 +43,18 @@ export function speechServerState(server: SpeechServer | undefined): HealthState
 export function engineItems(engine: VoiceEngine): HealthItem[] {
   const speechUp = engine.speech_server.configured ? Boolean(engine.speech_server.up) : undefined;
   const benched = benchedTts(engine);
-  const speech = (kind: "stt" | "tts", lang: "en" | "bn"): HealthItem => {
-    const chain = engine[kind][lang];
+  const speech = (kind: "stt" | "tts"): HealthItem => {
+    const chain = engine[kind].en;
     const state = chainState(chain, { speechUp, benched: kind === "tts" ? benched : undefined });
     return {
-      key: `${kind}-${lang}`,
-      label: `${kind.toUpperCase()} ${lang === "en" ? "EN" : "BN"}`,
+      key: kind,
+      label: kind.toUpperCase(),
       state,
       detail: chain.ready[0] ?? "No provider",
       href: "/admin/voice",
     };
   };
-  return [llmState(engine), speech("stt", "en"), speech("stt", "bn"), speech("tts", "en"), speech("tts", "bn")];
+  return [llmState(engine), speech("stt"), speech("tts")];
 }
 
 export function systemItems(health: SystemHealth): HealthItem[] {

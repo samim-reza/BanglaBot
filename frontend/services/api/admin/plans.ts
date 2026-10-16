@@ -27,7 +27,6 @@ export type CatalogTier = {
   included_chats: number;
   included_sms: number;
   phone_numbers: number;
-  included_languages: number;
   channels: string[];
   includes: string[];
   /** Marketing bullets. */

@@ -41,7 +41,7 @@ class PipelineLinesMixin:
 
     def preview_steps(self, ctx: CallContext, language: str) -> list[str]:
         lang = normalize_language(language)
-        steps = [f"{'শুভেচ্ছা' if lang == 'bn' else 'Greeting'}: \"{self.opening(ctx, lang)}\""]
+        steps = [f"Greeting: \"{self.opening(ctx, lang)}\""]
         for key, skills in self.cp.branches.items():
             branch = self.blueprint.branches[key]
             label = branch.label.get(lang) or branch.label.get("en") or key

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 
-import { BanglaBotMark } from "@/components/brand";
+import { BrandMark } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "@/lib/brand";
@@ -50,7 +50,7 @@ export function SiteHeader() {
           className="flex shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label={`${BRAND.name} home`}
         >
-          <BanglaBotMark compact />
+          <BrandMark compact />
           <span className="text-lg font-bold tracking-tight text-primary-dark">{BRAND.name}</span>
         </Link>
 

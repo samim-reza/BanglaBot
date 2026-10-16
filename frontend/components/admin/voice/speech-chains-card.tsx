@@ -55,7 +55,7 @@ function ChainRow({
   );
 }
 
-/** Speech-to-text and text-to-speech fallback chains per language, first choice on the left. */
+/** Speech-to-text and text-to-speech fallback chains, first choice on the left. */
 export function SpeechChainsCard({ engine }: { engine: VoiceEngine }) {
   const speechUp = engine.speech_server.configured ? Boolean(engine.speech_server.up) : undefined;
   const ttsStats: Record<string, TtsProviderStats> = {};
@@ -70,10 +70,8 @@ export function SpeechChainsCard({ engine }: { engine: VoiceEngine }) {
         <CardTitle>Speech chains</CardTitle>
       </CardHeader>
       <CardContent className="pt-0">
-        <ChainRow label="STT · EN" chain={engine.stt.en} speechUp={speechUp} />
-        <ChainRow label="STT · BN" chain={engine.stt.bn} speechUp={speechUp} />
-        <ChainRow label="TTS · EN" chain={engine.tts.en} stats={ttsStats} speechUp={speechUp} benched={benched} />
-        <ChainRow label="TTS · BN" chain={engine.tts.bn} stats={ttsStats} speechUp={speechUp} benched={benched} />
+        <ChainRow label="STT" chain={engine.stt.en} speechUp={speechUp} />
+        <ChainRow label="TTS" chain={engine.tts.en} stats={ttsStats} speechUp={speechUp} benched={benched} />
       </CardContent>
     </Card>
   );

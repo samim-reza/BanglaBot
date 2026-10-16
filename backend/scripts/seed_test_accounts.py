@@ -48,7 +48,7 @@ async def main() -> int:
     from scripts.simulate import SEEDS, MemorySession
 
     await bootstrap()
-    lines = ["BanglaBot test accounts", ""]
+    lines = ["Callisa test accounts", ""]
     async with AsyncSessionLocal() as db:
         admin = await db.scalar(select(AdminUser).where(AdminUser.username == ADMIN_USERNAME))
         if admin is not None:

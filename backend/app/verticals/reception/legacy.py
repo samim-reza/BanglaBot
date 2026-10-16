@@ -25,15 +25,12 @@ STAGE_PHONE = "phone"
 
 _LINES = {
     "readback": {
-        "bn": "তাহলে আপনার নাম {name}, আর আপনার বার্তা: {message}। আমাদের প্রতিনিধি {phone} নম্বরে ফোন করবেন — ঠিক আছে?",
         "en": "So your name is {name}, and your message is: {message}. A team member will call you on {phone} — is that right?",
     },
     "readback_own_number": {
-        "bn": "তাহলে আপনার নাম {name}, আর আপনার বার্তা: {message}। আমাদের প্রতিনিধি এই নম্বরেই আপনাকে ফোন করবেন — ঠিক আছে?",
         "en": "So your name is {name}, and your message is: {message}. A team member will call you back on this number — is that right?",
     },
     "help_guidance": {
-        "bn": "কলারের প্রশ্নের উত্তর দিন শুধু ব্যবসার তথ্য থেকে। যা জানা নেই বা কর্মীর দরকার (অর্ডারের অবস্থা, অভিযোগ), সেটা message-এ সেভ করুন।",
         "en": "Answer the caller from the business facts only. Anything you cannot answer or that needs staff (order status, complaints) — save it as message.",
     },
 }
@@ -136,12 +133,6 @@ class ReceptionFlow(StepFlow):
 
     def preview_steps(self, ctx: CallContext, language: str) -> list[str]:
         lang = normalize_language(language)
-        if lang == "bn":
-            return [
-                f"শুভেচ্ছা: \"{self.opening(ctx, lang)}\"",
-                "প্রশ্নের উত্তর: ব্যবসার তথ্য (সেটিংসের নলেজ) থেকে উত্তর দেয়।",
-                "বার্তা: যা উত্তর দেওয়া যায় না, তা নাম ও নম্বরসহ নোট করে — আপনার রেকর্ডে 'রিভিউ দরকার' হিসেবে আসে।",
-            ]
         return [
             f"Greeting: \"{self.opening(ctx, lang)}\"",
             "Questions: answered from the business facts (Settings → knowledge).",

@@ -8,22 +8,22 @@ from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
 from app.skills.base import BoundSkill
 from app.skills.library.choice import ChoiceSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import line
 from app.verticals.base import FieldSpec, L
 
 
 class CustomerTypeSkill(ChoiceSkill):
     key = "customer_type"
     slot = "customer_type"
-    label = L2("New or returning", "নতুন না পুরনো")
-    description = L2("Asks whether they've been here before (skipped when caller ID shows past visits).", "আগে এসেছেন কি না জিজ্ঞেস করে।")
+    label = L("New or returning")
+    description = L("Asks whether they've been here before (skipped when caller ID shows past visits).")
     default_enabled = False
-    options = (FieldSpec("detect_from_history", L("Recognise returning callers by phone number", "ফোন নম্বর দেখে পুরনো কলার চেনা"), "bool", default=True),)
+    options = (FieldSpec("detect_from_history", L("Recognise returning callers by phone number"), "bool", default=True),)
     defaults = {"detect_from_history": True}
-    lines = (line("ask", "Have you been with us before, or is this your first visit?", "আপনি কি আগে এসেছেন, নাকি এটাই প্রথম?", label="Ask new or returning", static=True),)
+    lines = (line("ask", "Have you been with us before, or is this your first visit?", label="Ask new or returning", static=True),)
     synonyms = {
-        "new": ("new", "first", "never", "নতুন", "প্রথম"),
-        "existing": ("existing", "returning", "been before", "before", "old patient", "regular", "পুরনো", "আগে এসেছি"),
+        "new": ("new", "first", "never"),
+        "existing": ("existing", "returning", "been before", "before", "old patient", "regular"),
     }
     volunteerable = frozenset({"customer_type"})
     goal = "Find out whether this is their first visit or they've been before."

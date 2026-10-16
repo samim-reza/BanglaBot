@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 
 const PIPELINE = [
   { icon: Mic, title: "Caller speaks", body: "On your number, or typed in a chat." },
-  { icon: AudioLines, title: "Speech becomes text", body: "The caller's words are transcribed in the account's language." },
+  { icon: AudioLines, title: "Speech becomes text", body: "The caller's words are transcribed as they speak." },
   { icon: BookOpen, title: "One AI turn, your data", body: "The next step is decided against your catalog, knowledge and schedule." },
   { icon: Volume2, title: "Reply is spoken", body: "Scripted lines play from a voice cache; the rest is synthesised." },
   { icon: FileText, title: "Outcome is written", body: "Booking, lead or follow-up saved, with recording and transcript." },

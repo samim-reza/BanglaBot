@@ -1,4 +1,4 @@
-# Testing BanglaBot v2 for free
+# Testing Callisa v2 for free
 
 Everything below runs on free tiers or on your laptop. Nothing here needs a credit card.
 
@@ -22,7 +22,7 @@ Everything below runs on free tiers or on your laptop. Nothing here needs a cred
 ```
 
 - `--speech` starts the open-source speech server on your GPU (Parakeet STT + Kokoro TTS; first run
-  downloads ~2 GB; log in `/tmp/banglabot-speech.log`).
+  downloads ~2 GB; log in `/tmp/callisa-speech.log`).
 - `--route-telnyx` points +1 872 342 8160 at your ngrok URL (signed webhook) and back to production
   when you stop the script.
 - Without `--speech`, calls use the free cloud chain (Deepgram/Groq for STT, Gemini/edge for TTS).

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import json
 from typing import Any
 
@@ -48,6 +49,8 @@ class MessengerIn(BaseModel):
 async def connect_messenger(data: MessengerIn, merchant: Merchant = Depends(get_current_merchant), db: AsyncSession = Depends(get_db)):
     if not entitlements(merchant).has_channel(CHANNEL_MESSENGER):
         raise HTTPException(status_code=403, detail="The Messenger bot is an add-on — request it on the Add-ons page")
+    if await meta_channels.taken(db, "messenger", data.page_id, merchant.id):
+        raise HTTPException(status_code=409, detail="That Page is connected to another account")
     try:
         stored = await channel_service.connect_messenger(data.page_id, data.page_token.strip())
     except ValueError as exc:
@@ -140,8 +143,8 @@ async def meta_verify(
 ):
     """Meta's one-time check when the webhook URL is saved in the app dashboard."""
     expected = str(get_settings().meta_verify_token or "")
-    if mode == "subscribe" and expected and token == expected:
-        return PlainTextResponse(challenge)
+    if mode == "subscribe" and expected and hmac.compare_digest(token.encode(), expected.encode()):
+        return PlainTextResponse(challenge[:200])
     raise HTTPException(status_code=403, detail="Verification failed")
 
 

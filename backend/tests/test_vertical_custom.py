@@ -98,14 +98,14 @@ async def test_booking_branch_schedules_over_the_resource_and_books_with_its_cap
     tools, runtime, store = _call()
     result = await tools.execute("save_details", {"intent": "book"}, caller_text="I'd like to book")
     assert result.say == "What would you like to book? We have Private session and Group class."
-    result = await tools.execute("save_details", {"resource": "group class", "date": "2026-10-03", "time_pref": "18:00"}, caller_text="the group class tomorrow at 6")
+    result = await tools.execute("save_details", {"resource": "group class", "date": "2026-10-03", "time_pref": "18:00"}, caller_text="the group class tomorrow, Saturday at 6")
     assert runtime.slots["slot"] == datetime(2026, 10, 3, 18, 0, tzinfo=NY).isoformat() and result.say == "May I have your name?"
     await tools.execute("save_details", {"customer_name": "Ben"}, caller_text="Ben")
     await tools.execute("save_details", {"f_level": "advanced"}, caller_text="advanced")
     result = await tools.execute("save_details", {"f_injuries": "none"}, caller_text="none")
-    assert result.say == "So that's Group class for Ben, tomorrow at 6 PM. Shall I book it?"
+    assert result.say == "So that's Group class for Ben, tomorrow, Saturday at 6 PM. Shall I book it?"
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes please")
-    assert result.outcome == "booked" and result.say.startswith("You're booked for tomorrow at 6 PM.")
+    assert result.outcome == "booked" and result.say.startswith("You're booked for tomorrow, Saturday at 6 PM.")
     action = store.commits[0]["action"]
     assert action.fields["kind"] == "booking" and action.fields["catalog_item_id"] == "r-group" and action.fields["total_amount"] == 20
     assert action.capacity == ("r-group", datetime(2026, 10, 3, 18, 0, tzinfo=NY), 12)
@@ -116,7 +116,7 @@ async def test_booking_branch_schedules_over_the_resource_and_books_with_its_cap
 async def test_a_closed_day_is_refused_and_nothing_bookable_becomes_a_message():
     tools, runtime, _ = _call()
     result = await tools.execute("save_details", {"intent": "book", "resource": "I1", "date": "2026-10-04"}, caller_text="private session on Sunday")
-    assert "closed on Sunday" in result.say and runtime.stage == "date"
+    assert "isn't available on Sunday" in result.say and runtime.stage == "date"  # the resource, not "we're closed"
     tools, runtime, _ = _call(catalog=[])
     result = await tools.execute("save_details", {"intent": "book"}, caller_text="I want to book")
     assert runtime.slots["intent"] == "message" and result.say == "Sure — what message should I pass on to the team?"

@@ -69,10 +69,8 @@ class MerchantCreate(BaseModel):
     @field_validator("language")
     @classmethod
     def _language(cls, value: str) -> str:
-        code = normalize_language(value, fallback="")
-        if not code:
-            raise ValueError("language must be 'en' or 'bn'")
-        return code
+        # English is the only language; any other code is taken as English.
+        return normalize_language(value)
 
     @field_validator("vertical")
     @classmethod

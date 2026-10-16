@@ -6,7 +6,7 @@ import logging
 import structlog
 
 from app.core.config import get_settings
-from app.core.log_redaction import install_access_log_filter, redact_event
+from app.core.log_redaction import install_access_log_filter, install_stdlib_filter, redact_event
 
 
 def configure_logging() -> None:
@@ -26,3 +26,4 @@ def configure_logging() -> None:
         cache_logger_on_first_use=True,
     )
     install_access_log_filter()
+    install_stdlib_filter()

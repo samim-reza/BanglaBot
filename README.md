@@ -1,4 +1,4 @@
-# BanglaBot — AI voice & chat agents for small businesses
+# Callisa — AI voice & chat agents for small businesses
 
 One platform, four ready-made agents. Each account runs one **business engine**, chosen by the admin when the account is created:
 
@@ -18,7 +18,7 @@ Every engine also gets (some as add-ons — a plan is one product with limits, e
 - **recordings and transcripts**;
 - **bulk and scheduled outbound** calls;
 
-Accounts are English by default (Bangla is supported). Each account has a **region preset** that sets time zone, currency, emergency number, phone format and English accent.
+Agents speak English. Each account has a **region preset** that sets time zone, currency, emergency number, phone format and English accent.
 
 Pricing, unit economics and go-to-market: [docs/pricing.md](docs/pricing.md).
 
@@ -38,7 +38,7 @@ backend/app/
     runtime.py    per-call slot store; the current stage is DERIVED from the slots
     steps.py      shared slot-filling machinery: yes/no fast paths, read-back → commit, amend
     scheduling.py sessions, slots, serials, capacity, nearest-slot picking
-    timefmt.py    dates/times as callers say and hear them (en + bn)
+    timefmt.py    dates/times as callers say and hear them
     hearing.py    did the caller's own words support a yes / no / cancel?
   verticals/    BUSINESS ENGINES plugged into the main engine
     ecommerce.py clinic.py real_estate.py home_service.py reception.py
@@ -95,6 +95,7 @@ cp .env.example .env   # fill OPENAI_API_KEY, AZURE_SPEECH_KEY/REGION, TELNYX_*,
 | DNS | cPanel zone `banglabot.xyz`: `@` A → Vercel, `www` CNAME → Vercel, `api` CNAME → Render; email `MX`/`mail` point at the cPanel server | |
 | Keep-awake | `.github/workflows/keep-awake.yml` pings `/health` every 10 minutes (Render free sleeps after 15 idle minutes) | |
 
+- The domains, the Render service and the Supabase project still carry the pre-rename `banglabot` name until a new domain is bought; both apps read their addresses from env (`NEXT_BACKEND_URL`, `PUBLIC_BASE_URL`, `FRONTEND_ORIGIN`).
 - Backend secrets live in Render → Environment (never in git). `PUBLIC_BASE_URL` is the Render address (Telnyx webhooks, calendar feeds); `FRONTEND_ORIGIN` lists the site origins (the first one is used for redirects); `TELNYX_AUTO_CONFIGURE_INBOUND=true` points the TeXML application at the hosted backend on every start.
 - Both Render and Vercel redeploy on every push to `main`.
 - The hosted backend and a local `./scripts/dev.sh` share the Supabase database, and both run the scheduled jobs: don't run them at the same time, or auto-calls and SMS reminders can go out twice. Incoming calls to the Twilio number go to the hosted backend; outbound calls from a local run still work through ngrok.

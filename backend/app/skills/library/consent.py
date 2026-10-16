@@ -10,30 +10,30 @@ from app.flows.base import Instruction
 from app.flows.context import CallContext
 from app.flows.steps import CONFIRMED, SlotSpec
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import line
 from app.verticals.base import FieldSpec, L
 
 MODES = (
-    ("in_readback", L("Read with the summary", "সারসংক্ষেপের সাথে পড়া হবে")),
-    ("separate", L("Ask as its own question", "আলাদা প্রশ্ন হিসেবে")),
+    ("in_readback", L("Read with the summary")),
+    ("separate", L("Ask as its own question")),
 )
 
 
 class ConsentSkill(Skill):
     key = "consent"
     kind = "gate"
-    label = L2("Approval", "সম্মতি")
-    description = L2("Reads your terms and gets the caller's yes.", "আপনার শর্ত পড়ে কলারের সম্মতি নেয়।")
+    label = L("Approval")
+    description = L("Reads your terms and gets the caller's yes.")
     default_enabled = False
-    options = (FieldSpec("mode", L("How to ask", "কীভাবে জিজ্ঞেস করবে"), "select", options=MODES, default="in_readback"),)
+    options = (FieldSpec("mode", L("How to ask"), "select", options=MODES, default="in_readback"),)
     defaults = {"mode": "in_readback"}
     slots = (SlotSpec("consent", "true = the caller agrees to the terms just read, false = they don't. Only after the terms were read.", {"type": "boolean"}),)
     gated = ("consent",)
     yes_no = {"consent": "consent"}
     lines = (
-        line("terms", "Please note: cancellations need 24 hours' notice.", "দয়া করে মনে রাখবেন: বাতিল করতে ২৪ ঘণ্টা আগে জানাতে হবে।", label="Your terms", static=True),
-        line("ask", "Do you agree?", "আপনি কি রাজি?", label="Ask to agree (own question)", static=True),
-        line("declined", "No problem. Without that I can't complete the booking, but our team can help you. Goodbye.", "ঠিক আছে। এটা ছাড়া বুকিং করা যাচ্ছে না, আমাদের টিম সাহায্য করবে। ভালো থাকবেন।", label="If they don't agree", static=True),
+        line("terms", "Please note: cancellations need 24 hours' notice.", label="Your terms", static=True),
+        line("ask", "Do you agree?", label="Ask to agree (own question)", static=True),
+        line("declined", "No problem. Without that I can't complete the booking, but our team can help you. Goodbye.", label="If they don't agree", static=True),
     )
     goal = "Read the terms and get a clear yes or no."
 

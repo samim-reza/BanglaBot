@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 from app.flows.base import OUTCOME_BOOKED, OUTCOME_CANCELLED, OUTCOME_RESCHEDULED, CommitAction, CommitResult, Instruction
@@ -43,6 +45,15 @@ COMPACT_RULES = """Salon / spa receptionist: book, move or cancel appointments; 
 - intent: book | reschedule | cancel. Answer questions from the facts, then offer a booking.
 - You never know free times — save date/time_pref and the system proposes one."""
 
+
+
+#: Service notes that ask something of the client (read back so nobody turns up unprepared).
+_REQUIREMENT_RE = re.compile(r"\b(patch test|before|required|must|bring|arrive|consultation|no .* within)\b", re.IGNORECASE)
+
+
+def requirement_note(service: Any) -> str:
+    note = " ".join(str((service.get("notes") if service is not None else "") or "").split()).rstrip(".")
+    return f"Please note: {note[0].lower()}{note[1:]}." if note and _REQUIREMENT_RE.search(note) else ""
 
 class SalonFlow(PipelineFlow):
     RULES = RULES
@@ -90,6 +101,7 @@ class SalonFlow(PipelineFlow):
 
     # ---- read-back -------------------------------------------------------------------------------
     def readback_core(self, slots: dict[str, Any], ctx: CallContext, language: str) -> tuple[str, str]:
+        """New bookings also repeat a service's own requirement ("patch test 48 hours before")."""
         lang = normalize_language(language)
         confirm = self.lines
         intent = self.intent(slots)
@@ -109,7 +121,7 @@ class SalonFlow(PipelineFlow):
         price_part = confirm.text("price_part", lang, price=money(cost, ctx, lang)) if cost else ""
         key = "readback_book" if person is not None else "readback_book_any"
         summary = confirm.text(key, lang, when=when, price_part=price_part, minutes=str(duration(service)), **words)
-        return summary, confirm.text("confirm_book", lang)
+        return " ".join(part for part in (summary, requirement_note(service)) if part), confirm.text("confirm_book", lang)
 
     # ---- commit --------------------------------------------------------------------------------------
     def commit_core(self, branch: Branch | None, slots: dict[str, Any], ctx: CallContext) -> CommitAction | None:

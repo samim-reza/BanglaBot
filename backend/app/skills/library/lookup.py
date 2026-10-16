@@ -9,7 +9,7 @@ from app.flows.base import STAGE_DONE
 from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.verticals.common import join_and
 
 DescribeFn = Callable[[Any, CallContext, str], str]
@@ -17,12 +17,12 @@ DescribeFn = Callable[[Any, CallContext, str], str]
 
 class LookupSkill(Skill):
     key = "lookup"
-    label = L2("Find their booking", "বুকিং খোঁজা")
-    description = L2("Finds the caller's booking by phone number.", "ফোন নম্বর দিয়ে কলারের বুকিং খোঁজে।")
+    label = L("Find their booking")
+    description = L("Finds the caller's booking by phone number.")
     toggleable = False
     lines = (
-        line("which", "This number has {list} — which one do you mean?", "এই নম্বরে {list} আছে — কোনটার কথা বলছেন?", label="Ask which one", variables=("list",)),
-        line("none", "Sorry, I can't find a booking for this number. Would you like to make a new one?", "দুঃখিত, এই নম্বরে কোনো বুকিং খুঁজে পাচ্ছি না। নতুন বুকিং করতে চান?", label="Nothing found", static=True),
+        line("which", "This number has {list} — which one do you mean?", label="Ask which one", variables=("list",)),
+        line("none", "Sorry, I can't find a booking for this number. Would you like to make a new one?", label="Nothing found", static=True),
     )
     goal = "Find out which of the caller's bookings they mean."
 

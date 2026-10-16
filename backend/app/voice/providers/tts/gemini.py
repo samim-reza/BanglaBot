@@ -1,4 +1,4 @@
-"""Gemini text-to-speech (free tier on our key; speaks Bangla and English).
+"""Gemini text-to-speech (free tier on our key).
 
 ``generateContent`` with an AUDIO response returns 24 kHz PCM16 (``audio/L16``,
 little-endian) or a WAV; it is resampled to 8 kHz and μ-law encoded here. The

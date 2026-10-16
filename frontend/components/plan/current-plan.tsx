@@ -16,7 +16,6 @@ import { billingApi, formatApiError, type ChannelKey, type PlanView } from "@/se
 const FEATURE_LABELS: Record<string, string> = {
   google_calendar: "Google Calendar",
   recording_retention: "12-month recordings",
-  extra_language: "Extra language",
 };
 
 export function CurrentPlan({ plan, onChanged }: { plan: PlanView; onChanged: () => Promise<void> }) {

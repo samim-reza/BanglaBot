@@ -2,7 +2,7 @@
 
 Deepgram renders μ-law 8 kHz with no container, so the bytes go straight to the
 phone. Aura-2 speaks English (US, British, Australian, Filipino accents) and a
-few European languages and Japanese — not Bangla, so a Bangla line skips it.
+few European languages and Japanese.
 """
 
 from __future__ import annotations

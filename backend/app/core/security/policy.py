@@ -15,7 +15,7 @@ COMMON_PASSWORDS = frozenset(
         "welcome123", "welcome@123", "admin12345", "admin@1234", "admin@12345", "administrator",
         "changeme123", "changeme!!", "football123", "baseball123", "monkey12345", "dragon12345",
         "sunshine123", "princess123", "abc1234567", "abcdefghij", "abcd123456", "aa12345678",
-        "bangladesh", "bangladesh1", "bangladesh123", "dhaka12345", "banglabot123",
+        "bangladesh", "bangladesh1", "bangladesh123", "dhaka12345", "banglabot123", "callisa123", "callisa1234",
     }
 )
 

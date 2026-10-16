@@ -122,15 +122,16 @@ def _apply_filters(stmt: Select, *, status: OrderStatus | None, search: str, kin
         stmt = stmt.where(Order.kind == kind)
     if upcoming:
         stmt = stmt.where(Order.scheduled_at >= utcnow())
-    term = " ".join(str(search or "").split())
+    term = " ".join(str(search or "").split())[:120]
     if term:
-        like = f"%{term}%"
+        # % and _ are literal characters in a search box, not wildcards.
+        like = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         stmt = stmt.where(
             or_(
-                Order.customer_name.ilike(like),
-                Order.customer_phone.ilike(like),
-                Order.order_ref.ilike(like),
-                Order.items_summary.ilike(like),
+                Order.customer_name.ilike(like, escape="\\"),
+                Order.customer_phone.ilike(like, escape="\\"),
+                Order.order_ref.ilike(like, escape="\\"),
+                Order.items_summary.ilike(like, escape="\\"),
             )
         )
     return stmt

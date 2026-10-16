@@ -49,6 +49,10 @@ def event_for(record: Order, merchant: Merchant, item: CatalogItem | None) -> Fe
     if record.kind == "appointment":
         summary = f"{record.customer_name} · {item_name}" if item_name else record.customer_name
     elif record.kind == "booking":
+        service = str(details.get("service") or "")
+        if service and item_name and item_name != service:
+            # A salon books a person (the catalog item); the service is in the details.
+            item_name = f"{service} with {item_name}"
         summary = f"{item_name or record.items_summary} · {record.customer_name}"
     elif record.kind == "lead":
         summary = f"Viewing · {record.customer_name}" + (f" · {item_name}" if item_name else "")
@@ -119,7 +123,7 @@ async def feed(token: str, item_id: str | None = None) -> tuple[str, str] | None
             stmt = stmt.where(Order.catalog_item_id == item_id)
         records = list(await session.scalars(stmt.order_by(Order.scheduled_at)))
         item_ids = {r.catalog_item_id for r in records if r.catalog_item_id} | ({item_id} if item_id else set())
-        items = {i.id: i for i in await session.scalars(select(CatalogItem).where(CatalogItem.id.in_(item_ids)))} if item_ids else {}
+        items = {i.id: i for i in await session.scalars(select(CatalogItem).where(CatalogItem.merchant_id == merchant.id, CatalogItem.id.in_(item_ids)))} if item_ids else {}
     name = merchant.business_name
     if item_id and item_id in items:
         name = f"{merchant.business_name} — {items[item_id].name}"

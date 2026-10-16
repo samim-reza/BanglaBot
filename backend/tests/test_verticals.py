@@ -99,7 +99,7 @@ async def test_clinic_books_with_one_read_back():
     assert "Dr. James Carter" in result.say and "10 AM" in result.say and "140 dollars" in result.say
     assert runtime.stage == "confirm"
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes please")
-    assert result.outcome == "booked" and result.hang_up
+    assert result.outcome == "booked" and not result.hang_up and result.say.endswith("anything else I can help you with?")
     action = store.commits[0]["action"]
     assert action.fields["kind"] == "appointment" and action.fields["customer_phone"] == "+16175550100"
     assert action.fields["scheduled_at"] == datetime(2026, 10, 7, 10, 0, tzinfo=NY)
@@ -195,7 +195,7 @@ async def test_real_estate_buyer_books_a_viewing_scored_hot():
     # "Saturday" said on a Friday means tomorrow, even if the model picked next week.
     result = await tools.execute("save_details", {"visit_date": "2026-10-10", "visit_time_pref": "morning"}, caller_text="Saturday morning")
     assert runtime.slots["visit_date"] == "2026-10-03"
-    assert "a viewing of the 3-bed family home, Maple Grove tomorrow at 10 AM" in result.say
+    assert "a viewing of the 3-bed family home, Maple Grove tomorrow, Saturday at 10 AM" in result.say
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes")
     assert result.outcome == "booked"
     fields = store.commits[0]["action"].fields
@@ -207,9 +207,11 @@ async def test_real_estate_seller_becomes_a_lead():
     tools, runtime, store = _tools(_realty())
     await tools.execute("save_details", {"intent": "sell", "property_type": "land", "caller_name": "Rita", "location": "Oak Hills", "size": "one acre"}, caller_text="I want to sell one acre of land in Oak Hills, I'm Rita")
     result = await tools.execute("save_details", {"asking_price": "around 250 thousand"}, caller_text="around 250 thousand")
+    assert runtime.stage == "timeline" and "hoping to sell" in result.say  # sellers are asked their timeline too
+    result = await tools.execute("save_details", {"timeline": "1-3 months"}, caller_text="in the next couple of months")
     assert "So your land in Oak Hills, one acre, asking around 250 thousand" in result.say
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes")
-    assert result.outcome == "lead" and "about selling your property" in result.say
+    assert result.outcome == "lead" and "selling your property" in result.say
     assert store.commits[0]["action"].status == "needs_review"
 
 
@@ -225,7 +227,7 @@ async def test_home_service_books_an_arrival_window_with_the_call_out_charge():
     await tools.execute("save_details", {"service": "S1", "problem": "AC leaking", "customer_name": "Mark"}, caller_text="my AC is leaking, I'm Mark")
     await tools.execute("save_details", {"address": "42 Bergen St, Brooklyn", "area": "Brooklyn"}, caller_text="42 Bergen St Brooklyn")
     result = await tools.execute("save_details", {"date": "2026-10-03", "time_window": "morning"}, caller_text="tomorrow morning")
-    assert "tomorrow between 9 AM and 12 PM" in result.say and "89 dollars" in result.say and "120 dollars to 450 dollars" in result.say
+    assert "tomorrow, Saturday between 9 AM and 12 PM" in result.say and "89 dollars" in result.say and "120 dollars to 450 dollars" in result.say
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="ok yes book it")
     assert result.outcome == "booked"
     action = store.commits[0]["action"]

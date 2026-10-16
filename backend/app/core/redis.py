@@ -22,7 +22,18 @@ redis_client: Redis | None = None
 async def connect_redis() -> None:
     global redis_client
     settings = get_settings()
-    client = Redis.from_url(settings.redis_url, encoding="utf-8", decode_responses=True)
+    url = str(settings.redis_url or "").strip()
+    if not url:
+        # REDIS_URL= (blank) means "no Redis", not a boot failure.
+        redis_client = None
+        await logger.ainfo("redis_disabled")
+        return
+    try:
+        client = Redis.from_url(url, encoding="utf-8", decode_responses=True)
+    except ValueError as exc:
+        await logger.awarning("redis_unavailable", error=str(exc))
+        redis_client = None
+        return
     try:
         await client.ping()
     except Exception as exc:  # noqa: BLE001 — optional dependency

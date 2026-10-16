@@ -22,6 +22,7 @@ from app.services.calls.warmup import _warm_call_lines
 from app.services.telnyx_urls import log_recording_callback_url
 from app.verticals import flow_for
 from app.voice import prepared
+from app.voice.languages import normalize_language
 from app.voice.twiml import PublicUrlMissing, say_twiml, stream_twiml
 
 logger = structlog.get_logger(__name__)
@@ -60,7 +61,7 @@ async def answer_inbound_call(db: AsyncSession, *, to_number: str, from_number: 
         merchant_id=merchant.id,
         twilio_call_sid=telnyx.sid_key(call_sid),
         call_status="in-progress",
-        language=merchant.language or "en",
+        language=normalize_language(merchant.language),
         direction=DIRECTION_INBOUND,
         flow=flow.key,
         caller_number=from_number,
@@ -79,8 +80,33 @@ async def answer_inbound_call(db: AsyncSession, *, to_number: str, from_number: 
     await db.commit()
     prepared.put_call_snapshot(log.id, prepared.CallSnapshot(merchant=merchant, order=None, ctx=ctx, call_sid=call_sid, direction=DIRECTION_INBOUND))
     asyncio.create_task(_warm_call_lines(ctx, merchant))
+    asyncio.create_task(_release_if_no_media(merchant, log.id), name=f"{MEDIA_WATCHDOG}:{log.id}")
     await logger.ainfo("inbound_call_answered", merchant_id=merchant.id, flow=flow.key, call_sid=call_sid, caller=from_number)
     return stream_twiml(call_log_id=log.id)
+
+
+#: An answered inbound call whose audio never connects gives its line back after this long.
+NO_MEDIA_RELEASE_SECONDS = 60.0
+#: Task name prefix of that per-call timer (a timer, not unfinished work).
+MEDIA_WATCHDOG = "inbound-media-watchdog"
+
+
+async def _release_if_no_media(merchant: Merchant, call_log_id: str, *, after: float | None = None) -> None:
+    """Inbound calls have no status callback: if the media stream never opened, free the line (it would
+    otherwise stay taken for hours) and mark the call as failed. Single-process check (one worker)."""
+    if await prepared.wait_for_media(call_log_id, NO_MEDIA_RELEASE_SECONDS if after is None else after) or prepared.call_ended(call_log_id):
+        return
+    await concurrency.release(merchant, call_log_id)
+    try:
+        async with AsyncSessionLocal() as session:
+            log = await session.get(CallLog, call_log_id)
+            if log is not None and log.call_status == "in-progress" and not log.transcript:
+                log.call_status = "failed"
+                log.outcome = log.outcome or "no_media"
+                await session.commit()
+    except Exception as exc:  # noqa: BLE001 — freeing the line is what matters
+        await logger.awarning("inbound_no_media_log_failed", call_log_id=call_log_id, error=str(exc))
+    await logger.awarning("inbound_media_never_connected", call_log_id=call_log_id)
 
 
 async def start_call_recording(call_sid: str, call_log_id: str) -> None:

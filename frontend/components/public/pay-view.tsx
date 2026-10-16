@@ -13,11 +13,14 @@ import { money } from "@/lib/vertical";
 import { formatApiError, isApiRequestError, merchantToken, payApi, type PayPage } from "@/services/api";
 
 /** Set by the signup wizard before checkout, so a paid signup can continue to its status page. */
-export const SIGNUP_REFERENCE_KEY = "banglabot_signup_reference";
+export const SIGNUP_REFERENCE_KEY = "callisa_signup_reference";
+/** Pre-rename key, still read so a checkout started before the Callisa rename can continue. */
+export const LEGACY_SIGNUP_REFERENCE_KEY = "banglabot_signup_reference";
 
-function storedSignupReference(): string {
+export function storedSignupReference(): string {
   try {
-    return window.sessionStorage.getItem(SIGNUP_REFERENCE_KEY) ?? "";
+    const store = window.sessionStorage;
+    return store.getItem(SIGNUP_REFERENCE_KEY) ?? store.getItem(LEGACY_SIGNUP_REFERENCE_KEY) ?? "";
   } catch {
     return "";
   }

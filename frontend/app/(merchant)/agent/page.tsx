@@ -1,6 +1,6 @@
 "use client";
 
-/** Agent: language, voice and greeting, plus the call-flow editor (or the fixed flow's steps). */
+/** Agent: voice and greeting, plus the call-flow editor (or the fixed flow's steps). */
 
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";

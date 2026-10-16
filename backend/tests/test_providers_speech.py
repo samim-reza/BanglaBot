@@ -185,14 +185,14 @@ async def test_deepgram_stt_url_audio_and_utterance_events():
     assert {"type": "CloseStream"} in socket.json_sent() and socket.closed
 
 
-async def test_deepgram_stt_utterance_end_flushes_and_bangla_skips_keyterms():
+async def test_deepgram_stt_utterance_end_flushes_and_non_english_skips_keyterms():
     socket, seen = FakeSocket(), {}
-    stt = DeepgramSTT(api_key="k", language="bn", keyterms=["Demo"], connector=_connector(socket, seen))
+    stt = DeepgramSTT(api_key="k", language="es", keyterms=["Demo"], connector=_connector(socket, seen))
     await stt.connect()
     assert "keyterm" not in parse_qs(urlparse(seen["url"]).query)
-    assert stt.translate({"type": "Results", "is_final": True, "channel": {"alternatives": [{"transcript": "জি"}]}})[0].type == "speech_started"
+    assert stt.translate({"type": "Results", "is_final": True, "channel": {"alternatives": [{"transcript": "sure"}]}})[0].type == "speech_started"
     events = stt.translate({"type": "UtteranceEnd"})
-    assert [(e.type, e.text) for e in events] == [("speech_stopped", ""), ("completed", "জি")]
+    assert [(e.type, e.text) for e in events] == [("speech_stopped", ""), ("completed", "sure")]
     await stt.close()
 
 
@@ -270,18 +270,18 @@ async def test_groq_stt_drops_noise_and_pauses_on_quota():
 # ------------------------------------------------------------------ local STT
 async def test_local_stt_contract():
     socket, seen = FakeSocket(), {}
-    stt = LocalSTT(base_url="https://gpu.example.com/", key="sk", language="bn", prompt="জি।", connector=_connector(socket, seen))
+    stt = LocalSTT(base_url="https://gpu.example.com/", key="sk", language="en", prompt="Yes.", connector=_connector(socket, seen))
     await stt.connect()
     url = urlparse(seen["url"])
-    assert url.scheme == "wss" and url.path == "/stt" and parse_qs(url.query)["language"] == ["bn"]
+    assert url.scheme == "wss" and url.path == "/stt" and parse_qs(url.query)["language"] == ["en"]
     assert seen["headers"] == {"X-Speech-Key": "sk"}
     await stt.send_audio_b64("AAAA")
     await stt.clear_input()
     assert socket.json_sent() == [{"type": "audio", "audio": "AAAA"}, {"type": "clear"}]
-    for message in ({"type": "speech_started"}, {"type": "partial", "text": "জি"}, {"type": "completed", "text": "জি হ্যাঁ", "audio_seconds": 1.2}):
+    for message in ({"type": "speech_started"}, {"type": "partial", "text": "yes"}, {"type": "completed", "text": "yes sure", "audio_seconds": 1.2}):
         await socket.inbox.put(json.dumps(message))
     events = await _drain(stt, 3)
-    assert [(e.type, e.text) for e in events] == [("speech_started", ""), ("delta", "জি"), ("completed", "জি হ্যাঁ")]
+    assert [(e.type, e.text) for e in events] == [("speech_started", ""), ("delta", "yes"), ("completed", "yes sure")]
     assert stt.usage()["billed_seconds"] == 0.0
     await stt.close()
 
@@ -364,7 +364,7 @@ async def test_deepgram_tts_request_and_voices(tmp_path):
     assert dict(seen[0].url.params) == {"model": "aura-2-orion-en", "encoding": "mulaw", "sample_rate": "8000", "container": "none"}
     assert seen[0].headers["authorization"] == "Token dg" and json.loads(seen[0].content) == {"text": "Hello there."}
     assert tts.resolve_voice(voice="en-GB-SoniaNeural", persona="female", language="en") == "aura-2-pandora-en"
-    assert not tts.supports("bn")
+    assert tts.supports("en")
     assert (await tts.synthesize_ex("Hello there.", language="en", persona="male"))[1] == "l1" and len(seen) == 1
 
 
@@ -380,10 +380,10 @@ async def test_gemini_tts_decodes_l16_and_falls_back_to_second_model(tmp_path):
         return httpx.Response(200, json={"candidates": [{"content": {"parts": [part]}}]})
 
     tts = GeminiTTS(api_key="gm", cache=_tiers(tmp_path), transport=httpx.MockTransport(handler))
-    audio = await tts.synthesize("আপনার অর্ডারটি কনফার্ম করব?", language="bn", persona="female")
+    audio = await tts.synthesize("Shall I confirm your order?", language="en", persona="female")
     assert abs(len(audio) - 2400) <= 30  # 0.3 s at 8 kHz, one byte per sample
     body = json.loads(seen[-1].content)
-    assert body["contents"][0]["parts"][0]["text"] == "আপনার অর্ডারটি কনফার্ম করব?"  # bare text, no "Say:"
+    assert body["contents"][0]["parts"][0]["text"] == "Shall I confirm your order?"  # bare text, no "Say:"
     assert body["generationConfig"]["speechConfig"]["voiceConfig"]["prebuiltVoiceConfig"]["voiceName"] == "Kore"
     assert seen[0].headers["x-goog-api-key"] == "gm" and "gemini-3.8-flash-tts" in seen[-1].url.path
 
@@ -397,11 +397,11 @@ async def test_gemini_auth_error_is_unavailable(tmp_path):
 async def test_azure_tts_keeps_legacy_cache_keys_and_ssml(tmp_path):
     seen: list[httpx.Request] = []
     tts = AzureTTS(key="az", region="southeastasia", cache=_tiers(tmp_path), transport=_recording(b"\x66" * 320, seen))
-    await tts.synthesize("হ্যালো", language="bn", persona="female")
-    assert b'<voice name="bn-BD-NabanitaNeural">' in seen[0].content
+    await tts.synthesize("Hello", language="en", persona="female")
+    assert b'<voice name="en-US-AvaNeural">' in seen[0].content
     assert seen[0].headers["x-microsoft-outputformat"] == OUTPUT_FORMAT
-    legacy = TTSCache.make_key(provider="azure", voice="bn-BD-NabanitaNeural", language="bn-BD", output_format=OUTPUT_FORMAT, text="হ্যালো", extra="0%")
-    assert tts.key_for("হ্যালো", language="bn", persona="female") == legacy
+    legacy = TTSCache.make_key(provider="azure", voice="en-US-AvaNeural", language="en-US", output_format=OUTPUT_FORMAT, text="Hello", extra="0%")
+    assert tts.key_for("Hello", language="en", persona="female") == legacy
 
 
 async def test_local_tts_posts_persona_and_format(tmp_path):
@@ -465,24 +465,24 @@ async def test_fallback_quota_benches_immediately_and_all_benched_still_tries(tm
 
 async def test_fallback_skips_unsupported_language_and_serves_cache(tmp_path):
     cache = _tiers(tmp_path)
-    english_only = ScriptedEngine("english", cache, languages=frozenset({"en"}))
+    spanish_only = ScriptedEngine("spanish", cache, languages=frozenset({"es"}))
     anything = ScriptedEngine("any", cache)
-    chain = FallbackTTS([english_only, anything], cache=cache)
-    assert (await chain.synthesize_ex("জি", language="bn"))[1:] == ("any", "synth")
-    assert english_only.calls == 0 and not chain.is_open("english")
-    assert chain.is_cached("জি", language="bn")
-    assert (await chain.synthesize_ex("জি", language="bn"))[2] == "l1" and anything.calls == 1
-    assert chain.pin_lines(["Hello."], language="en", persona="female") == 2  # one key per English-capable engine
-    assert await chain.warm(["জি", "আর কিছু?"], language="bn", persona="female") == 1
+    chain = FallbackTTS([spanish_only, anything], cache=cache)
+    assert (await chain.synthesize_ex("Okay.", language="en"))[1:] == ("any", "synth")
+    assert spanish_only.calls == 0 and not chain.is_open("spanish")
+    assert chain.is_cached("Okay.", language="en")
+    assert (await chain.synthesize_ex("Okay.", language="en"))[2] == "l1" and anything.calls == 1
+    assert chain.pin_lines(["Hello."], language="en", persona="female") == 1  # one key per English-capable engine
+    assert await chain.warm(["Okay.", "Anything else?"], language="en", persona="female") == 1
 
 
 # ------------------------------------------------------------------ registry
-async def test_get_tts_for_uses_the_language_chain(monkeypatch, tmp_path):
+async def test_get_tts_for_uses_the_platform_chain(monkeypatch, tmp_path):
     from app.voice import tts as tts_shim
     from app.voice.providers import tts as registry
 
     registry.reset_registry(_tiers(tmp_path))
-    monkeypatch.setattr(registry, "get_provider_settings", lambda: SimpleNamespace(tts_chain="alpha,beta,ghost", tts_chain_bn="beta"))
+    monkeypatch.setattr(registry, "get_provider_settings", lambda: SimpleNamespace(tts_chain="alpha,beta,ghost"))
     monkeypatch.setattr(
         registry,
         "FACTORIES",
@@ -491,10 +491,10 @@ async def test_get_tts_for_uses_the_language_chain(monkeypatch, tmp_path):
     try:
         english = registry.get_tts_for("en")
         assert english.chain == ["alpha", "beta"] and registry.get_tts_for("en") is english
-        assert registry.get_tts_for("bn").chain == ["beta"] and registry.get_tts_for(None).chain == ["beta"]
+        assert registry.get_tts_for(None) is english
         assert await tts_shim.get_tts().synthesize("Hi.", language="en") == b"alpha" * 10
         assert tts_shim.tts_configured("en")
-        monkeypatch.setattr(registry, "get_provider_settings", lambda: SimpleNamespace(tts_chain="ghost", tts_chain_bn="ghost"))
+        monkeypatch.setattr(registry, "get_provider_settings", lambda: SimpleNamespace(tts_chain="ghost"))
         assert not registry.tts_available("en")
         with pytest.raises(TTSError):
             registry.get_tts_for("en")

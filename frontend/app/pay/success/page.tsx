@@ -6,20 +6,14 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CircleCheck } from "lucide-react";
 
-import { SIGNUP_REFERENCE_KEY } from "@/components/public/pay-view";
+import { storedSignupReference } from "@/components/public/pay-view";
 import { PublicNotice, PublicShell } from "@/components/public/public-shell";
 import { Button } from "@/components/ui/button";
 
 export default function PaySuccessPage() {
   const [reference, setReference] = useState("");
   useEffect(() => {
-    let stored = "";
-    try {
-      stored = window.sessionStorage.getItem(SIGNUP_REFERENCE_KEY) ?? "";
-    } catch {
-      stored = "";
-    }
-    setReference(stored || new URLSearchParams(window.location.search).get("reference") || "");
+    setReference(storedSignupReference() || new URLSearchParams(window.location.search).get("reference") || "");
   }, []);
   return (
     <PublicShell>

@@ -57,12 +57,12 @@ def test_dates_and_times_read_naturally():
     today = date(2026, 10, 2)
     assert date_phrase(date(2026, 10, 5), today, "en", month_first=True) == "Monday, October 5"
     assert date_phrase(date(2026, 10, 5), today, "en") == "Monday, 5 October"
-    assert date_phrase(date(2026, 10, 3), today, "bn") == "আগামীকাল, শনিবার"
-    assert time_phrase(time(18, 20), "bn", at=True) == "সন্ধ্যা ছয়টা বিশ মিনিটে"
+    assert date_phrase(date(2026, 10, 3), today, "en") == "tomorrow, Saturday"
+    assert time_phrase(time(18, 20), "en", at=True) == "at 6:20 PM"
     assert time_phrase(time(14, 30), "en") == "2:30 PM"
     assert days_phrase(["mon", "tue", "wed", "thu", "fri", "sat"], "en") == "Monday to Saturday"
     assert days_phrase(["sat", "mon", "wed"], "en") == "Monday, Wednesday and Saturday"
-    assert days_phrase(["sat", "mon", "wed"], "bn") == "শনি, সোম ও বুধবার"
+    assert days_phrase(["mon", "tue", "wed", "thu", "fri", "sat", "sun"], "en") == "every day"
     assert parse_date("tomorrow", today) == date(2026, 10, 3)
     assert snap_weekday(date(2026, 10, 10), "Saturday please", today) == date(2026, 10, 3)
     assert snap_weekday(date(2026, 10, 10), "next Saturday", today) == date(2026, 10, 10)
@@ -74,7 +74,8 @@ def test_region_presets_and_phone_normalization():
     assert region_defaults("GB") == {"region": "GB", "timezone": "Europe/London", "currency": "GBP", "emergency_number": "999"}
     assert get_region("nope").code == "INTL"
     assert normalize_phone("(212) 555-0100", "US") == "+12125550100"
-    assert normalize_phone("01712345678", "BD") == "+8801712345678"
+    assert normalize_phone("09876 543210", "IN") == "+919876543210"
+    assert get_region("BD").code == "INTL"  # retired preset: an old account falls back to International
     assert normalize_phone("+44 7700 900123", "US") == "+447700900123"
 
 
@@ -186,8 +187,8 @@ def test_named_days_are_read_from_the_callers_words():
 
     friday = date(2026, 10, 2)
     assert date_from_text("I want the children's doctor on Wednesday morning", friday) == date(2026, 10, 7)
-    assert date_from_text("আমি শিশু ডাক্তার দেখাতে চাই বুধবার সকালে", friday) == date(2026, 10, 7)
-    assert date_from_text("কাল সকালে আসব", friday) == date(2026, 10, 3)
+    assert date_from_text("can I come Wednesday?", friday) == date(2026, 10, 7)
+    assert date_from_text("day after tomorrow", friday) == date(2026, 10, 4)
     assert date_from_text("tomorrow please", friday) == date(2026, 10, 3)
     assert date_from_text("next Friday", date(2026, 10, 5)) == date(2026, 10, 16)
     assert date_from_text("Wednesday or Thursday", friday) is None

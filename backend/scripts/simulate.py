@@ -140,8 +140,6 @@ async def run(args: argparse.Namespace) -> int:
         print("No LLM provider configured (.env): set GROQ_API_KEY / GEMINI_API_KEY, or OPENAI_API_KEY + LLM_ALLOW_PAID=true")
         return 2
     merchant, items, records = await build(args.vertical)
-    if args.language:
-        merchant.language = args.language
     record = records[args.record] if args.direction == "outbound" else None
     ctx = context(merchant, items, records, direction=args.direction, record=record, caller=args.caller, chat=args.chat)
     flow = flow_for(merchant, args.direction)
@@ -193,7 +191,6 @@ def main() -> None:
     parser.add_argument("--say", action="append", help="scripted caller turn (repeatable)")
     parser.add_argument("--interactive", action="store_true", help="continue interactively after the scripted turns")
     parser.add_argument("--chat", action="store_true", help="website-chat channel instead of a phone call")
-    parser.add_argument("--language", choices=["en", "bn"])
     parser.add_argument("--taken", action="append", help="slot key that is already booked (forces a conflict)")
     sys.exit(asyncio.run(run(parser.parse_args())))
 

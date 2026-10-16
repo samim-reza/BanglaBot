@@ -10,7 +10,7 @@ import { AdminMeProvider } from "@/components/admin/shell/admin-me";
 import { NavList, WebsiteLink } from "@/components/admin/shell/nav";
 import { useNavBadges } from "@/components/admin/shell/use-nav-badges";
 import { useAppToast } from "@/components/app-toast";
-import { BanglaBotBrand, BanglaBotMark } from "@/components/brand";
+import { BrandMark, BrandName } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { clearAdminSession } from "@/services/api";
@@ -76,8 +76,8 @@ function ShellFrame({ pathname, isLogin, children }: { pathname: string; isLogin
               </button>
             )}
             <Link href={isLogin ? "/" : "/admin"} className="flex min-w-0 items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-              <BanglaBotMark compact />
-              <BanglaBotBrand subtitle="Platform admin" />
+              <BrandMark compact />
+              <BrandName subtitle="Platform admin" />
             </Link>
           </div>
           <div className="flex items-center gap-2">

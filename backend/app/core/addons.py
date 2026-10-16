@@ -21,7 +21,6 @@ from app.core.plans import (
     CHANNEL_MESSENGER,
     CHANNEL_WEB_CHAT,
     CHANNEL_WHATSAPP,
-    FEATURE_EXTRA_LANGUAGE,
     FEATURE_GOOGLE_CALENDAR,
     FEATURE_RECORDING_RETENTION,
     PRODUCT_VOICE,
@@ -42,7 +41,9 @@ PERIOD_ONCE = "once"
 PERIODS = (PERIOD_MONTH, PERIOD_ONCE)
 
 #: Allowances an add-on can raise, per unit.
-GRANT_KEYS = ("minutes", "chats", "sms", "numbers", "languages", "concurrent_calls")
+GRANT_KEYS = ("minutes", "chats", "sms", "numbers", "concurrent_calls")
+#: Add-ons no longer sold; dropped from a stored catalog (accounts holding one simply lose it).
+RETIRED_ADDONS = frozenset({"extra_language"})
 
 #: Most of any stackable add-on one account can hold.
 MAX_QUANTITY = 50
@@ -105,7 +106,7 @@ class Addon:
         for key in ("products", "verticals"):
             if key in values:
                 values[key] = tuple(values[key] or ())
-        values["grants"] = {str(k): int(v) for k, v in dict(values.get("grants") or {}).items()}
+        values["grants"] = {str(k): int(v) for k, v in dict(values.get("grants") or {}).items() if str(k) in GRANT_KEYS}
         return cls(**values)
 
 
@@ -134,8 +135,6 @@ DEFAULT_CATALOG: dict[str, Addon] = {
               stackable=True, grants={"concurrent_calls": 1}, products=(PRODUCT_VOICE,), visible=False, max_quantity=10, sort=65),
         Addon("google_calendar", "Two-way Google Calendar", CATEGORY_FEATURE, 9, PERIOD_MONTH, "Bookings sync both ways with Google.",
               feature=FEATURE_GOOGLE_CALENDAR, sort=70),
-        Addon("extra_language", "Extra language", CATEGORY_FEATURE, 19, PERIOD_MONTH, "Serve callers in a second language.",
-              feature=FEATURE_EXTRA_LANGUAGE, grants={"languages": 1}, sort=80),
         Addon("recording_retention", "12-month recordings", CATEGORY_FEATURE, 10, PERIOD_MONTH, "Keep call recordings for a year.",
               feature=FEATURE_RECORDING_RETENTION, products=(PRODUCT_VOICE,), sort=90),
         Addon("setup", "Done-for-you setup", CATEGORY_SERVICE, 299, PERIOD_ONCE, "We load your catalog, script and number.", sort=100),
@@ -247,6 +246,7 @@ __all__ = [
     "GRANT_KEYS",
     "MAX_QUANTITY",
     "PERIODS",
+    "RETIRED_ADDONS",
     "Addon",
     "available_for",
     "entitlements",

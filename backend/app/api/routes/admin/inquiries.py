@@ -8,6 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import require_admin
+from app.api.routes.admin.common import account_editors
 from app.db.session import get_db
 from app.models import SalesInquiry
 
@@ -53,7 +54,7 @@ async def list_inquiries(
 
 
 @router.patch("/inquiries/{inquiry_id}")
-async def update_inquiry(inquiry_id: str, data: SalesInquiryUpdate, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+async def update_inquiry(inquiry_id: str, data: SalesInquiryUpdate, _: dict = Depends(account_editors), db: AsyncSession = Depends(get_db)):
     row = await db.get(SalesInquiry, inquiry_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Inquiry not found")
@@ -67,7 +68,7 @@ async def update_inquiry(inquiry_id: str, data: SalesInquiryUpdate, _: dict = De
 
 
 @router.delete("/inquiries/{inquiry_id}", status_code=204)
-async def delete_inquiry(inquiry_id: str, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+async def delete_inquiry(inquiry_id: str, _: dict = Depends(account_editors), db: AsyncSession = Depends(get_db)):
     row = await db.get(SalesInquiry, inquiry_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Inquiry not found")

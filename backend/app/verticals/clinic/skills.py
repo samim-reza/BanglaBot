@@ -8,7 +8,7 @@ from app.flows.base import Instruction
 from app.flows.context import DIRECTION_INBOUND, CallContext
 from app.flows.steps import CONFIRMED, SlotSpec
 from app.skills.base import BoundSkill, Skill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.verticals.clinic.catalog import (
     KIND_DOCTOR,
     departments,
@@ -24,15 +24,15 @@ from app.verticals.common import join_and, when_phrase
 
 class DoctorSkill(Skill):
     key = "doctor"
-    label = L2("Doctor", "ডাক্তার")
-    description = L2("Finds the right doctor by name, department or problem; tells who's available.", "নাম, বিভাগ বা সমস্যা শুনে সঠিক ডাক্তার খোঁজে।")
+    label = L("Doctor")
+    description = L("Finds the right doctor by name, department or problem; tells who's available.")
     toggleable = False
     slots = (SlotSpec("doctor", "The doctor, as the ref from the doctor list (D1, D2, …) — or the doctor's name / department if unsure."),)
     volunteerable = frozenset({"doctor"})
     lines = (
-        line("doctor", "Which doctor would you like to see? We have {departments}.", "কোন ডাক্তার দেখাতে চান? আমাদের এখানে {departments} এর ডাক্তার আছেন।", label="Ask for a doctor", variables=("departments",)),
-        line("choose", "We have {names} — who would you like to see?", "আমাদের এখানে {names} আছেন — কার কাছে দেখাতে চান?", label="Several match", variables=("names",)),
-        line("unknown", "Sorry, I can't find that doctor. We have {departments}. Who would you like to see?", "দুঃখিত, এই নামে কোনো ডাক্তার পাচ্ছি না। আমাদের এখানে {departments} এর ডাক্তার আছেন। কাকে দেখাতে চান?", label="No match", variables=("departments",)),
+        line("doctor", "Which doctor would you like to see? We have {departments}.", label="Ask for a doctor", variables=("departments",)),
+        line("choose", "We have {names} — who would you like to see?", label="Several match", variables=("names",)),
+        line("unknown", "Sorry, I can't find that doctor. We have {departments}. Who would you like to see?", label="No match", variables=("departments",)),
     )
     goal = "Find out which doctor (save the D-ref)."
 
@@ -74,7 +74,7 @@ def appointment_line(record: Any, ctx: CallContext, language: str) -> tuple[str,
 def serial_part(serial: Any, ctx: CallContext, language: str, confirm: BoundSkill | None) -> str:
     if not serial or not uses_serials(ctx):
         return ""
-    template = confirm.line_text("serial_part", language) if confirm else ("সিরিয়াল নম্বর {serial}।" if language == "bn" else "Your queue number is {serial}.")
+    template = confirm.line_text("serial_part", language) if confirm else "Your queue number is {serial}."
     from app.skills.base import render
 
     return " " + render(template, {"serial": serial_words(serial, language)})
@@ -83,13 +83,13 @@ def serial_part(serial: Any, ctx: CallContext, language: str, confirm: BoundSkil
 class AttendSkill(Skill):
     key = "attend"
     kind = "gate"
-    label = L2("Will they come?", "আসবেন কি?")
+    label = L("Will they come?")
     toggleable = False
     slots = (SlotSpec("attend", "Outbound reminder: true = the patient will come, false = they cannot come.", {"type": "boolean"}, directions=("outbound",)),)
     gated = ("attend",)
     yes_no = {"attend": "attend"}
     lines = (
-        line("attend", "You have an appointment with {doctor} {when}.{serial_part} Will you be able to make it?", "{when} {doctor} এর কাছে আপনার অ্যাপয়েন্টমেন্ট আছে।{serial_part} আপনি কি আসছেন?", label="Reminder question", variables=("doctor", "when", "serial_part")),
+        line("attend", "You have an appointment with {doctor} {when}.{serial_part} Will you be able to make it?", label="Reminder question", variables=("doctor", "when", "serial_part")),
     )
     goal = "Will the patient come to this appointment?"
 
@@ -108,11 +108,11 @@ class AttendSkill(Skill):
 class NewTimeSkill(Skill):
     key = "new_time"
     kind = "gate"
-    label = L2("Another day?", "অন্য দিন?")
+    label = L("Another day?")
     toggleable = False
     slots = (SlotSpec("wants_new_time", "After saying they cannot come: true = they want another day, false = just cancel.", {"type": "boolean"}, directions=("outbound",)),)
     yes_no = {"wants_new_time": "wants_new_time"}
-    lines = (line("new_time", "Alright. Would you like another day instead?", "ঠিক আছে। অন্য কোনো দিনে অ্যাপয়েন্টমেন্ট নিতে চান?", label="Offer another day", static=True),)
+    lines = (line("new_time", "Alright. Would you like another day instead?", label="Offer another day", static=True),)
     goal = "They cannot come — would they like another day, or just cancel?"
 
     def applies(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext) -> bool:
@@ -141,21 +141,21 @@ class ClinicConfirmSkill(Skill):
     key = "confirm"
     kind = "line"
     toggleable = False
-    label = L2("Read-back and closing", "পড়ে শোনানো ও সমাপ্তি")
-    description = L2("What is read back before booking, and what is said after.", "বুকিংয়ের আগে যা পড়ে শোনানো হয় ও পরে যা বলা হয়।")
+    label = L("Read-back and closing")
+    description = L("What is read back before booking, and what is said after.")
     lines = (
-        line("readback_book", "So that's {doctor} for {patient}, {when}.{serial_part}{fee_part}", "তাহলে {patient} এর জন্য {when} {doctor} এর অ্যাপয়েন্টমেন্ট।{serial_part}{fee_part}", label="Read-back (new)", variables=("doctor", "patient", "when", "serial_part", "fee_part")),
-        line("confirm_book", "Shall I book it?", "কনফার্ম করব?", label="Confirm question (new)", static=True),
-        line("readback_reschedule", "So I'll move your appointment with {doctor} to {when}.{serial_part}", "তাহলে {doctor} এর অ্যাপয়েন্টমেন্টটা সরিয়ে {when} করে দিচ্ছি।{serial_part}", label="Read-back (move)", variables=("doctor", "when", "serial_part")),
-        line("confirm_reschedule", "Is that right?", "ঠিক আছে?", label="Confirm question (move)", static=True),
-        line("readback_cancel", "Shall I cancel {patient}'s appointment with {doctor}, {when}?", "{when} {doctor} এর সাথে {patient} এর অ্যাপয়েন্টমেন্টটা বাতিল করব?", label="Read-back (cancel)", variables=("patient", "doctor", "when")),
-        line("serial_part", "Your queue number is {serial}.", "সিরিয়াল নম্বর {serial}।", label="Queue number", variables=("serial",)),
-        line("fee_part", "The consultation fee is {fee}.", "ভিজিট ফি {fee}।", label="Fee", variables=("fee",)),
-        line("closing_booked", "Your appointment is booked for {when}.{serial_part} Please arrive a few minutes early.", "আপনার অ্যাপয়েন্টমেন্ট কনফার্ম হয়েছে — {when}।{serial_part} একটু আগে চলে আসবেন।", label="After booking", variables=("when", "serial_part")),
-        line("closing_rescheduled", "Your appointment is now {when}.{serial_part}", "আপনার অ্যাপয়েন্টমেন্ট {when} করা হয়েছে।{serial_part}", label="After moving", variables=("when", "serial_part")),
-        line("closing_confirmed", "Thank you, your appointment is confirmed. Please come on time.", "ধন্যবাদ, আপনার অ্যাপয়েন্টমেন্ট কনফার্ম করা হলো। সময়মতো চলে আসবেন।", label="Reminder confirmed", static=True),
-        line("closing_cancelled", "Alright, the appointment has been cancelled. Call us any time you need.", "ঠিক আছে, অ্যাপয়েন্টমেন্টটা বাতিল করা হলো। প্রয়োজনে আবার ফোন করবেন।", label="After cancelling", static=True),
-        line("knows_person", "We have an appointment at our clinic under the name {name} for this number. Do you know them?", "এই নম্বরে {name} এর নামে আমাদের ক্লিনিকে একটি অ্যাপয়েন্টমেন্ট আছে। আপনি কি ওনাকে চেনেন?", label="Someone else answered", variables=("name",)),
+        line("readback_book", "So that's {doctor} for {patient}, {when}.{serial_part}{fee_part}", label="Read-back (new)", variables=("doctor", "patient", "when", "serial_part", "fee_part")),
+        line("confirm_book", "Shall I book it?", label="Confirm question (new)", static=True),
+        line("readback_reschedule", "So I'll move your appointment with {doctor} to {when}.{serial_part}", label="Read-back (move)", variables=("doctor", "when", "serial_part")),
+        line("confirm_reschedule", "Is that right?", label="Confirm question (move)", static=True),
+        line("readback_cancel", "Shall I cancel {patient}'s appointment with {doctor}, {when}?", label="Read-back (cancel)", variables=("patient", "doctor", "when")),
+        line("serial_part", "Your queue number is {serial}.", label="Queue number", variables=("serial",)),
+        line("fee_part", "The consultation fee is {fee}.", label="Fee", variables=("fee",)),
+        line("closing_booked", "Your appointment is booked for {when}.{serial_part} Please arrive a few minutes early.", label="After booking", variables=("when", "serial_part")),
+        line("closing_rescheduled", "Your appointment is now {when}.{serial_part}", label="After moving", variables=("when", "serial_part")),
+        line("closing_confirmed", "Thank you, your appointment is confirmed. Please come on time.", label="Reminder confirmed", static=True),
+        line("closing_cancelled", "Alright, the appointment has been cancelled. Call us any time you need.", label="After cancelling", static=True),
+        line("knows_person", "We have an appointment at our clinic under the name {name} for this number. Do you know them?", label="Someone else answered", variables=("name",)),
     )
 
     def prefetch(self, b: BoundSkill, ctx: CallContext, language: str) -> list[str]:

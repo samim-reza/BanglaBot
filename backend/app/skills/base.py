@@ -28,6 +28,9 @@ from app.voice.languages import normalize_language
 
 #: Bump when a skill's behaviour changes so compiled pipelines are rebuilt.
 SKILL_LIB_VERSION = 1
+#: Slots the caller refused twice (skipped from then on) / how often each was refused. Never persisted ("_").
+DECLINED = "_declined"
+REFUSED = "_refused"
 
 _VAR = re.compile(r"\{([a-z_][a-z0-9_]{0,30})\}")
 
@@ -185,8 +188,9 @@ class Skill:
 
     def stage(self, b: BoundSkill, slots: dict[str, Any], ctx: CallContext) -> str | None:
         """The next thing this skill still needs, or ``None`` when done (= skipped)."""
+        declined = set(slots.get(DECLINED) or ())
         for key in self.required(b):
-            if slots.get(key) in (None, ""):
+            if slots.get(key) in (None, "") and key not in declined:
                 return key
         return None
 

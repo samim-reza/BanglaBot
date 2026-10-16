@@ -18,7 +18,7 @@ from app.skills.library.consent import ConsentSkill
 from app.skills.library.greet import FarewellSkill, GreetSkill
 from app.skills.library.intake import IntakeField, IntakeSkill
 from app.skills.library.intent import IntentSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.skills.library.message import MessageSkill
 from app.skills.library.notify import NotifySkill
 from app.skills.library.payment import PaymentSkill
@@ -45,9 +45,9 @@ def _who(slots: dict[str, Any], ctx: CallContext, language: str) -> str:
 
 def inbound_skills() -> dict[str, Any]:
     intake = IntakeSkill(
-        (IntakeField("customer_name", L2("Name", "নাম"), L2("May I have your name?", "আপনার নামটা বলবেন?"), required=True, long_answer=True),),
-        label=L2("Details", "তথ্য"),
-        description=L2("Their name plus the questions you add.", "নাম ও আপনার যোগ করা প্রশ্ন।"),
+        (IntakeField("customer_name", L("Name"), L("May I have your name?"), required=True, long_answer=True),),
+        label=L("Details"),
+        description=L("Their name plus the questions you add."),
         goal="Get the caller's details.",
     )
     intake.name_key = "customer_name"  # the name is a record column, not an intake detail
@@ -58,18 +58,20 @@ def inbound_skills() -> dict[str, Any]:
         IntentSkill(
             {"book": "book something from the list", "inquiry": "have the team get back to them about something", "message": "leave a message for the team"},
             lines=(
-                line("intent", "How can I help you today?", "আমি কীভাবে সাহায্য করতে পারি?", label="Ask what they need", static=True),
-                line("branch_off", "Sorry, I can't do that over the phone, but our team can help.", "দুঃখিত, এটা ফোনে করা যাচ্ছে না, আমাদের টিম সাহায্য করবে।", label="Not offered by phone", static=True),
+                line("intent", "How can I help you today?", label="Ask what they need", static=True),
+                line("branch_off", "Sorry, I can't do that over the phone, but our team can help.", label="Not offered by phone", static=True),
             ),
         ),
         ResourceSkill(),
         ScheduleSkill(
             availability=_availability,
             who=_who,
+            notice_who=_who,  # "Private yoga session isn't available on Sunday", not "we're closed"
+            who_notice="closed_day_resource",
             needed=lambda slots, ctx: slots.get("intent") == "book",
             lines=(
-                line("ask", "{who} is available {schedule}. Which day would you like?", "{who} পাওয়া যায় {schedule}। কোন দিন চান?", label="Ask for a day", variables=("who", "schedule")),
-                line("ask_short", "Which day would you like?", "কোন দিন চান?", label="Ask again", static=True),
+                line("ask", "{who} is available {schedule}. Which day would you like?", label="Ask for a day", variables=("who", "schedule")),
+                line("ask_short", "Which day would you like?", label="Ask again", static=True),
             ),
         ),
         intake,
@@ -93,12 +95,12 @@ INBOUND = Blueprint(
         "book": Branch(
             "book",
             ("resource", "schedule", "intake", "phone", "payment", "consent"),
-            label=L2("Booking", "বুকিং"),
+            label=L("Booking"),
             movable=(frozenset({"schedule", "intake", "phone"}),),
             before={"schedule": frozenset({"resource"}), "payment": frozenset({"resource", "schedule"}), "consent": frozenset({"payment"})},
         ),
-        "inquiry": Branch("inquiry", ("intake", "phone"), label=L2("Inquiry", "জিজ্ঞাসা")),
-        "message": Branch("message", ("message", "intake", "phone"), label=L2("Message", "বার্তা"), toggleable=False),
+        "inquiry": Branch("inquiry", ("intake", "phone"), label=L("Inquiry")),
+        "message": Branch("message", ("message", "intake", "phone"), label=L("Message"), toggleable=False),
     },
     default_branch="book",
     effects=("notify",),

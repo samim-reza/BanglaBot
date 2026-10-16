@@ -4,7 +4,8 @@
 numbers (last 3 digits kept), email addresses (domain kept), bearer tokens, API
 keys and signed tokens; values under secret-looking keys are masked entirely.
 ``AccessLogFilter`` does the same for uvicorn's access log lines, whose paths can
-carry calendar feed tokens and webhook signatures.
+carry calendar feed tokens and webhook signatures; ``RedactingFilter`` for every
+other stdlib record (httpx request lines carry query-string tokens).
 """
 
 from __future__ import annotations
@@ -26,7 +27,13 @@ _PHONE = re.compile(r"(?<![\w+])(?:\+\d(?:[\s.-]?\d){6,14}|\d{8,15})(?!\w)")
 _PATH_SECRETS = (
     (re.compile(r"(/api/public/calendar/)[^/?\s]+?(\.ics)"), r"\1" + MASK + r"\2"),
     (re.compile(r"(/telnyx/[a-z-]+(?:/[^/?\s]+)?/)[0-9a-f]{32}\b"), r"\1" + MASK),
-    (re.compile(r"(?i)([?&](?:token|key|state|code|access_token)=)[^&\s]+"), r"\1" + MASK),
+    (re.compile(r"(/pay/)[^/?\s]{16,}"), r"\1" + MASK),
+    # Our signed tokens anywhere (pay / verify links): base64url claims "." 64 hex.
+    (re.compile(r"\b[A-Za-z0-9_-]{16,}\.[0-9a-f]{64}\b"), MASK),
+    (
+        re.compile(r"(?i)([?&](?:token|key|state|code|access_token|api_key|client_secret|secret|sig|signature|password|hub\.verify_token)=)[^&\s]+"),
+        r"\1" + MASK,
+    ),
 )
 
 
@@ -90,4 +97,27 @@ def install_access_log_filter() -> None:
         access.addFilter(AccessLogFilter())
 
 
-__all__ = ["AccessLogFilter", "install_access_log_filter", "redact_event", "scrub"]
+class RedactingFilter(logging.Filter):
+    """Scrubs any stdlib record's final message (installed on the root handlers)."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            message = record.getMessage()
+        except Exception:  # noqa: BLE001 — a malformed record still gets logged
+            return True
+        cleaned = scrub(message)
+        if cleaned != message:
+            record.msg, record.args = cleaned, ()
+        return True
+
+
+def install_stdlib_filter() -> None:
+    """Root handlers scrub every record; httpx / httpcore request lines (full URLs) stay quiet."""
+    for handler in logging.getLogger().handlers:
+        if not any(isinstance(item, RedactingFilter) for item in handler.filters):
+            handler.addFilter(RedactingFilter())
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
+__all__ = ["AccessLogFilter", "RedactingFilter", "install_access_log_filter", "install_stdlib_filter", "redact_event", "scrub"]

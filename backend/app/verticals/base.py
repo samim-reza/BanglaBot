@@ -34,9 +34,9 @@ RECORD_COLUMNS = (
 )
 
 
-def L(en: str, bn: str = "") -> dict[str, str]:
-    """A label in both portal languages."""
-    return {"en": en, "bn": bn or en}
+def L(en: str) -> dict[str, str]:
+    """A label keyed by language (English is the only one)."""
+    return {"en": en}
 
 
 @dataclass(frozen=True)
@@ -120,7 +120,7 @@ class Vertical:
     #: Status → label overrides (the generic labels are used otherwise).
     status_labels: dict[str, dict[str, str]] = field(default_factory=dict)
     #: What an outbound call from the portal does ("Confirmation call", "Reminder call").
-    outbound_label: dict[str, str] = field(default_factory=lambda: L("Call", "কল"))
+    outbound_label: dict[str, str] = field(default_factory=lambda: L("Call"))
     #: Records have a time (appointment, visit, service window).
     scheduled: bool = False
     #: One-line description of a record for tables and logs.

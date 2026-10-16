@@ -20,7 +20,7 @@ from typing import Iterable
 from app.flows.timefmt import business_tz
 
 # ------------------------------------------------------------------------------ export
-_PRODID = "-//BanglaBot//Voice Agent Bookings//EN"
+_PRODID = "-//Callisa//Voice Agent Bookings//EN"
 
 
 def _escape(text: str) -> str:
@@ -31,6 +31,7 @@ def _escape(text: str) -> str:
         .replace(",", "\\,")
         .replace("\r\n", "\\n")
         .replace("\n", "\\n")
+        .replace("\r", "\\n")  # a lone CR would start a new property line
     )
 
 

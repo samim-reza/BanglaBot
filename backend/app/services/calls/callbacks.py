@@ -18,6 +18,8 @@ from app.services.calls.policy import FAILED_CALL_STATUSES, LIVE_CALL_STATUSES, 
 
 logger = structlog.get_logger(__name__)
 
+#: A status callback's CallDuration outside 1 s … 24 h is ignored (forged / garbage values).
+MAX_CALLBACK_DURATION_SECS = 24 * 3600
 MACHINE_ANSWERS = ("machine", "machine_start", "machine_end_beep", "machine_end_silence", "machine_end_other", "fax")
 
 
@@ -42,7 +44,8 @@ async def apply_status_callback(db: AsyncSession, order_id: str, call_sid: str, 
     order = await db.get(Order, order_id)
     log = None
     if call_sid:
-        log = await db.scalar(select(CallLog).where(CallLog.twilio_call_sid == telnyx.sid_key(call_sid)))
+        # Bound to the signed URL's order: a body CallSid can't reach another call's log.
+        log = await db.scalar(select(CallLog).where(CallLog.twilio_call_sid == telnyx.sid_key(call_sid), CallLog.order_id == order_id))
     if log is None and order is not None:
         log = await db.scalar(
             select(CallLog).where(CallLog.order_id == order.id).order_by(CallLog.created_at.desc()).limit(1)
@@ -51,7 +54,7 @@ async def apply_status_callback(db: AsyncSession, order_id: str, call_sid: str, 
         if call_sid and not log.twilio_call_sid:
             log.twilio_call_sid = telnyx.sid_key(call_sid)
         log.call_status = call_status or log.call_status
-        if duration:
+        if duration and 0 < int(duration) <= MAX_CALLBACK_DURATION_SECS:
             log.duration_secs = int(duration)
         if call_status in FAILED_CALL_STATUSES and not log.outcome:
             # Nobody answered (no-answer / busy / failed): the call never reached the agent.
@@ -59,6 +62,13 @@ async def apply_status_callback(db: AsyncSession, order_id: str, call_sid: str, 
     if order is not None and call_status in FAILED_CALL_STATUSES | {"completed"}:
         _settle_from_call_status(order, log, call_status)
     await db.commit()
+    if log is not None and call_status in FAILED_CALL_STATUSES | {"completed"}:
+        # The call is over. One that never reached the media stream (no answer, busy, a
+        # voicemail hung up by AMD) has no bridge to free its line: without this the slot
+        # stayed taken for STALE_SECONDS and the plan's lines read "all busy" (inbound too).
+        from app.services import concurrency
+
+        await concurrency.release(log.merchant_id, log.id)
     await logger.ainfo("call_status_applied", order_id=order_id, call_sid=call_sid, call_status=call_status, duration=duration)
 
 
@@ -70,7 +80,8 @@ async def apply_amd_callback(db: AsyncSession, order_id: str, call_sid: str, ans
     """Telnyx's answering-machine verdict. Returns True when the call was hung up."""
     log = None
     if call_sid:
-        log = await db.scalar(select(CallLog).where(CallLog.twilio_call_sid == telnyx.sid_key(call_sid)))
+        # Bound to the signed URL's order: a body CallSid can't reach another call's log.
+        log = await db.scalar(select(CallLog).where(CallLog.twilio_call_sid == telnyx.sid_key(call_sid), CallLog.order_id == order_id))
     if log is None:
         log = await db.scalar(
             select(CallLog).where(CallLog.order_id == order_id).order_by(CallLog.created_at.desc()).limit(1)
@@ -81,7 +92,8 @@ async def apply_amd_callback(db: AsyncSession, order_id: str, call_sid: str, ans
     if log is not None and not log.outcome:
         log.outcome = OUTCOME_VOICEMAIL
         await db.commit()
-    sid = call_sid or (log.twilio_call_sid if log is not None else "")
+    # Only this order's call is hung up: its known SID, else the callback's (before the SID was stored).
+    sid = (log.twilio_call_sid or call_sid) if log is not None else ""
     if sid:
         try:
             await complete_call(sid)
@@ -94,7 +106,8 @@ async def apply_amd_callback(db: AsyncSession, order_id: str, call_sid: str, ans
 async def apply_recording_callback(db: AsyncSession, order_id: str, call_sid: str, recording_sid: str) -> None:
     log = None
     if call_sid:
-        log = await db.scalar(select(CallLog).where(CallLog.twilio_call_sid == telnyx.sid_key(call_sid)))
+        # Bound to the signed URL's order: a body CallSid can't reach another call's log.
+        log = await db.scalar(select(CallLog).where(CallLog.twilio_call_sid == telnyx.sid_key(call_sid), CallLog.order_id == order_id))
     if log is None:
         log = await db.scalar(
             select(CallLog).where(CallLog.order_id == order_id).order_by(CallLog.created_at.desc()).limit(1)

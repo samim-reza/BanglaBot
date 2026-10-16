@@ -1,6 +1,6 @@
 "use client";
 
-/** Settings → Agent: when the agent hangs up (language, voice, greeting and steps live on the Agent page). */
+/** Settings → Agent: when the agent hangs up (voice, greeting and steps live on the Agent page). */
 
 import { FormEvent, useMemo } from "react";
 import Link from "next/link";
@@ -65,7 +65,7 @@ export function AgentSection({ onSaved }: { onSaved?: () => void }) {
 
   const agentLink = (
     <>
-      Language, voice and steps:{" "}
+      Voice and steps:{" "}
       <Link href="/agent" className="font-medium text-primary-dark hover:underline dark:text-primary">
         Agent
       </Link>

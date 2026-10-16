@@ -74,99 +74,75 @@ NEW_TIME = "wants_new_time"
 
 _LINES: dict[str, dict[str, str]] = {
     "opening_question": {
-        "bn": "আমি কীভাবে সাহায্য করতে পারি? ডাক্তারের অ্যাপয়েন্টমেন্ট নিতে চাইলে বলুন।",
         "en": "How can I help you today?",
     },
     "intent": {
-        "bn": "আপনি কি নতুন অ্যাপয়েন্টমেন্ট নিতে চান, নাকি আগের কোনো অ্যাপয়েন্টমেন্ট বদলাতে বা বাতিল করতে চান?",
         "en": "Would you like a new appointment, or to change or cancel an existing one?",
     },
     "doctor": {
-        "bn": "কোন ডাক্তার দেখাতে চান? আমাদের এখানে {departments} এর ডাক্তার আছেন।",
         "en": "Which doctor would you like to see? We have {departments}.",
     },
     "doctor_choose": {
-        "bn": "আমাদের এখানে {names} আছেন — কার কাছে দেখাতে চান?",
         "en": "We have {names} — who would you like to see?",
     },
     "doctor_unknown": {
-        "bn": "দুঃখিত, এই নামে কোনো ডাক্তার পাচ্ছি না। আমাদের এখানে {departments} এর ডাক্তার আছেন। কাকে দেখাতে চান?",
         "en": "Sorry, I can't find that doctor. We have {departments}. Who would you like to see?",
     },
     "patient_name": {
-        "bn": "রোগীর নামটা বলবেন?",
         "en": "May I have the patient's name?",
     },
     "date": {
-        "bn": "{doctor} {schedule} রোগী দেখেন। কোন দিন আসতে চান?",
         "en": "{doctor} sees patients {schedule}. Which day would you like to come?",
     },
     "date_short": {
-        "bn": "কোন দিন আসতে চান?",
         "en": "Which day would you like?",
     },
     "phone": {
-        "bn": "রোগীর মোবাইল নম্বরটা বলবেন?",
         "en": "What is the patient's mobile number?",
     },
     "readback_book": {
-        "bn": "তাহলে {patient} এর জন্য {when} {doctor} এর অ্যাপয়েন্টমেন্ট।{serial_part}{fee_part} কনফার্ম করব?",
         "en": "So that's {doctor} for {patient}, {when}.{serial_part}{fee_part} Shall I book it?",
     },
     "readback_reschedule": {
-        "bn": "তাহলে {doctor} এর অ্যাপয়েন্টমেন্টটা সরিয়ে {when} করে দিচ্ছি।{serial_part} ঠিক আছে?",
         "en": "So I'll move your appointment with {doctor} to {when}.{serial_part} Is that right?",
     },
     "serial_part": {
-        "bn": " সিরিয়াল নম্বর {serial}।",
         "en": " Your queue number is {serial}.",
     },
     "fee_part": {
-        "bn": " ভিজিট ফি {fee}।",
         "en": " The consultation fee is {fee}.",
     },
     "readback_cancel": {
-        "bn": "{when} {doctor} এর সাথে {patient} এর অ্যাপয়েন্টমেন্টটা বাতিল করব?",
         "en": "Shall I cancel {patient}'s appointment with {doctor}, {when}?",
     },
     "which": {
-        "bn": "এই নম্বরে {list} আছে — কোনটার কথা বলছেন?",
         "en": "This number has {list} — which one do you mean?",
     },
     "no_record": {
-        "bn": "দুঃখিত, এই নম্বরে কোনো অ্যাপয়েন্টমেন্ট খুঁজে পাচ্ছি না। নতুন অ্যাপয়েন্টমেন্ট নিতে চান?",
         "en": "Sorry, I can't find an appointment for this number. Would you like to book a new one?",
     },
     "attend": {
-        "bn": "{when} {doctor} এর কাছে আপনার অ্যাপয়েন্টমেন্ট আছে।{serial_part} আপনি কি আসছেন?",
         "en": "You have an appointment with {doctor} {when}.{serial_part} Will you be able to make it?",
     },
     "new_time": {
-        "bn": "ঠিক আছে। অন্য কোনো দিনে অ্যাপয়েন্টমেন্ট নিতে চান?",
         "en": "Alright. Would you like another day instead?",
     },
     "closing_booked": {
-        "bn": "আপনার অ্যাপয়েন্টমেন্ট কনফার্ম হয়েছে — {when}।{serial_part} একটু আগে চলে আসবেন। ধন্যবাদ, ভালো থাকবেন।",
         "en": "Your appointment is booked for {when}.{serial_part} Please arrive a few minutes early. Thank you, goodbye.",
     },
     "closing_rescheduled": {
-        "bn": "আপনার অ্যাপয়েন্টমেন্ট {when} করা হয়েছে।{serial_part} ধন্যবাদ, ভালো থাকবেন।",
         "en": "Your appointment is now {when}.{serial_part} Thank you, goodbye.",
     },
     "closing_confirmed": {
-        "bn": "ধন্যবাদ, আপনার অ্যাপয়েন্টমেন্ট কনফার্ম করা হলো। সময়মতো চলে আসবেন। ভালো থাকবেন।",
         "en": "Thank you, your appointment is confirmed. Please come on time. Goodbye.",
     },
     "closing_cancelled": {
-        "bn": "ঠিক আছে, অ্যাপয়েন্টমেন্টটা বাতিল করা হলো। প্রয়োজনে আবার ফোন করবেন। ভালো থাকবেন।",
         "en": "Alright, the appointment has been cancelled. Call us any time you need. Goodbye.",
     },
     "emergency": {
-        "bn": "এটা জরুরি অবস্থা মনে হচ্ছে। দয়া করে এখনই {emergency} নম্বরে ফোন করুন, অথবা রোগীকে নিকটস্থ হাসপাতালের জরুরি বিভাগে নিয়ে যান।",
         "en": "This sounds like an emergency. Please call {emergency} right now, or take the patient to the nearest hospital emergency department.",
     },
     "knows_person": {
-        "bn": "এই নম্বরে {name} এর নামে আমাদের ক্লিনিকে একটি অ্যাপয়েন্টমেন্ট আছে। আপনি কি ওনাকে চেনেন?",
         "en": "We have an appointment at our clinic under the name {name} for this number. Do you know them?",
     },
 }
@@ -177,7 +153,7 @@ _RULES = """You are the receptionist of a doctor's practice / clinic. You book d
 - Never reveal another patient's details.
 - Doctors: when saving `doctor`, use the ref from the doctor list (D1, D2, …). If the caller describes a problem instead of naming a doctor, you may name the matching department from the list (never diagnose); if several doctors fit, let the system ask.
 - Intent: book = new appointment, reschedule = move an existing one, cancel = cancel an existing one. Questions about doctors, days, timings, fees or the address are answered from the facts below, then ask whether they would like an appointment.
-- Dates: save `date` as YYYY-MM-DD from the calendar below ("tomorrow"/"কাল" = the next day, "the day after"/"পরশু" = two days ahead; a weekday means the next such day). A preferred time goes in `time_pref` as HH:MM (24 h) or morning/afternoon/evening.
+- Dates: save `date` as YYYY-MM-DD from the calendar below ("tomorrow" = the next day, "the day after" = two days ahead; a weekday means the next such day). A preferred time goes in `time_pref` as HH:MM (24 h) or morning/afternoon/evening.
 - Existing appointments of this caller are listed with refs (A1, A2, …); save the chosen one as `appointment`.
 - Availability: you never know which times are free — the system does. When the caller wants another day or time, save it (date / time_pref) and the system proposes the nearest free time; never say a time is or isn't available yourself.
 - The system reads the summary back and writes the booking. Never say an appointment is booked, moved or cancelled before a tool result says so."""
@@ -214,9 +190,9 @@ def doctor_title(item: CatalogEntry | None, language: str) -> str:
         return ""
     name = item.name.strip()
     lowered = name.lower()
-    if lowered.startswith(("dr", "ডা", "ডাক্তার", "prof", "অধ্যাপক")):
+    if lowered.startswith(("dr", "prof")):
         return name
-    return f"ডা. {name}" if normalize_language(language) == "bn" else f"Dr. {name}"
+    return f"Dr. {name}"
 
 
 def departments(ctx: CallContext, language: str) -> str:
@@ -243,17 +219,14 @@ def uses_serials(ctx: CallContext) -> bool:
     configured = ctx.config.get("queue_numbers")
     if isinstance(configured, bool):
         return configured
-    return ctx.region.code in ("BD", "IN", "PK")
+    return ctx.region.code in ("IN", "PK")
 
 
 def _serial_words(value: Any, language: str) -> str:
-    from app.flows.timefmt import bn_number
-
     try:
-        number = int(value)
+        return str(int(value))
     except (TypeError, ValueError):
         return str(value or "")
-    return bn_number(number) if normalize_language(language) == "bn" else str(number)
 
 
 class ClinicFlow(StepFlow):
@@ -411,7 +384,7 @@ class ClinicFlow(StepFlow):
                 slots.pop(key, None)
             return
         doctor = self._doctor(slots, ctx)
-        plan_booking(slots, ctx, doctor_availability(doctor, ctx), who=doctor_title(doctor, "bn"))
+        plan_booking(slots, ctx, doctor_availability(doctor, ctx), who=doctor_title(doctor, "en"))
 
     # ---- the cascade -----------------------------------------------------------------
     def next_stage(self, slots: dict[str, Any], ctx: CallContext) -> str:
@@ -652,7 +625,7 @@ class ClinicFlow(StepFlow):
                     "bleeding, unconsciousness, seizure, severe injury, pregnancy emergency, poisoning). Call at once."
                 ),
                 properties={"what": {"type": "string", "description": "What the caller described, a few words."}},
-                note_template={"bn": "জরুরি অবস্থা: {what}", "en": "Emergency: {what}"},
+                note_template={"en": "Emergency: {what}"},
                 requires_identity=False,
             )
         ]
@@ -736,7 +709,6 @@ class ClinicFlow(StepFlow):
     def transcription_hints(self, ctx: CallContext) -> list[str]:
         hints = [str(ctx.merchant_value("business_name", ""))]
         hints += [item.name for item in ctx.items(KIND_DOCTOR)][:8]
-        hints += ["সিরিয়াল", "অ্যাপয়েন্টমেন্ট", "ডাক্তার"]
         if ctx.record is not None:
             hints.append(self.person_name(ctx))
         return hints
@@ -768,15 +740,6 @@ class ClinicFlow(StepFlow):
     def preview_steps(self, ctx: CallContext, language: str) -> list[str]:
         lang = normalize_language(language)
         if ctx.direction == DIRECTION_INBOUND:
-            if lang == "bn":
-                return [
-                    f"শুভেচ্ছা: \"{self.opening(ctx, lang)}\"",
-                    "ডাক্তার: কোন ডাক্তার/বিভাগ — আপনার ডাক্তার তালিকা থেকে।",
-                    "রোগীর নাম ও দিন: ডাক্তারের বসার দিন অনুযায়ী তারিখ যাচাই, পছন্দের সময়ের কাছাকাছি সিরিয়াল।",
-                    "পড়ে শোনানো: ডাক্তার, দিন, সময়, সিরিয়াল নম্বর ও ফি — 'হ্যাঁ' বললে বুক হয়।",
-                    "বাতিল / সময় বদল: কলারের নম্বরের অ্যাপয়েন্টমেন্ট খুঁজে বাতিল বা নতুন সময়।",
-                    f"জরুরি অবস্থা: {ctx.emergency_number}-এ ফোন করতে বলা হয়; কোনো চিকিৎসা পরামর্শ দেওয়া হয় না।",
-                ]
             return [
                 f"Greeting: \"{self.opening(ctx, lang)}\"",
                 "Doctor: which doctor / department — from your doctor list.",
@@ -784,12 +747,6 @@ class ClinicFlow(StepFlow):
                 "Read-back: doctor, day, time (and queue number where used) and fee — booked on a 'yes'.",
                 "Cancel / reschedule: finds the caller's appointment by phone number.",
                 f"Emergencies: told to call {ctx.emergency_number}; no medical advice is ever given.",
-            ]
-        if lang == "bn":
-            return [
-                f"শুভেচ্ছা: \"{self.opening(ctx, lang)}\"",
-                "রিমাইন্ডার: অ্যাপয়েন্টমেন্টের দিন, সময় ও সিরিয়াল বলে জিজ্ঞেস করে আসবেন কি না।",
-                "না আসলে: অন্য দিনে সিরিয়াল দেয়, না চাইলে বাতিল করে।",
             ]
         return [
             f"Greeting: \"{self.opening(ctx, lang)}\"",
@@ -812,78 +769,76 @@ def _summary(record: Any, names: dict[str, str]) -> str:
 
 CLINIC = Vertical(
     key="clinic",
-    label=L("Doctor appointments", "ডাক্তারের অ্যাপয়েন্টমেন্ট"),
+    label=L("Doctor appointments"),
     description=L(
         "Answers the clinic's phone: books doctor appointments, moves or cancels appointments, answers questions about doctors, days and fees, and calls patients with reminders.",
-        "ক্লিনিকের ফোন ধরে: ডাক্তারের সিরিয়াল দেয়, অ্যাপয়েন্টমেন্ট বদলায় বা বাতিল করে, ডাক্তার-দিন-ফি নিয়ে প্রশ্নের উত্তর দেয়, আর রোগীদের রিমাইন্ডার কল করে।",
     ),
     record_kind=KIND_APPOINTMENT,
-    record_label=L("Appointment", "অ্যাপয়েন্টমেন্ট"),
-    record_label_plural=L("Appointments", "অ্যাপয়েন্টমেন্ট"),
+    record_label=L("Appointment"),
+    record_label_plural=L("Appointments"),
     record_fields=(
-        FieldSpec("customer_name", L("Patient name", "রোগীর নাম"), required=True, list_column=True),
-        FieldSpec("customer_phone", L("Phone", "ফোন"), "phone", required=True, list_column=True, placeholder="+1 415 555 0100"),
-        FieldSpec("catalog_item_id", L("Doctor", "ডাক্তার"), "catalog", required=True, list_column=True),
-        FieldSpec("scheduled_at", L("Date & time", "দিন ও সময়"), "datetime", required=True, list_column=True),
-        FieldSpec("serial", L("Queue / serial no.", "সিরিয়াল নম্বর"), "number"),
-        FieldSpec("reason", L("Reason", "কারণ"), "text"),
-        FieldSpec("notes", L("Notes", "নোট"), "textarea"),
+        FieldSpec("customer_name", L("Patient name"), required=True, list_column=True),
+        FieldSpec("customer_phone", L("Phone"), "phone", required=True, list_column=True, placeholder="+1 415 555 0100"),
+        FieldSpec("catalog_item_id", L("Doctor"), "catalog", required=True, list_column=True),
+        FieldSpec("scheduled_at", L("Date & time"), "datetime", required=True, list_column=True),
+        FieldSpec("serial", L("Queue / serial no."), "number"),
+        FieldSpec("reason", L("Reason"), "text"),
+        FieldSpec("notes", L("Notes"), "textarea"),
     ),
     catalog_kind=KIND_DOCTOR,
-    catalog_label=L("Doctor", "ডাক্তার"),
-    catalog_label_plural=L("Doctors", "ডাক্তার"),
+    catalog_label=L("Doctor"),
+    catalog_label_plural=L("Doctors"),
     catalog_fields=(
-        FieldSpec("name", L("Doctor's name", "ডাক্তারের নাম"), required=True, placeholder="Dr. Abdul Karim"),
-        FieldSpec("specialty", L("Department / specialty", "বিভাগ"), required=True, placeholder="Medicine / শিশু রোগ"),
-        FieldSpec("degrees", L("Degrees", "ডিগ্রি"), placeholder="MBBS, FCPS (Medicine)"),
-        FieldSpec("days", L("Chamber days", "বসার দিন"), "days", required=True),
-        FieldSpec("start_time", L("Starts at", "শুরু"), "time", required=True, default="17:00"),
-        FieldSpec("end_time", L("Ends at", "শেষ"), "time", required=True, default="21:00"),
+        FieldSpec("name", L("Doctor's name"), required=True, placeholder="Dr. Abdul Karim"),
+        FieldSpec("specialty", L("Department / specialty"), required=True, placeholder="Medicine / Pediatrics"),
+        FieldSpec("degrees", L("Degrees"), placeholder="MBBS, FCPS (Medicine)"),
+        FieldSpec("days", L("Chamber days"), "days", required=True),
+        FieldSpec("start_time", L("Starts at"), "time", required=True, default="17:00"),
+        FieldSpec("end_time", L("Ends at"), "time", required=True, default="21:00"),
         FieldSpec(
             "slot_minutes",
-            L("Minutes per patient", "প্রতি রোগী (মিনিট)"),
+            L("Minutes per patient"),
             "number",
             default=15,
-            help=L("Serial n arrives at start + (n − 1) × this.", "সিরিয়াল n এর সময় = শুরু + (n − ১) × এই মিনিট।"),
+            help=L("Serial n arrives at start + (n − 1) × this."),
         ),
-        FieldSpec("max_patients", L("Max patients per day", "দিনে সর্বোচ্চ রোগী"), "number", default=0, help=L("0 = no limit", "০ = সীমা নেই")),
-        FieldSpec("fee", L("Consultation fee", "ভিজিট ফি"), "money"),
-        FieldSpec("notes", L("Notes for the agent", "এজেন্টের জন্য নোট"), "textarea", placeholder="Room 304. Reports shown free within 7 days."),
+        FieldSpec("max_patients", L("Max patients per day"), "number", default=0, help=L("0 = no limit")),
+        FieldSpec("fee", L("Consultation fee"), "money"),
+        FieldSpec("notes", L("Notes for the agent"), "textarea", placeholder="Room 304. Reports shown free within 7 days."),
         FieldSpec(
             "calendar_ics",
-            L("Busy calendar (iCal link)", "ব্যস্ত সময়ের ক্যালেন্ডার (iCal লিংক)"),
+            L("Busy calendar (iCal link)"),
             placeholder="https://calendar.google.com/calendar/ical/…/basic.ics",
             help=L(
                 "Optional. The doctor's private iCal address (Google Calendar → Settings → Secret address in iCal format). Busy times are never offered.",
-                "ঐচ্ছিক। ডাক্তারের ক্যালেন্ডারের গোপন iCal ঠিকানা — ব্যস্ত সময়ে সিরিয়াল দেওয়া হবে না।",
             ),
         ),
     ),
     config_fields=(
-        FieldSpec("booking_horizon_days", L("Book how many days ahead", "কত দিন আগে পর্যন্ত বুকিং"), "number", default=14),
-        FieldSpec("lead_minutes", L("Earliest booking (minutes from now)", "এখন থেকে অন্তত কত মিনিট পরে"), "number", default=30),
+        FieldSpec("booking_horizon_days", L("Book how many days ahead"), "number", default=14),
+        FieldSpec("lead_minutes", L("Earliest booking (minutes from now)"), "number", default=30),
         FieldSpec(
             "queue_numbers",
-            L("Tell patients a queue (serial) number", "রোগীকে সিরিয়াল নম্বর বলা হবে"),
+            L("Tell patients a queue (serial) number"),
             "bool",
-            help=L("Common in South Asian chambers. Unset = on for BD/IN/PK accounts.", "দক্ষিণ এশিয়ার চেম্বারে প্রচলিত।"),
+            help=L("Common in South Asian chambers. Unset = on for BD/IN/PK accounts."),
         ),
         FieldSpec(
             "health_line",
-            L("Health advice line (optional)", "স্বাস্থ্য পরামর্শ লাইন (ঐচ্ছিক)"),
+            L("Health advice line (optional)"),
             placeholder="111 (NHS)",
-            help=L("Suggested for medical questions; empty = the region's line, if any.", "চিকিৎসা প্রশ্নে বলা হয়; খালি = অঞ্চলের লাইন।"),
+            help=L("Suggested for medical questions; empty = the region's line, if any."),
         ),
     ),
     config_defaults={"booking_horizon_days": 14, "lead_minutes": 30},
     status_labels={
-        "pending": L("Scheduled", "নির্ধারিত"),
-        "confirmed": L("Confirmed", "কনফার্মড"),
-        "cancelled": L("Cancelled", "বাতিল"),
-        "needs_review": L("Needs review", "রিভিউ দরকার"),
+        "pending": L("Scheduled"),
+        "confirmed": L("Confirmed"),
+        "cancelled": L("Cancelled"),
+        "needs_review": L("Needs review"),
     },
     flows={"inbound": INBOUND, "outbound": OUTBOUND},
-    outbound_label=L("Reminder call", "রিমাইন্ডার কল"),
+    outbound_label=L("Reminder call"),
     scheduled=True,
     summarize=_summary,
 )

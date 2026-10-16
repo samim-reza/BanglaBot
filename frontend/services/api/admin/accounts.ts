@@ -27,7 +27,7 @@ export const adminApi = {
   /** With two-factor sign-in on, the first attempt answers 401 + `X-2FA-Required: totp`; resend with `code`. */
   login: (username: string, password: string, code = "") =>
     request<{ token: string }>("/api/admin/login", { method: "POST", body: JSON.stringify({ username, password, code }) }),
-  /** Business engines, regions, plans and languages for the account forms. */
+  /** Business engines, regions and plans for the account forms. */
   meta: () => request<AdminMeta>("/api/admin/meta", { auth: "admin" }),
   overview: () => request<AdminOverview>("/api/admin/overview", { auth: "admin" }),
   merchants: () => request<Merchant[]>("/api/admin/merchants", { auth: "admin" }),

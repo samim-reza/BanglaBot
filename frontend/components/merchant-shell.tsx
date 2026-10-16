@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 
 import { useAppToast } from "@/components/app-toast";
-import { BanglaBotBrand, BanglaBotMark } from "@/components/brand";
+import { BrandMark, BrandName } from "@/components/brand";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -274,8 +274,8 @@ export function MerchantShell({ children }: { children: React.ReactNode }) {
               <Menu className="h-4 w-4" />
             </button>
             <Link href="/dashboard" className="flex min-w-0 items-center gap-3">
-              <BanglaBotMark compact />
-              <BanglaBotBrand subtitle="Account portal" />
+              <BrandMark compact />
+              <BrandName subtitle="Account portal" />
             </Link>
           </div>
           <div className="flex items-center gap-2">

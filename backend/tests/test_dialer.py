@@ -134,7 +134,7 @@ def test_serialize_run_shape():
 
 
 def test_next_daily_rolls_to_the_same_time_after_now():
-    at = datetime(2026, 8, 29, 5, 0, tzinfo=timezone.utc)  # 11:00 Dhaka
+    at = datetime(2026, 8, 29, 5, 0, tzinfo=timezone.utc)
     now = datetime(2026, 8, 31, 5, 30, tzinfo=timezone.utc)
     assert dialer.next_daily(at, now) == datetime(2026, 9, 1, 5, 0, tzinfo=timezone.utc)
     future = now + timedelta(hours=1)

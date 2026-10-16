@@ -16,7 +16,7 @@ import {
 } from "@/services/api";
 
 /**
- * Form choices (business engines, regions, plans, languages) are static per
+ * Form choices (business engines, regions, plans) are static per
  * deploy, so one request serves every admin screen for the life of the tab.
  * A failed request is not cached, so the next screen retries.
  */

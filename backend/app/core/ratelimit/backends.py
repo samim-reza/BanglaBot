@@ -33,9 +33,18 @@ class MemoryBackend:
         if len(self._hits) > MAX_MEMORY_KEYS:
             for key in [k for k, v in self._hits.items() if not v or now - v[-1] > 3600]:
                 self._hits.pop(key, None)
+            if len(self._hits) > MAX_MEMORY_KEYS:
+                # Still full of fresh keys (a flood of distinct keys): drop the least recently hit.
+                ranked = sorted(self._hits, key=lambda k: self._hits[k][-1] if self._hits[k] else 0.0)
+                for key in ranked[: len(ranked) - MAX_MEMORY_KEYS * 9 // 10]:
+                    self._hits.pop(key, None)
         if len(self._values) > MAX_MEMORY_KEYS:
             for key in [k for k, (expires, _) in self._values.items() if expires <= now]:
                 self._values.pop(key, None)
+            if len(self._values) > MAX_MEMORY_KEYS:
+                ranked = sorted(self._values, key=lambda k: self._values[k][0])
+                for key in ranked[: len(ranked) - MAX_MEMORY_KEYS * 9 // 10]:
+                    self._values.pop(key, None)
 
     def hit_sync(self, key: str, max_hits: int, window: float, *, now: float | None = None) -> float:
         """Record a hit; 0 when allowed, else seconds until the window has room."""

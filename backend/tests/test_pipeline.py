@@ -50,8 +50,9 @@ class Account:
     id: str = "m1"
 
 
-def _call(agent_flow: dict | None = None, **ctx_kwargs: Any) -> tuple[CallTools, FlowRuntime, NullCallStore]:
-    merchant = Account(agent_flow=agent_flow or {})
+def _call(agent_flow: dict | None = None, *, texts: bool = False, **ctx_kwargs: Any) -> tuple[CallTools, FlowRuntime, NullCallStore]:
+    # texts=True: the account sends texts (a payment link can go out).
+    merchant = Account(agent_flow=agent_flow or {}, sms_settings={"enabled": True} if texts else {})
     ctx = CallContext(merchant=merchant, catalog=list(DOCTORS), direction=DIRECTION_INBOUND, now=NOW, caller_number="+16175550100", **ctx_kwargs)
     runtime = FlowRuntime(flow_for(merchant, DIRECTION_INBOUND), ctx, language="en")
     store = NullCallStore()
@@ -90,8 +91,9 @@ async def test_returning_caller_is_recognised_without_asking():
 
 # ---- optional skills ----------------------------------------------------------------------------------
 @pytest.mark.asyncio
-async def test_online_required_payment_is_read_back_and_holds_the_booking():
-    tools, runtime, store = _call(steps(payment={"enabled": True, "options": {"mode": "online_required", "hold_minutes": 20}}))
+async def test_online_required_payment_is_read_back_and_holds_the_booking(monkeypatch):
+    monkeypatch.setattr("app.services.sms.policy.platform_ready", lambda: True)
+    tools, runtime, store = _call(steps(payment={"enabled": True, "options": {"mode": "online_required", "hold_minutes": 20}}), texts=True)
     result = await tools.execute(
         "save_details", {"intent": "book", "doctor": "D2", "date": "2026-10-07", "patient_name": "Leo"}, caller_text="Dr Carter Wednesday, Leo"
     )
@@ -104,8 +106,23 @@ async def test_online_required_payment_is_read_back_and_holds_the_booking():
 
 
 @pytest.mark.asyncio
-async def test_caller_choice_payment_asks_then_records_the_choice():
-    tools, runtime, store = _call(steps(payment={"enabled": True, "options": {"mode": "caller_choice"}}))
+async def test_online_required_without_texts_is_paid_at_the_visit_not_promised_by_text():
+    # No way to send the link (texts off): never promise one, never hold the booking for it.
+    tools, runtime, store = _call(steps(payment={"enabled": True, "options": {"mode": "online_required"}}))
+    result = await tools.execute(
+        "save_details", {"intent": "book", "doctor": "D2", "date": "2026-10-07", "patient_name": "Leo"}, caller_text="Dr Carter Wednesday, Leo"
+    )
+    assert runtime.stage == "confirm" and "payment link" not in result.say
+    await tools.execute("save_details", {"confirmed": True}, caller_text="yes")
+    action = store.commits[0]["action"]
+    assert str(getattr(action.status, "value", action.status)) != "pending"
+    assert action.fields["details"]["payment"]["method"] == "at_venue" and action.fields["details"]["payment"]["note"]
+
+
+@pytest.mark.asyncio
+async def test_caller_choice_payment_asks_then_records_the_choice(monkeypatch):
+    monkeypatch.setattr("app.services.sms.policy.platform_ready", lambda: True)
+    tools, runtime, store = _call(steps(payment={"enabled": True, "options": {"mode": "caller_choice"}}), texts=True)
     result = await tools.execute(
         "save_details", {"intent": "book", "doctor": "D1", "date": "2026-10-05", "patient_name": "Jo"}, caller_text="Dr Mitchell Monday, Jo"
     )
@@ -171,7 +188,10 @@ async def test_owner_edited_lines_are_spoken():
     assert result.say.endswith("Who is the appointment for?")
     await tools.execute("save_details", {"patient_name": "Jo"}, caller_text="Jo")
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes")
-    assert result.say.endswith("Take care!")
+    assert result.say.endswith("Is there anything else I can help you with?")
+    # The owner's farewell is the goodbye once the caller is done.
+    result = await tools.execute("end_call", {}, caller_text="no, that's all")
+    assert result.say.endswith("Take care!") and result.hang_up
 
 
 # ---- settings validation, locks, cache ------------------------------------------------------------

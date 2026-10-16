@@ -133,7 +133,7 @@ def test_sms_texts_per_event_stay_in_one_or_two_gsm_segments():
                               address="77 Court St", total_amount=85, currency="USD", order_ref="", details={"time_window": "afternoon"})
     text = sms_service.compose("confirmation", booking, _merchant(business_name="FixRight"))
     assert "Mon, Oct 5, 12 PM-3 PM at 77 Court St" in text and "$85" in text and text.isascii()
-    assert sms_service.segments("x" * 160) == 1 and sms_service.segments("x" * 161) == 2 and sms_service.segments("অ" * 71) == 2
+    assert sms_service.segments("x" * 160) == 1 and sms_service.segments("x" * 161) == 2 and sms_service.segments("é" * 71) == 2
 
 
 def test_which_outcomes_send_a_text(monkeypatch):
@@ -165,8 +165,10 @@ async def test_the_agent_says_a_text_is_coming(monkeypatch):
     tools = CallTools(FlowRuntime(flow_for(merchant, DIRECTION_INBOUND), ctx, language="en"), NullCallStore())
     await tools.execute("save_details", {"service": "S1", "problem": "leak", "customer_name": "Mark", "address": "1 Main St", "date": "2026-10-05"}, caller_text="AC leak, Mark, 1 Main St, Monday")
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes")
-    assert result.outcome == "booked"
-    assert "We'll text you the details. Thank you, goodbye." in result.say
+    assert result.outcome == "booked" and not result.hang_up
+    assert "We'll text you the details. Is there anything else I can help you with?" in result.say
+    result = await tools.execute("end_call", {}, caller_text="no thanks, bye")
+    assert result.hang_up and result.outcome == "booked" and "goodbye" in result.say.lower()
 
 
 # ------------------------------------------------------------------------------ Google (mocked)

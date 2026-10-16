@@ -2,10 +2,10 @@
 
 import type { FieldSpec, Label, OrderStatus, VerticalSpec } from "@/services/api";
 
-/** The portal is English-first; Bangla labels are kept for later. */
+/** The English text of a label. */
 export function t(label: Partial<Label> | null | undefined, fallback = ""): string {
   if (!label) return fallback;
-  return label.en || label.bn || fallback;
+  return label.en || fallback;
 }
 
 const GENERIC_STATUS: Record<OrderStatus, string> = {

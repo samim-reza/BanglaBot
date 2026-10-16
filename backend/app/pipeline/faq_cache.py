@@ -24,8 +24,7 @@ MAX_ENTRIES = 2000
 TTL_SECONDS = 24 * 3600
 MIN_WORDS = 2
 _TIME_SENSITIVE = re.compile(
-    r"\b(now|today|tonight|tomorrow|yesterday|right now|currently|this (morning|afternoon|evening|week)|available|free|slot|my|mine|"
-    r"আজ|এখন|কাল|পরশু)\b",
+    r"\b(now|today|tonight|tomorrow|yesterday|right now|currently|this (morning|afternoon|evening|week)|available|free|slot|my|mine)\b",
     re.IGNORECASE,
 )
 ROUTER_STAGES = frozenset({"intent", "help"})

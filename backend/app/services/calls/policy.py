@@ -28,9 +28,9 @@ def call_time_limit(merchant: Merchant, *, inbound: bool = False) -> int:
 def require_telephony() -> None:
     settings = get_settings()
     if not settings.telnyx_api_key or not settings.telnyx_texml_app_id:
-        raise HTTPException(status_code=500, detail="Telnyx is not configured (TELNYX_API_KEY / TELNYX_TEXML_APP_ID)")
+        raise HTTPException(status_code=503, detail="Telnyx is not configured (TELNYX_API_KEY / TELNYX_TEXML_APP_ID)")
     if not settings.telnyx_from_number:
-        raise HTTPException(status_code=500, detail="TELNYX_FROM_NUMBER is not configured")
+        raise HTTPException(status_code=503, detail="TELNYX_FROM_NUMBER is not configured")
 
 
 def require_voice(merchant: Merchant) -> None:

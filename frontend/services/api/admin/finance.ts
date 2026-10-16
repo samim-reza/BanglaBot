@@ -170,7 +170,7 @@ export const financeApi = {
   exportCsv: async (kind: "daily" | "accounts", m?: string) => {
     const response = await rawRequest(`${BASE}/export.csv${queryString({ kind, ...month(m) })}`, { auth: "admin" });
     const disposition = response.headers.get("content-disposition") ?? "";
-    const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `banglabot-finance-${kind}.csv`;
+    const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? `callisa-finance-${kind}.csv`;
     return { blob: await response.blob(), filename };
   },
 };

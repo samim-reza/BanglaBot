@@ -42,12 +42,9 @@ export function TierDetails({
           ))}
         </Select>
       </Labeled>
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <Labeled label="$/min over" hint="Overage price per minute">
           <NumCell value={tier.overage_per_minute} onChange={(n) => onChange({ overage_per_minute: n })} label="Overage per minute" step="0.01" className="w-full" disabled={disabled} />
-        </Labeled>
-        <Labeled label="Languages">
-          <NumCell value={tier.included_languages} onChange={(n) => onChange({ included_languages: n })} label="Included languages" className="w-full" disabled={disabled} />
         </Labeled>
         <Labeled label="Trial days" hint="0 = a normal billing period">
           <NumCell value={tier.trial_days} onChange={(n) => onChange({ trial_days: n })} label="Trial days" className="w-full" disabled={disabled} />

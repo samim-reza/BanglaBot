@@ -17,15 +17,15 @@ PROPERTY_TYPES = ["land", "flat", "house", "commercial"]
 TIMELINES = ["now", "1-3 months", "3-6 months", "later"]
 
 TYPE_WORDS = {
-    "land": {"bn": "জমি", "en": "land"},
-    "flat": {"bn": "ফ্ল্যাট", "en": "apartment"},
-    "house": {"bn": "বাড়ি", "en": "house"},
-    "commercial": {"bn": "কমার্শিয়াল স্পেস", "en": "commercial space"},
+    "land": {"en": "land"},
+    "flat": {"en": "apartment"},
+    "house": {"en": "house"},
+    "commercial": {"en": "commercial space"},
 }
 INTENT_WORDS = {
-    "buy": {"bn": "কেনা", "en": "buying"},
-    "rent": {"bn": "ভাড়া", "en": "renting"},
-    "sell": {"bn": "বিক্রি", "en": "selling"},
+    "buy": {"en": "buying"},
+    "rent": {"en": "renting"},
+    "sell": {"en": "selling"},
 }
 
 CONFIG_DEFAULTS: dict[str, Any] = {
@@ -126,11 +126,9 @@ def interest_phrase(slots: dict[str, Any], ctx: CallContext, language: str) -> s
     """What the caller is interested in: "the 3-bed family home" / "a house in Maple Grove"."""
     item = chosen_property(slots, ctx)
     if item is not None:
-        return item.name if language == "bn" else f"the {item.name}"
+        return f"the {item.name}"
     ptype = word(TYPE_WORDS, slots.get("property_type"), language) if slots.get("property_type") else ""
     area = slots.get("location") or ""
-    if language == "bn":
-        return " ".join(part for part in (area, ptype) if part) or "একটি প্রপার্টি"
     return " ".join(part for part in (ptype, f"in {area}" if area else "") if part) or "a property"
 
 

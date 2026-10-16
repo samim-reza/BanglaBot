@@ -1,10 +1,9 @@
-"""Azure Speech text-to-speech (paid, every language we speak, best Bangla).
+"""Azure Speech text-to-speech (paid; the backup English voice).
 
 Azure returns ``raw-8khz-8bit-mono-mulaw`` directly, which is exactly what a
 phone media stream plays, so no resampling happens on the call path. The voice
-is chosen per *persona* (female / male) and per language, so a bilingual
-merchant keeps one consistent "person" whether the customer speaks Bangla or
-English. Cache keys are unchanged from the pre-provider ``voice/tts.py`` so
+is chosen per *persona* (female / male) and per English accent, so a merchant
+keeps one consistent "person" on every call. Cache keys are unchanged from the pre-provider ``voice/tts.py`` so
 clips already on disk keep hitting.
 """
 
@@ -15,7 +14,7 @@ from xml.sax.saxutils import escape
 
 import httpx
 
-from app.voice.languages import BANGLA, ENGLISH, normalize_language
+from app.voice.languages import ENGLISH, normalize_language
 from app.voice.providers.tts.base import (
     DEFAULT_PERSONA,
     CachedTTSEngine,
@@ -31,8 +30,8 @@ OUTPUT_FORMAT = "raw-8khz-8bit-mono-mulaw"
 
 #: One "person" per persona, spoken through the right neural voice per language.
 VOICE_PERSONAS: dict[str, dict[str, str]] = {
-    "female": {ENGLISH: "en-US-AvaNeural", BANGLA: "bn-BD-NabanitaNeural"},
-    "male": {ENGLISH: "en-US-AndrewNeural", BANGLA: "bn-BD-PradeepNeural"},
+    "female": {ENGLISH: "en-US-AvaNeural"},
+    "male": {ENGLISH: "en-US-AndrewNeural"},
 }
 #: English accents by locale (the account's region picks one): (female, male).
 ENGLISH_ACCENTS: dict[str, tuple[str, str]] = {
@@ -57,7 +56,7 @@ def voice_for(persona: str, language: str | None, accent: str | None = None) -> 
         female, male = ENGLISH_ACCENTS[accent]  # type: ignore[index]
         return female if persona == "female" else male
     voices = VOICE_PERSONAS.get(persona, VOICE_PERSONAS[DEFAULT_PERSONA])
-    return voices.get(lang, voices[BANGLA])
+    return voices.get(lang, voices[ENGLISH])
 
 
 def is_neural_voice(voice: str | None) -> bool:
@@ -94,7 +93,7 @@ class AzureTTS(CachedTTSEngine):
                 "Ocp-Apim-Subscription-Key": key,
                 "Content-Type": "application/ssml+xml",
                 "X-Microsoft-OutputFormat": OUTPUT_FORMAT,
-                "User-Agent": "banglabot-voice-agent",
+                "User-Agent": "callisa-voice-agent",
             },
             transport=transport,
         )

@@ -12,7 +12,7 @@ from app.voice.tts_tiers import TieredTTSCache
 
 
 def _key(text: str) -> str:
-    return TTSCache.make_key(provider="azure", voice="bn-BD-NabanitaNeural", language="bn-BD", output_format="mulaw", text=text)
+    return TTSCache.make_key(provider="azure", voice="en-US-AvaNeural", language="en-US", output_format="mulaw", text=text)
 
 
 def test_lru_eviction_by_entry_count(tmp_path):
@@ -37,7 +37,7 @@ def test_lru_eviction_by_bytes_and_manifest_survives_restart(tmp_path):
 
 
 def test_key_is_whitespace_insensitive():
-    assert _key("হ্যালো   বিশ্ব") == _key(" হ্যালো বিশ্ব ")
+    assert _key("hello   world") == _key(" hello world ")
     assert _key("a") != _key("b")
 
 

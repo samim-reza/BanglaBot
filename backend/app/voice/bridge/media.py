@@ -16,6 +16,8 @@ logger = structlog.get_logger(__name__)
 
 # Pre-roll kept ahead of the barge-in window while caller audio is gated (15 × 20 ms).
 PREROLL_FRAMES = 15
+# Caller audio kept while the STT (re)connects (250 × 20 ms = 5 s), sent once it is back.
+STT_GAP_FRAMES = 250
 
 
 class MediaMixin:
@@ -37,8 +39,7 @@ class MediaMixin:
                 if not self.closed:
                     await logger.ainfo("media_disconnected", call_log_id=self.call_log_id, detail=str(exc)[:120])
                 self.closed = True
-                if self._stt is not None:
-                    await self._stt.close()
+                await self._close_stt(self._stt)
                 return
             event = message.get("event")
             if event == "start":
@@ -58,12 +59,26 @@ class MediaMixin:
                 await logger.awarning("media_stream_error", call_log_id=self.call_log_id, error=message.get("payload"))
             elif event == "stop":
                 self.closed = True
-                if self._stt is not None:
-                    await self._stt.close()
+                await self._close_stt(self._stt)
                 break
 
-    async def _handle_inbound_frame(self, payload: str) -> None:
+    async def _to_stt(self, payload: str) -> None:
+        """Forward one caller frame. While the STT is down or (re)connecting the last few
+        seconds are kept and sent first once it is back, so words said in the gap still count."""
         stt = self._stt
+        if stt is None or not getattr(stt, "connected", True):
+            self._stt_gap.append(payload)
+            return
+        try:
+            while self._stt_gap:
+                await stt.send_audio_b64(self._stt_gap.popleft())
+            await stt.send_audio_b64(payload)
+        except Exception as exc:  # noqa: BLE001 — a broken STT socket must not end the call (the STT loop reconnects)
+            if not self._stt_send_failed:
+                self._stt_send_failed = True
+                await logger.awarning("bridge_stt_send_failed", call_log_id=self.call_log_id, error=str(exc)[:160])
+
+    async def _handle_inbound_frame(self, payload: str) -> None:
         rms = pcm_rms(payload)
         if not self.assistant_speaking:
             self._ambient_noise.update(rms)
@@ -75,14 +90,13 @@ class MediaMixin:
             self.last_voice_activity_at = self.last_customer_audio_at
         if not self.assistant_speaking:
             self._barge_in_loud_frames = 0
-            if self._barge_in_prebuffer:
-                if sum(self._barge_in_window) >= 2 and stt is not None:
-                    for buffered in self._barge_in_prebuffer:
-                        await stt.send_audio_b64(buffered)
-                self._barge_in_prebuffer.clear()
+            # Snapshot before awaiting: the speaker clears these buffers when a line starts.
+            held = list(self._barge_in_prebuffer) if sum(self._barge_in_window) >= 2 else []
+            self._barge_in_prebuffer.clear()
             self._barge_in_window.clear()
-            if stt is not None:
-                await stt.send_audio_b64(payload)
+            for buffered in held:
+                await self._to_stt(buffered)
+            await self._to_stt(payload)
             return
         # Half duplex: only SUSTAINED loud audio (a real barge-in) reaches the STT;
         # everything else waits in the pre-roll buffer and is never billed.
@@ -92,17 +106,16 @@ class MediaMixin:
             self._barge_in_prebuffer.append(payload)
             return
         self._barge_in_window.clear()
-        if stt is not None:
-            for buffered in self._barge_in_prebuffer:
-                await stt.send_audio_b64(buffered)
+        held = list(self._barge_in_prebuffer)
         self._barge_in_prebuffer.clear()
+        for buffered in held:
+            await self._to_stt(buffered)
         await self._on_barge_in()
-        if stt is not None:
-            await stt.send_audio_b64(payload)
+        await self._to_stt(payload)
 
     async def _on_barge_in(self) -> None:
+        # Only the caller's words reset the silence count (a door slam is not an answer).
         self._last_barge_in_at = time.monotonic()
-        self._silence_strikes = 0
         if not self._barge_in_allowed:
             return
         await self._interrupt_playback("caller_barge_in")

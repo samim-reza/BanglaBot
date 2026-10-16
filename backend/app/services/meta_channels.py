@@ -38,7 +38,7 @@ logger = structlog.get_logger(__name__)
 INSTAGRAM = "instagram"
 WHATSAPP_CLOUD = "whatsapp_cloud"
 #: settings key → the field a merchant is found by.
-LOOKUP_FIELD = {INSTAGRAM: "account_id", WHATSAPP_CLOUD: "phone_number_id"}
+LOOKUP_FIELD = {INSTAGRAM: "account_id", WHATSAPP_CLOUD: "phone_number_id", "messenger": "page_id"}
 MAX_CHARS = {INSTAGRAM: 1000, WHATSAPP_CLOUD: 4096}
 TEXT_ONLY = "Sorry, I can only read text messages."
 _tasks: set[asyncio.Task] = set()

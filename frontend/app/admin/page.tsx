@@ -21,7 +21,7 @@ export default function AdminDashboardPage() {
     <>
       <PageHeader
         title="Dashboard"
-        subtitle="Today is from midnight, Asia/Dhaka."
+        subtitle="Today is from midnight, UTC."
         actions={
           <>
             <Button variant="outline" onClick={() => void refresh()} disabled={refreshing} aria-label="Refresh">

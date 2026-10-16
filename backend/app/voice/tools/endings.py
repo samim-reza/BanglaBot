@@ -43,7 +43,8 @@ class EndingsMixin:
         if terminal.gate:
             if hearing.supports(caller_text, "later"):
                 return await self._settle_later()
-            if not hearing.supports(caller_text, terminal.gate):
+            changed_mind = terminal.gate == "cancel" and hearing.declines_cancel(caller_text)  # "cancel it — no wait, keep it"
+            if changed_mind or not hearing.supports(caller_text, terminal.gate):
                 self.runtime.reasks += 1
                 if self.runtime.reasks <= MAX_REASKS:
                     line = self.flow.reask_line(self.runtime.reasks, language)
@@ -115,6 +116,8 @@ class EndingsMixin:
 
         An inbound caller's partial details are kept as a lead when the flow can."""
         language = self.language
+        if self.completed:
+            return self._goodbye_after_completed()
         kept = await self._keep_fallback(note=note or _note(OUTCOME_UNCLEAR, language))
         if not kept:
             await self._set_outcome(OUTCOME_UNCLEAR, note or _note(OUTCOME_UNCLEAR, language))
@@ -129,7 +132,7 @@ class EndingsMixin:
 
     async def _keep_fallback(self, *, note: str = "") -> bool:
         """Write the flow's fallback (e.g. a partial lead) for an inbound call that ends early."""
-        if self.outcome or self.flow.direction != DIRECTION_INBOUND:
+        if self.outcome or self.completed or self.flow.direction != DIRECTION_INBOUND:
             return False
         action = self.flow.fallback_action(self.runtime.slots, self.runtime.ctx)
         if action is None:
@@ -186,6 +189,8 @@ class EndingsMixin:
                 return await self.closing_result()
             # A terminal already spoke its closing; the agent is hanging up.
             return ToolResult(payload={"ok": True, "outcome": self.outcome}, hang_up=True, stop=True, outcome=self.outcome)
+        if self.completed:
+            return self._goodbye_after_completed()
         stage = self.runtime.stage
         ctx = self.runtime.ctx
         reason = str(args.get("reason") or "").strip()
@@ -196,6 +201,20 @@ class EndingsMixin:
                 OUTCOME_WRONG_NUMBER,
                 self.flow.closing_line(OUTCOME_WRONG_NUMBER, self.runtime.slots, ctx, language),
                 _note(OUTCOME_WRONG_NUMBER, language),
+            )
+        elif self.flow.direction == DIRECTION_INBOUND and (hearing.supports(caller_text, "later") or "later" in reason.lower()):
+            # "I'll call back after 11": the caller will ring again — keep what they said, invite them back.
+            await self._keep_fallback(note=_note("later", language))
+            self.closing_spoken = True
+            outcome = self.outcome or OUTCOME_INQUIRY
+            if not self.outcome:
+                await self._set_outcome(OUTCOME_INQUIRY, "")
+            return ToolResult(
+                payload={"ok": True, "outcome": outcome, "instruction": "Say nothing."},
+                say=phrase("closing_caller_later", language),
+                hang_up=True,
+                stop=True,
+                outcome=outcome,
             )
         elif hearing.supports(caller_text, "later") or "later" in reason.lower():
             if await self._keep_fallback(note=_note("later", language)):
@@ -209,11 +228,15 @@ class EndingsMixin:
                 )
             outcome, say, note = OUTCOME_UNCLEAR, phrase("closing_callback", language), _note("later", language)
         elif self.flow.direction == DIRECTION_INBOUND:
+            # What they told us is kept for the business either way; a caller who politely said they're
+            # done just hears goodbye (no "we'll call you back" they didn't ask for).
+            finished = hearing.says_goodbye(caller_text) or hearing.is_done(caller_text)
             if await self._keep_fallback():
                 self.closing_spoken = True
+                say = phrase("closing_inquiry", language) if finished else self.flow.closing_line(self.outcome, self.runtime.slots, ctx, language)
                 return ToolResult(
                     payload={"ok": True, "outcome": self.outcome, "instruction": "Say nothing."},
-                    say=self.flow.closing_line(self.outcome, self.runtime.slots, ctx, language),
+                    say=say,
                     hang_up=True,
                     stop=True,
                     outcome=self.outcome,
@@ -237,12 +260,15 @@ class EndingsMixin:
 
     async def abandon(self, outcome: str, *, note: str = "") -> None:
         """Record an outcome for a call nobody we should talk to answered (divert / voicemail)."""
-        if not self.outcome:
+        if not self.outcome and not self.completed:
             await self._set_outcome(outcome, note or _note(outcome, self.language))
 
     async def settle(self, outcome: str, *, note: str = "") -> str:
         """Commit an agent-decided outcome (auto-dropped, timeout). Returns the closing line."""
         language = self.language
+        if self.completed and not self.outcome:
+            # Silence after "anything else?": the booking stands; just say goodbye.
+            return self._farewell_line()
         if not self.outcome:
             if not await self._keep_fallback(note=note or _note(outcome, language)):
                 await self._set_outcome(outcome, note or _note(outcome, language))
@@ -252,10 +278,27 @@ class EndingsMixin:
 
     async def finish_inbound(self) -> None:
         """An inbound call ended without an outcome (the caller hung up)."""
-        if self.outcome:
+        if self.outcome or self.completed:
             return
         if not await self._keep_fallback():
             await self._set_outcome(OUTCOME_INQUIRY, "")
+
+    def _farewell_line(self) -> str:
+        farewell = getattr(self.flow, "farewell", None)
+        text = farewell(self.runtime.ctx, self.language) if callable(farewell) else ""
+        return text or phrase("closing_inquiry", self.language)
+
+    def _goodbye_after_completed(self) -> ToolResult:
+        """The caller is done after their request was saved: goodbye, keeping that outcome."""
+        self.closing_spoken = True
+        outcome = self.completed[-1]
+        return ToolResult(
+            payload={"ok": True, "outcome": outcome, "instruction": "Say nothing."},
+            say=self._farewell_line(),
+            hang_up=True,
+            stop=True,
+            outcome=outcome,
+        )
 
     async def _set_outcome(self, outcome: str, note: str) -> None:
         self.outcome = outcome

@@ -1,7 +1,7 @@
-# BanglaBot local speech server
+# Callisa local speech server
 
 A free, open-source speech server for phone-call testing. It runs on the developer's laptop GPU and
-falls back to CPU, so testing calls doesn't use paid STT or TTS. The BanglaBot backend calls it through its
+falls back to CPU, so testing calls doesn't use paid STT or TTS. The Callisa backend calls it through its
 `local` STT/TTS providers (`backend/app/voice/providers/{stt,tts}/local.py`).
 
 | Part | Model | License | On disk | Runtime |
@@ -71,7 +71,7 @@ and returns raw audio:
 - `pcm16_24k` returns `audio/L16;rate=24000` (little-endian int16).
 
 Empty text, an unknown voice, an unsupported language or a bad format returns 400. Languages are `en` (US), `en-gb`, `es`, `fr`, `hi`,
-`it` and `pt`. Bengali isn't supported. With plain `en`, an explicit voice keeps its own accent, so `b*` voices sound British.
+`it` and `pt`. With plain `en`, an explicit voice keeps its own accent, so `b*` voices sound British.
 Text is split into chunks of 200 characters or less. A typical reply is one chunk and one model call. Longer text streams back chunk by chunk with
 short pauses, and the `X-First-Chunk-Ms` header reports how long the first chunk took to synthesize.
 

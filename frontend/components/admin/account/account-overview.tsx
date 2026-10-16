@@ -6,7 +6,7 @@ import { PlanAddonsCard } from "@/components/admin/plan-addons-card";
 import { useAdminMe } from "@/components/admin/shell/admin-me";
 import { planPrice, regionOf, verticalOf } from "@/components/admin/use-admin-meta";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { formatDate, languageLabel } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import { t } from "@/lib/vertical";
 import type { AddonItem, AdminMerchantDetail, AdminMeta } from "@/services/api";
 
@@ -163,7 +163,6 @@ export function AccountOverview({
             <Row label="Time zone">{merchant.timezone || "—"}</Row>
             <Row label="Currency">{merchant.currency || "—"}</Row>
             <Row label="Emergency number">{merchant.emergency_number || "—"}</Row>
-            <Row label="Language">{languageLabel(merchant.language)}</Row>
             <Row label="Voice">{merchant.voice_persona === "male" ? "Male" : "Female"}</Row>
             <Row label="Greeting">
               {merchant.custom_greeting ? <span className="italic">“{merchant.custom_greeting}”</span> : <span className="text-muted-foreground">Standard</span>}

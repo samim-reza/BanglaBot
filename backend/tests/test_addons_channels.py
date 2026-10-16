@@ -208,7 +208,7 @@ async def test_jev_only_answers_when_confident(monkeypatch):
     monkeypatch.setattr(settings, "typesafe_api_key", "ts-key")
     monkeypatch.setattr(jev, "http", lambda: httpx.AsyncClient(transport=httpx.MockTransport(jev_reply("yes", 0.96))))
     assert await jev.decide_yes_no("Is that right?", "yeah that works for me") == "yes"
-    assert await jev.decide_yes_no("Is that right?", "yeah that works", language="bn") is None
+    assert await jev.decide_yes_no("Is that right?", "yeah that works", language="xx") is None
     monkeypatch.setattr(jev, "http", lambda: httpx.AsyncClient(transport=httpx.MockTransport(jev_reply("yes", 0.6))))
     assert await jev.decide_yes_no("Is that right?", "I guess, maybe") is None
     monkeypatch.setattr(jev, "http", lambda: httpx.AsyncClient(transport=httpx.MockTransport(jev_reply("other", 0.99))))

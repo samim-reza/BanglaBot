@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { BanglaBotMark } from "@/components/brand";
+import { BrandMark } from "@/components/brand";
 import { BRAND } from "@/lib/brand";
 import { AGENTS, TRIAL_HREF } from "@/lib/site-content";
 
@@ -48,7 +48,7 @@ export function SiteFooter() {
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:grid-cols-2 sm:px-6 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div className="max-w-xs">
           <Link href="/" className="inline-flex items-center gap-2.5" aria-label={`${BRAND.name} home`}>
-            <BanglaBotMark compact />
+            <BrandMark compact />
             <span className="text-lg font-bold tracking-tight text-primary-dark">{BRAND.name}</span>
           </Link>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{BRAND.tagline}</p>

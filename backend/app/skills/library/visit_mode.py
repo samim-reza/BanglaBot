@@ -8,32 +8,32 @@ from app.flows.context import CallContext
 from app.flows.steps import SlotSpec
 from app.skills.base import BoundSkill
 from app.skills.library.choice import ChoiceSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import line
 from app.verticals.base import FieldSpec, L
 
 MODES = (
-    ("caller_choice", L("Caller chooses", "কলার বেছে নেবেন")),
-    ("in_person", L("In person only", "শুধু সরাসরি")),
-    ("online", L("Online only", "শুধু অনলাইন")),
+    ("caller_choice", L("Caller chooses")),
+    ("in_person", L("In person only")),
+    ("online", L("Online only")),
 )
 
 
 class VisitModeSkill(ChoiceSkill):
     key = "visit_mode"
     slot = "visit_mode"
-    label = L2("In person or online", "সরাসরি না অনলাইন")
-    description = L2("Offers an online (video) visit as well as in person.", "অনলাইন (ভিডিও) বা সরাসরি সাক্ষাৎ।")
+    label = L("In person or online")
+    description = L("Offers an online (video) visit as well as in person.")
     default_enabled = False
-    options = (FieldSpec("mode", L("Visit type", "সাক্ষাতের ধরন"), "select", options=MODES, default="caller_choice"),)
+    options = (FieldSpec("mode", L("Visit type"), "select", options=MODES, default="caller_choice"),)
     defaults = {"mode": "caller_choice"}
     slots = (SlotSpec("visit_mode", "in_person = come to the venue, online = video call. Only if they say so.", {"type": "string", "enum": ["in_person", "online"]}),)
     lines = (
-        line("ask", "Would you like to come in person, or have an online video consultation?", "আপনি কি সরাসরি আসবেন, নাকি অনলাইনে ভিডিও কলে দেখাবেন?", label="Ask the visit type", static=True),
-        line("readback_online", "It's an online video consultation; we'll text you the link.", "এটা অনলাইন ভিডিও কনসালটেশন; লিংকটা এসএমএস করে পাঠাব।", label="Read-back (online)", static=True),
+        line("ask", "Would you like to come in person, or have an online video consultation?", label="Ask the visit type", static=True),
+        line("readback_online", "It's an online video consultation; we'll text you the link.", label="Read-back (online)", static=True),
     )
     synonyms = {
-        "online": ("online", "video", "virtual", "zoom", "অনলাইন", "ভিডিও"),
-        "in_person": ("in person", "come in", "visit", "physically", "সরাসরি", "চেম্বারে", "আসব"),
+        "online": ("online", "video", "virtual", "zoom"),
+        "in_person": ("in person", "come in", "visit", "physically"),
     }
     volunteerable = frozenset({"visit_mode"})
     goal = "Find out whether they want to come in person or have an online video visit."

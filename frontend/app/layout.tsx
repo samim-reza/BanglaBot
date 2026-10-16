@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { Noto_Sans_Bengali } from "next/font/google";
+import { Noto_Sans } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 
 import { AppToastProvider } from "@/components/app-toast";
 import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
-const notoSansBengali = Noto_Sans_Bengali({
-  subsets: ["bengali", "latin"],
+const notoSans = Noto_Sans({
+  subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-noto-bengali",
+  variable: "--font-noto-sans",
   display: "swap",
 });
 
@@ -24,7 +24,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={notoSansBengali.variable} suppressHydrationWarning>
+    <html lang="en" className={notoSans.variable} suppressHydrationWarning>
       <body className="font-sans antialiased">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
           <AppToastProvider>{children}</AppToastProvider>

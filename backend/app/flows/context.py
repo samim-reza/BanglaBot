@@ -40,7 +40,7 @@ class CatalogEntry:
 
 def _norm(text: Any) -> str:
     lowered = str(text or "").lower()
-    lowered = re.sub(r"(?:^|\s)(?:dr|ডা|ডাঃ|ডাক্তার|doctor)\.?\s*", " ", lowered)
+    lowered = re.sub(r"(?:^|\s)(?:dr|doctor)\.?\s*", " ", lowered)
     return " ".join(re.sub(r"[^\w\s]", " ", lowered).split())
 
 
@@ -96,11 +96,6 @@ class CallContext:
     @property
     def month_first(self) -> bool:
         return self.region.date_style == "mdy"
-
-    @property
-    def saturday_first(self) -> bool:
-        """List weekdays Saturday-first (the Bangladeshi week) or Monday-first."""
-        return self.region.code == "BD"
 
     @property
     def chat(self) -> bool:

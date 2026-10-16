@@ -35,12 +35,12 @@ class FakeTTS:
 
 @pytest.fixture
 def order():
-    return SimpleNamespace(id="o-1", customer_name="Samim", items_summary="Shirt x2", total_amount=1250, currency="BDT", address="")
+    return SimpleNamespace(id="o-1", customer_name="Samim", items_summary="Shirt x2", total_amount=1250, currency="USD", address="")
 
 
 @pytest.fixture
 def merchant():
-    return SimpleNamespace(business_name="Demo Shop", language="bn", supported_languages=["bn", "en"], voice_persona="female", verify_address=False)
+    return SimpleNamespace(business_name="Demo Shop", language="en", supported_languages=["en"], voice_persona="female", verify_address=False)
 
 
 @pytest.fixture(autouse=True)
@@ -52,37 +52,37 @@ def _clean_store():
 
 @pytest.mark.asyncio
 async def test_compose_uses_model_line_when_it_is_a_question(order, merchant):
-    llm = FakeLLM("আপনি দুইটা শার্ট অর্ডার করেছেন, মোট এক হাজার দুইশো পঞ্চাশ টাকা ক্যাশ অন ডেলিভারিতে। অর্ডারটি কি কনফার্ম করবেন?")
-    line = await prepared.compose_decision_line(llm, DEFAULT_FLOW, order, merchant, "bn")
+    llm = FakeLLM("You ordered two shirts, 1250 dollars in total, cash on delivery. Shall I confirm the order?")
+    line = await prepared.compose_decision_line(llm, DEFAULT_FLOW, order, merchant, "en")
     assert line.endswith("?")
-    assert "এক হাজার দুইশো পঞ্চাশ" in llm.calls[0][1]["content"]  # amount handed over in words
+    assert "1250 dollars" in llm.calls[0][1]["content"]  # amount handed over as it is spoken
 
 
 @pytest.mark.asyncio
 async def test_compose_falls_back_when_the_model_line_is_unusable(order, merchant):
     line = await prepared.compose_decision_line(FakeLLM("- item list\n- total"), DEFAULT_FLOW, order, merchant, "en")
     assert line == prepared.fallback_decision_line(DEFAULT_FLOW, order, "en")
-    assert "1250" in line or "one thousand" in line.lower() or "taka" in line.lower()
+    assert "1250 dollars" in line
 
 
 @pytest.mark.asyncio
 async def test_prepare_call_lines_stores_and_warms_every_language(order, merchant):
-    llm = FakeLLM("You ordered two shirts for 1,250 taka, cash on delivery. Shall I confirm the order?")
+    llm = FakeLLM("You ordered two shirts for 1,250 dollars, cash on delivery. Shall I confirm the order?")
     tts = FakeTTS()
     result = await prepared.prepare_call_lines(order, merchant, llm=llm, tts=tts)
-    assert set(result) == {"bn"}  # only the merchant's call language is prepared
-    assert prepared.get_decision_line("o-1", "bn") == result["bn"]
-    assert prepared.get_decision_line("o-1", "en") is None
-    assert {lang for _, lang in tts.warmed} == {"bn"}
+    assert set(result) == {"en"}  # only the merchant's call language is prepared
+    assert prepared.get_decision_line("o-1", "en") == result["en"]
+    assert prepared.get_decision_line("o-9", "en") is None
+    assert {lang for _, lang in tts.warmed} == {"en"}
     assert not llm.closed  # a caller-supplied LLM is not closed by the helper
 
 
-def test_store_expires_and_is_keyed_per_language():
-    prepared.put_decision_line("o-2", "bn", "প্রশ্ন?")
-    assert prepared.get_decision_line("o-2", "bn") == "প্রশ্ন?"
+def test_store_expires_and_is_keyed_per_order():
+    prepared.put_decision_line("o-2", "en", "Shall I confirm?")
+    assert prepared.get_decision_line("o-2", "en") == "Shall I confirm?"
+    assert prepared.get_decision_line("o-3", "en") is None
+    prepared._decision_lines[("o-2", "en")] = ("Shall I confirm?", -10**9)
     assert prepared.get_decision_line("o-2", "en") is None
-    prepared._decision_lines[("o-2", "bn")] = ("প্রশ্ন?", -10**9)
-    assert prepared.get_decision_line("o-2", "bn") is None
 
 
 def test_call_snapshot_round_trip(order, merchant):

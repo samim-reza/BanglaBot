@@ -47,12 +47,6 @@ REGIONS: dict[str, Region] = {
         Region("AU", "Australia", "Australia/Sydney", "AUD", "000", "61", "0", "en-AU", "dmy", health_line="1800 022 222 (healthdirect)", national_lengths=(9,)),
         Region("NZ", "New Zealand", "Pacific/Auckland", "NZD", "111", "64", "0", "en-NZ", "dmy", health_line="0800 611 116 (Healthline)", national_lengths=(8, 9, 10)),
         Region("IN", "India", "Asia/Kolkata", "INR", "112", "91", "0", "en-IN", "dmy", national_lengths=(10,)),
-        Region(
-            "BD", "Bangladesh", "Asia/Dhaka", "BDT", "999", "880", "0", "en-IN", "dmy",
-            working_days=("sat", "sun", "mon", "tue", "wed", "thu"),
-            health_line="16263 (Shasthyo Batayon)",
-            national_lengths=(10,),
-        ),
         Region("PK", "Pakistan", "Asia/Karachi", "PKR", "1122", "92", "0", "en-IN", "dmy", national_lengths=(10,)),
         Region("AE", "United Arab Emirates", "Asia/Dubai", "AED", "999", "971", "0", "en-US", "dmy",
                working_days=("mon", "tue", "wed", "thu", "fri", "sat"), national_lengths=(9,)),
@@ -83,8 +77,7 @@ def normalize_phone(phone: Any, region: Region | str | None = None) -> str:
 
     ``+44 7700 900123`` / ``0044…`` pass through; a national number gets the
     region's country code with its trunk prefix dropped (``07700 900123`` →
-    ``+447700900123``, ``01712345678`` → ``+8801712345678``, ``(415) 555-0100``
-    → ``+14155550100``).
+    ``+447700900123``, ``(415) 555-0100`` → ``+14155550100``).
     """
     reg = region if isinstance(region, Region) else get_region(region)
     raw = str(phone or "").strip()

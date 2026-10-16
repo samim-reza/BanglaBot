@@ -22,7 +22,7 @@ from app.voice.agent import CallAgent
 from app.voice.audio import AmbientNoiseTracker
 from app.voice.bridge.hangup import HangupMixin
 from app.voice.bridge.lifecycle import LifecycleMixin
-from app.voice.bridge.media import PREROLL_FRAMES, MediaMixin
+from app.voice.bridge.media import PREROLL_FRAMES, STT_GAP_FRAMES, MediaMixin
 from app.voice.bridge.speaker import SpeakerMixin
 from app.voice.bridge.stt_loop import SttMixin
 from app.voice.bridge.transcript import TranscriptMixin
@@ -87,8 +87,7 @@ class CallBridge(
 
         # --- language / voice ---
         self.primary_language = normalize_supported(getattr(merchant, "language", None), [])[0]
-        # The account's language is THE call language: no per-turn auto-detect
-        # (one mis-transcribed line used to flip a Bangla call to English).
+        # The account's language is THE call language: no per-turn auto-detect.
         self.supported_languages = [self.primary_language]
         self.active_language = self.primary_language
         self.persona = normalize_persona(getattr(merchant, "voice_persona", None) or self.settings.tts_voice_persona)
@@ -123,6 +122,16 @@ class CallBridge(
         self._pending_user_turn_seq = 0
         self._turn_backlog = ""
         self._agent_turn_task: asyncio.Task[None] | None = None
+        self._agent_handle_task: asyncio.Task[None] | None = None
+        #: The text the agent is answering right now, and a cancelled turn's text (the caller
+        #: kept talking) waiting to be answered together with what they said next.
+        self._agent_turn_text = ""
+        self._carry_text = ""
+        #: STT says the caller is talking (speech_started / words since the last final), and when.
+        self._caller_speech_open = False
+        self._caller_active_at = 0.0
+        #: Real replies queued (not acks / hold lines): a turn that queued none gets the recovery line.
+        self._replies_queued = 0
 
         # --- audio out ---
         self._speech_queue: asyncio.Queue[_Utterance] = asyncio.Queue()
@@ -135,6 +144,10 @@ class CallBridge(
         self._pending_playback_mark: str | None = None
         self._playback_mark_event = asyncio.Event()
         self._tts_semaphore = asyncio.Semaphore(2)
+        self._tts_silent_lines = 0
+        #: What a barge-in cut off (utterance, unheard text) — resumed when no words follow.
+        self._unheard: list[tuple[_Utterance, str]] = []
+        self._unheard_at = 0.0
         self.tts_chars = 0
         self.tts_cache_hits = 0
 
@@ -147,6 +160,8 @@ class CallBridge(
         # first syllable of a real interruption still reaches the transcriber.
         self._barge_in_prebuffer: deque[str] = deque(maxlen=(self._barge_in_window.maxlen or 0) + PREROLL_FRAMES)
         self._last_barge_in_at = 0.0
+        self._stt_gap: deque[str] = deque(maxlen=STT_GAP_FRAMES)
+        self._stt_send_failed = False
         self._stt_usage: list[dict[str, Any]] = []
         #: provider → {"chars": synthesised (billed), "cached_chars": served from cache} for this call.
         self._tts_usage: dict[str, dict[str, int]] = {}
@@ -156,6 +171,7 @@ class CallBridge(
         self.last_customer_audio_at = self.started_at
         self.last_voice_activity_at = self.started_at
         self._silence_counting_paused_until = 0.0
+        self._last_busy_at = self.started_at
         self._silence_strikes = 0
         self._hangup_scheduled = False
         self._goodbye_hangup_delay_seconds = 8.0
@@ -196,7 +212,13 @@ class CallBridge(
 
     @property
     def silence_seconds(self) -> int:
+        """Idle seconds before the agent re-prompts (the account's setting, default 10)."""
         return max(3, int(getattr(self.merchant, "silence_hangup_secs", 0) or 10))
+
+    @property
+    def silence_reprompts(self) -> int:
+        """Silent stretches answered with a re-prompt; the one after them drops the call."""
+        return max(0, int(getattr(self.settings, "voice_silence_reprompts", 2)))
 
 
 __all__ = ["CallBridge"]

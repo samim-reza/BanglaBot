@@ -81,7 +81,7 @@ class RestaurantFlow(PipelineFlow):
             return summary, c.text("confirm_booking", language)
         if intent == "message":
             phone = caller_phone(slots, ctx)
-            said = ctx.say_number(phone, language) if slots.get("phone") or not ctx.caller_number else ("this number" if language != "bn" else "এই নম্বরে")
+            said = ctx.say_number(phone, language) if slots.get("phone") or not ctx.caller_number else "this number"
             message = str(slots.get("message") or "").strip().rstrip(".!?।")
             return c.text("readback_message", language, message=message, phone=said), c.text("confirm_message", language)
         delivery = slots.get("fulfillment") == "delivery"

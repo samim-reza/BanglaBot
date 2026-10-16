@@ -60,6 +60,19 @@ async def test_stored_catalog_overrides_defaults_and_fills_missing_fields(memory
     assert catalog_plans.signup_settings()["auto_activate"] is True
 
 
+async def test_stored_catalog_drops_the_retired_language_extras(memory):
+    memory.values[catalog_plans.PLANS_KEY] = {
+        "tiers": [{"key": "pro", "includes": ["google_calendar", "extra_language"], "included_languages": 2}],
+    }
+    memory.values[catalog_plans.ADDONS_KEY] = {
+        "addons": [{"key": "sms", "price": 12}, {"key": "extra_language", "name": "Extra language", "category": "feature",
+                    "price": 19, "period": "month", "summary": "", "feature": "extra_language", "grants": {"languages": 1}}],
+    }
+    await catalog_plans.load()
+    assert get_plan("pro").includes == ("google_calendar",)
+    assert list(addons.CATALOG) == ["sms"]
+
+
 @pytest.mark.parametrize(
     "mutate, message",
     [
@@ -162,7 +175,7 @@ def test_entitlements_carry_the_new_limits():
     assert (starter.max_concurrent_calls, starter.flow_editing, starter.payments, starter.api_webhooks) == (2, FLOW_LINES, False, False)
     growth = entitlements(account("growth", {"concurrent_call": 2, "extra_language": 1}))
     assert growth.max_concurrent_calls == 6 and growth.flow_editing == FLOW_FULL and growth.payments and growth.custom_fields
-    assert growth.languages == 2 and growth.has_feature("payments")
+    assert growth.has_feature("payments") and "extra_language" not in growth.addons  # retired add-on is ignored
     assert entitlements(account("chat")).max_concurrent_calls == 0
     shape = entitlements(account("enterprise")).as_json()
     assert shape["limits"]["minutes"] is None and shape["limits"]["max_concurrent_calls"] == 20

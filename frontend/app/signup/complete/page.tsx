@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CircleX } from "lucide-react";
 
-import { SIGNUP_REFERENCE_KEY } from "@/components/public/pay-view";
+import { LEGACY_SIGNUP_REFERENCE_KEY, SIGNUP_REFERENCE_KEY } from "@/components/public/pay-view";
 import { PublicNotice, PublicShell } from "@/components/public/public-shell";
 import { SignupStatusNotice } from "@/components/public/signup-status";
 import { Button } from "@/components/ui/button";
@@ -40,6 +40,7 @@ export default function SignupCompletePage() {
         if (next.status === "approved" || next.status === "rejected") {
           try {
             window.sessionStorage.removeItem(SIGNUP_REFERENCE_KEY);
+            window.sessionStorage.removeItem(LEGACY_SIGNUP_REFERENCE_KEY);
           } catch {
             // storage blocked: nothing to clean up
           }

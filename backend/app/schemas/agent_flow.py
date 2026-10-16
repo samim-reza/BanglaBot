@@ -16,7 +16,7 @@ class AgentFlowSave(BaseModel):
 
 class AgentFlowPreview(BaseModel):
     config: dict[str, Any] | None = None
-    #: Preview language (default: the account's); lets an English account check its Bangla lines.
+    #: Preview language (default: the account's).
     language: str | None = None
 
 

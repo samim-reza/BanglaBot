@@ -22,11 +22,9 @@ from app.flows.context import CallContext
 from app.voice.languages import language_name, normalize_language, phrase
 
 _STYLE = {
-    "bn": "Use natural, polite, colloquial Bangladeshi Bangla with the respectful \"আপনি\".",
     "en": "Use warm, friendly, professional English.",
 }
 _NUMBERS = {
-    "bn": "Say numbers, prices, dates and times in words, the way a person would on the phone.",
     "en": "Write times, prices and numbers the normal way (9 AM, $140, 2:30 PM) — the voice reads them naturally.",
 }
 
@@ -48,6 +46,11 @@ How to work:
 - Never say something is booked, confirmed, cancelled or changed unless a tool result says so.
 - If the caller asks something unrelated to the business, answer briefly and politely, then steer back.
 - The caller wants a human → transfer_to_human. The conversation is finished or the caller wants to stop → end_call (the system says goodbye). After any call-ending tool, say nothing more.
+- Unclear or garbled words: ask briefly to repeat. Never transfer or end the call because of them.
+- Off-topic questions (weather, other businesses, general chat): say briefly that you can only help with this business, then continue.
+- A question isn't a request: answer it, and collect booking details only once the caller says they want to book.
+- Answer questions completely from the facts (asked "when?" → the days and the hours), still briefly.
+- Asked for something the business doesn't offer: say so plainly ("Sorry, we don't offer roof repairs") before offering what it does.
 - If you could not understand the caller, briefly ask them to repeat."""
 
 
@@ -73,7 +76,7 @@ def core_rules(language: str, channel: str = "voice") -> str:
         # Same working rules; only the medium differs ("caller" reads as "customer").
         text = _CHAT_HEAD + text[text.index("\nHow to work:"):]
     return text.format(
-        language=language_name(lang).split(" (")[0],
+        language=language_name(lang),
         style=_STYLE.get(lang, _STYLE["en"]),
         numbers=_NUMBERS.get(lang, _NUMBERS["en"]),
     )

@@ -4,7 +4,7 @@ One model covers every vertical:
 
 - a **doctor chamber** is a session on some weekdays ("Sat/Mon/Wed 17:00–21:00")
   cut into ``step_minutes`` slots; the slot's position is the patient's
-  **serial number** (how Bangladeshi chambers book), its start the
+  **serial number** (how South Asian chambers book), its start the
   approximate time to arrive;
 - a **home-service visit** is a named window ("morning 09:00–12:00") with one
   slot (``step_minutes=0``) and a ``capacity`` = how many teams are out;

@@ -17,7 +17,7 @@ import { Pagination } from "@/components/pagination";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDateTime, formatDuration, humanize, languageLabel } from "@/lib/format";
+import { formatDateTime, formatDuration, humanize } from "@/lib/format";
 import { channelLabel } from "@/lib/vertical";
 import { adminApi, formatApiError, type CallChannel, type CallLog, type Merchant } from "@/services/api";
 
@@ -212,7 +212,6 @@ function CallsView() {
 function CallDetail({ log }: { log: CallLog }) {
   const { can } = useAdminMe();
   const facts: [string, React.ReactNode][] = [
-    ["Language", languageLabel(log.language)],
     ["Call status", humanize(log.call_status)],
     ["Ended at", humanize(log.final_node)],
     ["Call SID", log.twilio_call_sid ? <span className="break-all font-mono">{log.twilio_call_sid}</span> : "—"],

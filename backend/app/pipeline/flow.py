@@ -13,15 +13,25 @@ the read-back summary, the commit, and the outcome lines.
 from __future__ import annotations
 
 import hashlib
+import re
 from typing import Any
 
-from app.flows.base import STAGE_COMMIT, STAGE_DONE, CommitAction, Instruction, Terminal
+from app.flows.base import (
+    OUTCOME_BOOKED,
+    OUTCOME_RESCHEDULED,
+    STAGE_COMMIT,
+    STAGE_DONE,
+    CommitAction,
+    Instruction,
+    Terminal,
+)
 from app.flows.context import DIRECTION_INBOUND, CallContext
 from app.flows.steps import CONFIRMED, DECISION, STAGE_AMEND, STAGE_CONFIRM, StepFlow
 from app.pipeline.blueprint import TAIL_COMMIT, TAIL_NONE, Branch
+from app.pipeline.followup import AFTER, AMEND, PipelineFollowUpMixin, RecordView
 from app.pipeline.lines import PipelineLinesMixin
 from app.pipeline.tools import PipelineToolsMixin
-from app.skills.base import BoundSkill
+from app.skills.base import DECLINED, BoundSkill
 from app.verticals.common import clear_notice, with_notice
 from app.voice.languages import normalize_language, phrase
 
@@ -30,7 +40,17 @@ def join(*parts: str) -> str:
     return " ".join(part.strip() for part in parts if part and part.strip())
 
 
-class PipelineFlow(PipelineToolsMixin, PipelineLinesMixin, StepFlow):
+def _no_blank_name(text: str) -> str:
+    """A read-back with a detail the caller declined: "for , Tuesday" → "for you, Tuesday";
+    "4-bedroom, asking ." → "4-bedroom."; empty clauses (", ,") disappear."""
+    text = re.sub(r"\bfor\s*,", "for you,", text)
+    text = re.sub(r"\bfor\s*\.", "for you.", text)
+    text = re.sub(r",\s*(?:asking|in|at|with|on|about)\s*(?=[.,])", "", text)
+    text = re.sub(r"(?:,\s*)+(?=[,.])", "", text)
+    return re.sub(r"^So,\s*,\s*", "So, ", re.sub(r"\s+,", ",", text))
+
+
+class PipelineFlow(PipelineFollowUpMixin, PipelineToolsMixin, PipelineLinesMixin, StepFlow):
     def __init__(self, compiled: Any) -> None:
         self.cp = compiled
         bp = compiled.blueprint
@@ -93,6 +113,7 @@ class PipelineFlow(PipelineToolsMixin, PipelineLinesMixin, StepFlow):
 
     def normalize(self, fields: dict[str, Any], slots: dict[str, Any], ctx: CallContext, language: str):
         fields = dict(fields)
+        self._amend_last(fields, slots, ctx)
         override: Instruction | None = None
         done: set[str] = set()
         for bound in (*self.active(slots), *self.cp.sequence()):
@@ -131,11 +152,12 @@ class PipelineFlow(PipelineToolsMixin, PipelineLinesMixin, StepFlow):
         branch = self.branch(slots)
         if branch is None:
             return STAGE_DONE
+        declined = set(slots.get(DECLINED) or ())
         for bound in self.cp.branches[branch.key]:
             if not bound.skill.applies(bound, slots, ctx):
                 continue
             stage = bound.skill.stage(bound, slots, ctx)
-            if stage:
+            if stage and stage not in declined:
                 return stage
         if branch.tail == TAIL_NONE:
             return STAGE_DONE
@@ -157,7 +179,7 @@ class PipelineFlow(PipelineToolsMixin, PipelineLinesMixin, StepFlow):
     def readback(self, slots: dict[str, Any], ctx: CallContext, language: str) -> str:
         summary, question = self.readback_core(slots, ctx, language)
         parts = [bound.skill.readback_part(bound, slots, ctx, language) for bound in self.active(slots)]
-        return join(summary, *parts, question)
+        return _no_blank_name(join(summary, *parts, question))
 
     def readback_core(self, slots: dict[str, Any], ctx: CallContext, language: str) -> tuple[str, str]:
         """(summary, question) of the read-back — the vertical's own words."""
@@ -212,6 +234,11 @@ class PipelineFlow(PipelineToolsMixin, PipelineLinesMixin, StepFlow):
                 if status:
                     action.status = status
         details.pop("_status", None)
+        if slots.get(AMEND):
+            # Amending the record written earlier in this call: update it, don't add a second one.
+            action.record_id = str(slots[AMEND])
+            if action.outcome == OUTCOME_BOOKED:
+                action.outcome = OUTCOME_RESCHEDULED
         details["idem"] = idempotency_key(ctx, action)
         if details:
             action.fields = {**action.fields, "details": details}
@@ -237,15 +264,22 @@ class PipelineFlow(PipelineToolsMixin, PipelineLinesMixin, StepFlow):
             return super().closing_line(outcome, slots, ctx, language)
         return join(line, self.farewell(ctx, language))
 
-    def closing_for(self, action: CommitAction, slots: dict[str, Any], ctx: CallContext, language: str) -> str:
+    def closing_for(
+        self, action: CommitAction, slots: dict[str, Any], ctx: CallContext, language: str, *, farewell: bool = True
+    ) -> str:
         """Closing after a successful commit: outcome line + skill notes (text coming, pay link) + goodbye."""
         line = self.outcome_line(action.outcome, slots, ctx, language)
+        if not line and action.outcome == OUTCOME_RESCHEDULED:
+            # An amended booking: the booking sentence already states the new time.
+            line = self.outcome_line(OUTCOME_BOOKED, slots, ctx, language)
+        if not line and not farewell:
+            line = phrase("closing_saved", language)
         if not line:
             return super().closing_line(action.outcome, slots, ctx, language)
         notes: list[str] = []
         for bound in (*self.active(slots), *self.cp.effects):
             notes += bound.skill.notes(bound, action, slots, ctx, language)
-        return join(line, *notes, self.farewell(ctx, language))
+        return join(line, *notes, self.farewell(ctx, language) if farewell else "")
 
     def terminals(self) -> list[Terminal]:
         out: list[Terminal] = []
@@ -273,4 +307,4 @@ def idempotency_key(ctx: CallContext, action: CommitAction) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
-__all__ = ["PipelineFlow", "idempotency_key", "join"]
+__all__ = ["AFTER", "PipelineFlow", "RecordView", "idempotency_key", "join"]

@@ -31,10 +31,23 @@ class PipelineToolsMixin:
     def extra_tool_names(self) -> set[str]:
         return set(self._tool_owners())
 
+    def _switch_to_branch_of(self, owner: BoundSkill, slots: dict[str, Any]) -> None:
+        """A tool that belongs to another branch ("a medium margherita" while leaving a message):
+        the caller changed their mind — move to that branch instead of refusing the tool."""
+        if owner.key in {b.key for b in self.active(slots)}:
+            return
+        router = getattr(self.blueprint, "router_slot", "") or ""
+        target = next((key for key, skills in self.cp.branches.items() if any(b.key == owner.key for b in skills)), None)
+        if not router or target is None:
+            return
+        slots[router] = target
+        slots.pop("confirmed", None)
+
     def run_extra_tool(self, name: str, args: dict[str, Any], slots: dict[str, Any], ctx: CallContext, language: str, *, caller_text: str = "") -> dict[str, Any]:
         owner = self._tool_owners().get(name)
         if owner is None:
             return {"ok": False, "reason": "unknown_tool"}
+        self._switch_to_branch_of(owner, slots)
         if owner.key not in {b.key for b in self.active(slots)} or not owner.skill.applies(owner, slots, ctx):
             return {"ok": False, "reason": "not_now"}  # the tool guard: only while its skill is active
         return owner.skill.run_tool(owner, name, args, slots, ctx, language, caller_text=caller_text)

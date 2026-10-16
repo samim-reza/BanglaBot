@@ -21,6 +21,7 @@ from app.services.calls.warmup import _warm_call_lines
 from app.services.telnyx_urls import amd_callback_url, recording_callback_url, status_callback_url
 from app.verticals import flow_for
 from app.voice import prepared
+from app.voice.languages import normalize_language
 from app.voice.twiml import PublicUrlMissing, stream_twiml
 
 logger = structlog.get_logger(__name__)
@@ -48,7 +49,7 @@ async def start_outbound_call(db: AsyncSession, order: Order, merchant: Merchant
         order_id=order.id,
         merchant_id=merchant.id,
         call_status="initiated",
-        language=merchant.language or "en",
+        language=normalize_language(merchant.language),
         direction=DIRECTION_OUTBOUND,
         flow=flow.key,
     )

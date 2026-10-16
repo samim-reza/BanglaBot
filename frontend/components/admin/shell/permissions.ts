@@ -6,6 +6,8 @@ import type { AdminRole } from "@/services/api/admin/common";
  */
 export const PERMISSIONS = {
   hangUp: ["superadmin", "support"],
+  editAccounts: ["superadmin", "support"],
+  deleteAccounts: ["superadmin"],
   audit: ["superadmin", "support"],
   manageAdmins: ["superadmin"],
   impersonate: ["superadmin", "support"],

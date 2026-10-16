@@ -3,7 +3,7 @@
 Voice callbacks are TeXML's Twilio-style form posts (CallSid, CallStatus, ...);
 messaging receipts are Telnyx JSON events. Every webhook URL ends in an HMAC
 signature (``services.telnyx_urls``) checked before anything else; the unsigned
-forms only work while ENFORCE_WEBHOOK_SIGNATURES is off. The media socket is
+forms are refused in production (ENFORCE_WEBHOOK_SIGNATURES overrides). The media socket is
 authorized by the signed media token in its start frame.
 """
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from urllib.parse import parse_qsl
 
@@ -20,7 +21,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 
 from app.core.config import get_settings
-from app.core.security import verify_media_stream_token
+from app.core.security import boot_guard, verify_media_stream_token
 from app.db.session import AsyncSessionLocal
 from app.flows.context import DIRECTION_INBOUND, DIRECTION_OUTBOUND
 from app.models import CallLog, Merchant, Order
@@ -32,17 +33,24 @@ from app.voice.twiml import say_twiml, stream_twiml
 router = APIRouter(prefix="/telnyx", tags=["telnyx"])
 logger = structlog.get_logger(__name__)
 
+#: Recording ids go into Telnyx API paths: plain tokens only.
+_RECORDING_SID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+#: The media socket's first frames must arrive this fast (unauthenticated until then).
+MEDIA_HANDSHAKE_SECONDS = 10.0
 
-def _guard_path(request: Request, kind: str, value: str | None, sig: str | None) -> None:
+
+def _guard_path(request: Request, kind: str, value: str | None, sig: str | None) -> bool:
     """First thing every webhook does: a signed path must carry a valid signature
-    (constant-time); the old unsigned paths only work while ENFORCE_WEBHOOK_SIGNATURES is off."""
+    (constant-time); unsigned paths are refused in production (ENFORCE_WEBHOOK_SIGNATURES
+    overrides). True when the path was signed."""
     if sig is not None:
         if not telnyx_urls.verify(kind, value, sig):
             raise HTTPException(status_code=403, detail="Invalid webhook signature")
-        return
-    if get_settings().enforce_webhook_signatures:
+        return True
+    if boot_guard.webhook_signatures_enforced(get_settings()):
         raise HTTPException(status_code=403, detail="Unsigned webhook URL")
     logger.warning("telnyx_unsigned_webhook", path=request.url.path, hint="point Telnyx at the signed URL: python -m scripts.telnyx_route")
+    return False
 
 
 async def _verified_body(request: Request) -> bytes:
@@ -56,25 +64,40 @@ async def _verified_body(request: Request) -> bytes:
     return raw
 
 
-async def _form_dict(request: Request) -> dict[str, str]:
+async def _form_dict(request: Request, *, signed: bool = False) -> dict[str, str]:
     """A TeXML callback's fields (form body, or the query string on a GET)."""
     raw = await _verified_body(request)
     values = {str(key): str(value) for key, value in request.query_params.items()}
     values.update({key: value for key, value in parse_qsl(raw.decode("utf-8", "replace"), keep_blank_values=True)})
-    telnyx.remember_account_sid(values.get("AccountSid"))
+    if signed or get_settings().telnyx_public_key:
+        # Only an authenticated callback may teach us the platform's account id.
+        telnyx.remember_account_sid(values.get("AccountSid"))
     return values
+
+
+def _duration(value: str | None) -> int:
+    """CallDuration as whole seconds; garbage (negative, inf, nan, text) reads as 0."""
+    try:
+        seconds = float(value or 0)
+    except ValueError:
+        return 0
+    if seconds != seconds or not 0 <= seconds <= 86_400:
+        return 0
+    return int(seconds)
+
+
+def _recording_sid(value: str | None) -> str:
+    sid = str(value or "").strip()
+    return sid if _RECORDING_SID.match(sid) else ""
 
 
 @router.post("/status/{order_id}/{sig}")
 @router.post("/status/{order_id}")
 async def status_callback(order_id: str, request: Request, sig: str | None = None):
-    _guard_path(request, telnyx_urls.STATUS, order_id, sig)
-    values = await _form_dict(request)
+    signed = _guard_path(request, telnyx_urls.STATUS, order_id, sig)
+    values = await _form_dict(request, signed=signed)
     call_status = values.get("CallStatus", "")
-    try:
-        duration = int(float(values.get("CallDuration") or 0))
-    except ValueError:
-        duration = 0
+    duration = _duration(values.get("CallDuration"))
     async with AsyncSessionLocal() as session:
         await call_service.apply_status_callback(session, order_id, values.get("CallSid", ""), call_status, duration)
     return Response(status_code=204)
@@ -84,8 +107,8 @@ async def status_callback(order_id: str, request: Request, sig: str | None = Non
 @router.post("/amd/{order_id}")
 async def amd_callback(order_id: str, request: Request, sig: str | None = None):
     """Async answering-machine detection: hang up on voicemail so the order stays callable."""
-    _guard_path(request, telnyx_urls.AMD, order_id, sig)
-    values = await _form_dict(request)
+    signed = _guard_path(request, telnyx_urls.AMD, order_id, sig)
+    values = await _form_dict(request, signed=signed)
     async with AsyncSessionLocal() as session:
         await call_service.apply_amd_callback(session, order_id, values.get("CallSid", ""), values.get("AnsweredBy", ""))
     return Response(status_code=204)
@@ -94,9 +117,9 @@ async def amd_callback(order_id: str, request: Request, sig: str | None = None):
 @router.post("/recording/{order_id}/{sig}")
 @router.post("/recording/{order_id}")
 async def recording_callback(order_id: str, request: Request, sig: str | None = None):
-    _guard_path(request, telnyx_urls.RECORDING, order_id, sig)
-    values = await _form_dict(request)
-    recording_sid = values.get("RecordingSid", "")
+    signed = _guard_path(request, telnyx_urls.RECORDING, order_id, sig)
+    values = await _form_dict(request, signed=signed)
+    recording_sid = _recording_sid(values.get("RecordingSid"))
     if recording_sid:
         async with AsyncSessionLocal() as session:
             await call_service.apply_recording_callback(session, order_id, values.get("CallSid", ""), recording_sid)
@@ -107,9 +130,9 @@ async def recording_callback(order_id: str, request: Request, sig: str | None = 
 @router.post("/recording-log/{call_log_id}")
 async def log_recording_callback(call_log_id: str, request: Request, sig: str | None = None):
     """Recording of an inbound call (started from the media stream)."""
-    _guard_path(request, telnyx_urls.RECORDING_LOG, call_log_id, sig)
-    values = await _form_dict(request)
-    recording_sid = values.get("RecordingSid", "")
+    signed = _guard_path(request, telnyx_urls.RECORDING_LOG, call_log_id, sig)
+    values = await _form_dict(request, signed=signed)
+    recording_sid = _recording_sid(values.get("RecordingSid"))
     if recording_sid:
         async with AsyncSessionLocal() as session:
             await call_service.apply_log_recording_callback(session, call_log_id, recording_sid)
@@ -129,8 +152,8 @@ async def inbound_check(sig: str):
 async def inbound_call(request: Request, sig: str | None = None):
     """Voice webhook of the platform's TeXML application: route the call to the account
     whose inbound number was dialed and connect it to that account's agent."""
-    _guard_path(request, telnyx_urls.INBOUND, None, sig)
-    values = await _form_dict(request)
+    signed = _guard_path(request, telnyx_urls.INBOUND, None, sig)
+    values = await _form_dict(request, signed=signed)
     async with AsyncSessionLocal() as session:
         texml = await call_service.answer_inbound_call(
             session,
@@ -142,11 +165,11 @@ async def inbound_call(request: Request, sig: str | None = None):
 
 
 @router.post("/texml/{order_id}/{sig}")
-@router.post("/texml/{order_id}")
-async def texml_fallback(order_id: str, request: Request, sig: str | None = None):
-    """Same TeXML the call was created with (for a manual redirect / debugging)."""
-    _guard_path(request, telnyx_urls.TEXML, order_id, sig)
-    await _form_dict(request)
+async def texml_fallback(order_id: str, sig: str, request: Request):
+    """Same TeXML the call was created with (for a manual redirect / debugging). Signed
+    only: the answer carries a media token for the order's call."""
+    signed = _guard_path(request, telnyx_urls.TEXML, order_id, sig)
+    await _form_dict(request, signed=signed)
     async with AsyncSessionLocal() as session:
         order = await session.get(Order, order_id)
         log = None
@@ -201,16 +224,21 @@ async def sms_events(request: Request, sig: str | None = None):
 async def media_stream(websocket: WebSocket):
     """Media stream of a phone call (Telnyx) or of a browser test call (Twilio-style frames)."""
     await websocket.accept()
-    first = await websocket.receive_json()
-    if first.get("event") != "connected":
+    try:
+        # Unauthenticated until the start frame's token checks out: no idle sockets, no odd frames.
+        first = await asyncio.wait_for(websocket.receive_json(), MEDIA_HANDSHAKE_SECONDS)
+        start = await asyncio.wait_for(websocket.receive_json(), MEDIA_HANDSHAKE_SECONDS) if isinstance(first, dict) and first.get("event") == "connected" else None
+    except (asyncio.TimeoutError, ValueError):
+        await websocket.close(code=1008)
+        return
+    if not isinstance(start, dict) or start.get("event") != "start":
         await websocket.close(code=1002)
         return
-    start = await websocket.receive_json()
-    if start.get("event") != "start":
-        await websocket.close(code=1002)
-        return
-    start_payload = start.get("start") or {}
+    start_payload = start.get("start") if isinstance(start.get("start"), dict) else {}
     custom = start_payload.get("custom_parameters") or start_payload.get("customParameters") or {}
+    if not isinstance(custom, dict):
+        await websocket.close(code=1008)
+        return
     order_id = str(custom.get("order_id") or "")
     call_log_id = str(custom.get("call_log_id") or "")
     media_token = str(custom.get("media_token") or "")
@@ -223,6 +251,12 @@ async def media_stream(websocket: WebSocket):
         await websocket.close(code=1008)
         return
     telnyx.remember_account_sid(start_payload.get("user_id"))
+    prepared.mark_media_started(call_log_id)
+    if prepared.call_ended(call_log_id):
+        # Telnyx re-opened the stream of a call the agent already ended: don't greet again.
+        await logger.ainfo("media_reconnect_after_end", call_log_id=call_log_id)
+        await websocket.close()
+        return
     accepted_at = time.monotonic()
     snapshot = prepared.get_call_snapshot(call_log_id)
     if snapshot is not None:
@@ -237,6 +271,11 @@ async def media_stream(websocket: WebSocket):
             if log is None or merchant is None:
                 await logger.awarning("media_unknown_call", call_log_id=call_log_id)
                 await websocket.close(code=1008)
+                return
+            if log.call_status == "completed":
+                # Finished on another worker (or before a restart): never restart its conversation.
+                await logger.ainfo("media_reconnect_after_end", call_log_id=call_log_id)
+                await websocket.close()
                 return
             direction = DIRECTION_OUTBOUND if order is not None and log.direction == DIRECTION_OUTBOUND else DIRECTION_INBOUND
             web = log.direction == "web"

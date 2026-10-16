@@ -60,8 +60,9 @@ class Record:
     kind: str = "booking"
 
 
-def _call(agent_flow: dict | None = None, **ctx_kwargs: Any):
-    merchant = Account(agent_flow=agent_flow or {})
+def _call(agent_flow: dict | None = None, *, texts: bool = False, **ctx_kwargs: Any):
+    # texts=True: the account sends texts (a payment link can go out).
+    merchant = Account(agent_flow=agent_flow or {}, sms_settings={"enabled": True} if texts else {})
     ctx_kwargs.setdefault("caller_number", "+12125550111")
     ctx = CallContext(merchant=merchant, catalog=list(CATALOG), direction=DIRECTION_INBOUND, now=NOW, **ctx_kwargs)
     runtime = FlowRuntime(flow_for(merchant, DIRECTION_INBOUND), ctx, language="en")
@@ -144,9 +145,10 @@ async def test_an_existing_booking_blocks_overlapping_times():
 
 # ---------------------------------------------------------------------------- optional skills
 @pytest.mark.asyncio
-async def test_online_deposit_switched_on_holds_the_booking_as_pending():
+async def test_online_deposit_switched_on_holds_the_booking_as_pending(monkeypatch):
+    monkeypatch.setattr("app.services.sms.policy.platform_ready", lambda: True)
     flow = steps(payment={"enabled": True, "options": {"mode": "online_required", "amount_source": "deposit", "deposit_amount": 20}})
-    tools, runtime, store = _call(flow)
+    tools, runtime, store = _call(flow, texts=True)
     result = await tools.execute("save_details", dict(BOOK_MAYA), caller_text="A haircut with Maya on Tuesday at 11, I'm Ana")
     assert runtime.stage == "confirm" and "payment link for 20 dollars" in result.say and "30 minutes" in result.say
     result = await tools.execute("save_details", {"confirmed": True}, caller_text="yes")

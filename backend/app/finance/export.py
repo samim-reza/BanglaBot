@@ -26,12 +26,13 @@ ACCOUNT_COLUMNS = (
 )
 #: Accounts / rollup rows read per database round trip while streaming.
 CHUNK = 500
-_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r", "\n", "\uff1d", "\uff0b", "\uff0d", "\uff20")
 
 
 def safe_cell(value: Any) -> Any:
-    """Business names are user input: keep spreadsheets from running them as formulas."""
-    if isinstance(value, str) and value.startswith(_FORMULA_START):
+    """Business names are user input: keep spreadsheets from running them as formulas
+    (also behind leading spaces, and the full-width ＝ ＋ － ＠ some spreadsheets accept)."""
+    if isinstance(value, str) and value.lstrip(" ").startswith(_FORMULA_START):
         return "'" + value
     return value
 

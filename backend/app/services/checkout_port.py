@@ -15,6 +15,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
+import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
@@ -76,7 +77,9 @@ async def create_checkout(
             success_url=return_url(return_path, subscription_id),
         )
     except PaymentError as exc:
-        raise PaymentsUnavailable(str(exc) or "Online payment isn't available right now") from exc
+        # The provider's own wording (keys, account state) stays in the log, not the public answer.
+        structlog.get_logger(__name__).warning("checkout_unavailable", error=str(exc)[:300])
+        raise PaymentsUnavailable("Online payment isn't available right now — please try again shortly") from exc
     return Checkout(
         url=str(payment.url or ""), provider=str(payment.provider or ""), provider_ref=str(payment.provider_ref or ""),
         payment_id=str(payment.id), expires_at=payment.expires_at,

@@ -27,7 +27,7 @@ export const HOME_FAQS: Faq[] = [
   },
   {
     q: "Which languages does it speak?",
-    a: "English today, with the accent set per account. Bangla is available as an extra language, with more on the way.",
+    a: "English, with the accent set per account (US, UK, Australian, Indian and more).",
   },
   {
     q: "How much work is setup?",

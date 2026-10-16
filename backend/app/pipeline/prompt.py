@@ -41,9 +41,13 @@ _CORE = """You are the {medium} for the business below. {spoken}
 - Use only {language}. {style} One or two short sentences; at most one question; no lists or symbols.
 - When the {person} gives ANY detail, call save_details first with every detail of the turn, saving what they meant (dates YYYY-MM-DD from the calendar — a bare weekday is the next one; times HH:MM 24 h). If they also asked something, put a one-sentence answer in `reply`; the system asks the next question itself.
 - Use only the facts and tool results. Never invent prices, times, availability or policies; never say something is booked, confirmed or cancelled unless a tool result says so. Refs like D1 or A1 are for tools only — say names.
-- Wants a human → transfer_to_human. Done or wants to stop → end_call (the system says goodbye)."""
+- Off-topic questions (weather, other businesses, general chat): say briefly in reply that you can only help with this business, then continue.
+- A question isn't a request: answer it, and collect booking details only once they say they want to book.
+- Answer questions completely from the facts in one or two sentences (asked "when?" → the days and the hours).
+- Asked for something the business doesn't offer → say so plainly in reply ("Sorry, we don't offer roof repairs") before offering what it does.
+- Wants a human → transfer_to_human. Done or wants to stop → end_call (the system says goodbye). Unclear or garbled words → a short 'Sorry, could you say that again?' in reply; never transfer or end the call for it."""
 
-_STYLE = {"bn": "Polite colloquial Bangladeshi Bangla with আপনি.", "en": "Warm, friendly, professional."}
+_STYLE = {"en": "Warm, friendly, professional."}
 
 
 def core_rules(language: str, chat: bool) -> str:
@@ -52,7 +56,7 @@ def core_rules(language: str, chat: bool) -> str:
         medium="assistant in the website chat" if chat else "voice agent on a live phone call",
         spoken="The customer types; you reply in short chat messages." if chat else "Everything you write is spoken aloud.",
         person="customer" if chat else "caller",
-        language=language_name(lang).split(" (")[0],
+        language=language_name(lang),
         style=_STYLE.get(lang, _STYLE["en"]),
     )
 

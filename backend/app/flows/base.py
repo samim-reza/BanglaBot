@@ -24,7 +24,7 @@ from datetime import datetime
 from typing import Any
 
 from app.flows.context import DIRECTION_OUTBOUND, CallContext
-from app.voice.languages import normalize_language, phrase
+from app.voice.languages import phrase
 
 # --- Stages: the finest-grained "what is still missing" answers ------------
 STAGE_IDENTITY = "identity"
@@ -150,17 +150,10 @@ class Instruction:
     end_call: bool = False
 
     def for_model(self, language: str) -> str:
-        lang = normalize_language(language)
         if self.verbatim:
-            lead = "হুবহু বলুন:" if lang == "bn" else "Say exactly:"
-            text = f"{lead} {self.text}"
+            text = f"Say exactly: {self.text}"
             if self.end_call:
-                tail = (
-                    "এরপর অন্য কিছু না বলে end_call টুল কল করুন।"
-                    if lang == "bn"
-                    else "Then call the end_call tool without saying anything else."
-                )
-                text = f"{text} {tail}"
+                text = f"{text} Then call the end_call tool without saying anything else."
             return text
         return self.text
 
@@ -310,12 +303,12 @@ class Flow:
 
         identity_talk = bool(labels & {"not_me", "knows", "wrong_number"})
         if stage == STAGE_IDENTITY:
-            if "is_me" in labels and not identity_talk:
+            if "is_me" in labels and not identity_talk and len(hearing.tokens(text)) <= 8:
                 return {"identity_confirmed": True}
             if "wrong_number" in labels:
                 return {"identity_confirmed": False, "wrong_person": True}
             if "no" in labels and "is_me" not in labels and hearing.is_pure_answer(text):
-                # "না" alone: not them — ask whether they know the person.
+                # A bare "no": not them — ask whether they know the person.
                 return {"identity_confirmed": False}
         elif stage == STAGE_KNOWS_PERSON:
             if "wrong_number" in labels or ("no" in labels and "knows" not in labels):

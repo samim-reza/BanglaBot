@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.core.config import get_settings
 from app.core.datetime_utils import utcnow
+from app.core.ratelimit import backends
 from app.core.regions import normalize_phone, region_of
 from app.db.session import AsyncSessionLocal
 from app.models import CatalogItem, Merchant, Message, Order
@@ -19,6 +20,20 @@ from app.services.sms.composer import compose, segments
 from app.services.sms.policy import planned_kind, platform_ready
 
 logger = structlog.get_logger(__name__)
+
+DAY_SECONDS = 86_400
+CAPPED = "Daily text limit reached for this account or number."
+
+
+async def _over_daily_cap(merchant_id: str, to_number: str) -> bool:
+    """Counts this text against the account's and the number's daily caps; True when over.
+    Chat visitors type the number a confirmation goes to, so both are bounded."""
+    settings = get_settings()
+    per_account = max(1, int(getattr(settings, "sms_daily_cap_per_account", 300) or 300))
+    per_number = max(1, int(getattr(settings, "sms_daily_cap_per_number", 10) or 10))
+    if await backends.call("hit", f"sms-number:{to_number}", per_number, float(DAY_SECONDS)):
+        return True  # a refused number doesn't use up the account's budget
+    return bool(await backends.call("hit", f"sms-account:{merchant_id}", per_account, float(DAY_SECONDS)))
 
 
 def _sms_status_url(message_id: str) -> str | None:
@@ -43,6 +58,11 @@ async def send(merchant: Merchant, to: str, body: str, *, kind: str, order_id: s
     if not platform_ready():
         await _update(message.id, status="skipped", error="SMS is not configured on the platform (Telnyx API key / sender).")
         message.status = "skipped"
+        return message
+    if await _over_daily_cap(str(merchant.id), to_number):
+        await _update(message.id, status="skipped", error=CAPPED)
+        message.status, message.error = "skipped", CAPPED
+        await logger.awarning("sms_daily_cap", merchant_id=merchant.id, kind=kind, to=to_number)
         return message
     callback = _sms_status_url(message.id)
     try:

@@ -12,8 +12,8 @@ from sqlalchemy import func, select, text
 
 from app.core.datetime_utils import utcnow
 from app.db.session import AsyncSessionLocal
-from app.flows.base import CommitAction, CommitResult
-from app.flows.context import DIRECTION_INBOUND
+from app.flows.base import OUTCOME_INQUIRY, CommitAction, CommitResult
+from app.flows.context import DIRECTION_OUTBOUND
 from app.models import CallLog, Order, OrderStatus
 
 #: Statuses a scheduled slot stays taken in.
@@ -63,7 +63,8 @@ class DbCallStore:
                 if note:
                     order.notes = _note_line(order.notes or "", note)
                 order.updated_at = utcnow()
-            if log is not None:
+            if log is not None and not (outcome == OUTCOME_INQUIRY and log.outcome and log.outcome != OUTCOME_INQUIRY):
+                # A late "it was just an enquiry" (e.g. from a reconnected stream) never hides a real outcome.
                 log.outcome = outcome
                 log.final_node = final_node or log.final_node
                 log.language = language or log.language
@@ -121,6 +122,8 @@ class DbCallStore:
                         return CommitResult(ok=True, record_id=existing)
                 record_id = action.record_id or ""
                 record: Order | None = await session.get(Order, record_id) if record_id else None
+                if record is not None and str(record.merchant_id) != str(merchant_id):
+                    record = None  # never another account's record, whatever id reached the action
                 if record_id and record is None:
                     return CommitResult(ok=False, reason="not_found")
                 if record is None:
@@ -187,12 +190,15 @@ class DbCallStore:
                 return
             for key in ("llm_prompt_tokens", "llm_completion_tokens", "llm_cached_tokens", "tts_chars", "tts_cache_hits"):
                 if key in counters:
-                    setattr(log, key, int(counters[key] or 0))
+                    # Added, not replaced: a stream that reconnected mid-call reports only its own share.
+                    setattr(log, key, int(getattr(log, key) or 0) + int(counters[key] or 0))
             # The status callback has the billed duration for outbound calls;
             # inbound / test calls only have ours.
             if counters.get("duration_secs") and not log.duration_secs:
                 log.duration_secs = int(counters["duration_secs"])
-            if log.direction in (DIRECTION_INBOUND, "web", "chat") and log.call_status == "in-progress":
+            # Outbound calls are settled by the carrier's status callback; everything else
+            # (inbound, console tests, website / WhatsApp / Messenger / Instagram chats) ends here.
+            if log.direction != DIRECTION_OUTBOUND and log.call_status == "in-progress":
                 log.call_status = "completed"
             await session.commit()
         from app.finance import recorder

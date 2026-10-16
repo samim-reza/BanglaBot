@@ -8,7 +8,6 @@ import {
   CalendarSync,
   Clock,
   Handshake,
-  Languages,
   LoaderCircle,
   MessageCircle,
   MessageCircleMore,
@@ -50,7 +49,6 @@ const ADDON_ICONS: Record<string, LucideIcon> = {
   sms: Smartphone,
   number: PhoneCall,
   google_calendar: CalendarSync,
-  extra_language: Languages,
   recording_retention: Archive,
   setup: Handshake,
 };

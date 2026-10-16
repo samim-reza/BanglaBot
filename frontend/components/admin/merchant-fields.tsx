@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { t } from "@/lib/vertical";
-import type { AdminMeta, Language, VerticalKey, VerticalSpec, VoicePersona } from "@/services/api";
+import type { AdminMeta, VerticalKey, VerticalSpec, VoicePersona } from "@/services/api";
 
 import { FormField, fieldProps } from "./form-bits";
 import { planOf, planPrice, regionOf } from "./use-admin-meta";
@@ -162,26 +162,6 @@ export function PlanField({
   );
 }
 
-export function LanguageField({ id, meta, value, onChange }: { id: string; meta: AdminMeta | null; value: Language; onChange: (value: Language) => void }) {
-  const languages = meta?.languages?.length
-    ? meta.languages
-    : [
-        { code: "en" as Language, label: "English" },
-        { code: "bn" as Language, label: "Bangla (বাংলা)" },
-      ];
-  const hint = "The agent's first language. Callers can still switch.";
-  return (
-    <FormField id={id} label="Language" hint={hint}>
-      <Select {...fieldProps(id, null, hint)} value={value} onChange={(event) => onChange(event.target.value as Language)}>
-        {languages.map((language) => (
-          <option key={language.code} value={language.code}>
-            {language.label}
-          </option>
-        ))}
-      </Select>
-    </FormField>
-  );
-}
 
 export function PersonaField({ id, value, onChange }: { id: string; value: VoicePersona; onChange: (value: VoicePersona) => void }) {
   return (

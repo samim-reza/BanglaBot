@@ -1,7 +1,7 @@
 """Create (or reset the password of) an account login.
 
     python -m scripts.create_merchant --username clinic2 --password secret \
-        --business "Second Clinic" --vertical clinic --region US [--owner "Owner"] [--phone ...] [--support ...] [--language en]
+        --business "Second Clinic" --vertical clinic --region US [--owner "Owner"] [--phone ...] [--support ...]
 """
 
 from __future__ import annotations
@@ -32,8 +32,8 @@ async def upsert(args: argparse.Namespace) -> str:
                 phone=args.phone or "",
                 support_phone=args.support or "",
                 email=args.email or "",
-                language=args.language,
-                supported_languages=[args.language] + [c for c in ("bn", "en") if c != args.language],
+                language="en",
+                supported_languages=["en"],
                 vertical=args.vertical,
                 vertical_config={},
                 **region_defaults(args.region),
@@ -63,7 +63,6 @@ def main() -> int:
     parser.add_argument("--phone", default="")
     parser.add_argument("--support", default="")
     parser.add_argument("--email", default="")
-    parser.add_argument("--language", default="en", choices=("bn", "en"))
     parser.add_argument("--vertical", default="ecommerce", choices=sorted(VERTICALS))
     parser.add_argument("--region", default="INTL", choices=sorted(REGIONS))
     print(asyncio.run(upsert(parser.parse_args())))

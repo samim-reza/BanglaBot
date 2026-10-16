@@ -85,10 +85,9 @@ export type SpeechServer = {
 
 export type VoiceEngine = {
   llm: { allow_paid: boolean; prompt_profile: string; chain: LlmLink[]; unconfigured: string[] };
-  stt: { en: SpeechChain; bn: SpeechChain };
+  stt: { en: SpeechChain };
   tts: {
     en: SpeechChain;
-    bn: SpeechChain;
     stats: { chains: Record<string, Record<string, TtsProviderStats>>; cache: TtsCacheStats | null };
   };
   speech_server: SpeechServer;
@@ -114,8 +113,8 @@ export const systemApi = {
   hangUp: (callLogId: string) =>
     request<{ ok: true }>(`/api/admin/live-calls/${encodeURIComponent(callLogId)}/hangup`, { method: "POST", auth: "admin" }),
   voiceEngine: () => request<VoiceEngine>("/api/admin/voice-engine", { auth: "admin" }),
-  testTts: (text: string, language: "en" | "bn") =>
-    request<TtsTestResult>("/api/admin/voice-engine/test-tts", { method: "POST", auth: "admin", body: JSON.stringify({ text, language }) }),
+  testTts: (text: string) =>
+    request<TtsTestResult>("/api/admin/voice-engine/test-tts", { method: "POST", auth: "admin", body: JSON.stringify({ text, language: "en" }) }),
   testLlm: () => request<LlmTestResult>("/api/admin/voice-engine/test-llm", { method: "POST", auth: "admin" }),
   health: () => request<SystemHealth>("/api/admin/system/health", { auth: "admin" }),
 };

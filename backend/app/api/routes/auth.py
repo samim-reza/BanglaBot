@@ -21,6 +21,7 @@ from app.schemas.merchant import MerchantOut, MerchantSettingsUpdate
 from app.services import auth_service, usage_service
 from app.verticals import flow_for, vertical_for
 from app.verticals.forms import FieldError, clean_config
+from app.voice.languages import normalize_language
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -35,6 +36,11 @@ def merchant_out(merchant: Merchant) -> MerchantOut:
 
 def apply_settings(merchant: Merchant, data: MerchantSettingsUpdate) -> None:
     changes = data.model_dump(exclude_unset=True)
+    if str(changes.get("webhook_url") or "").strip():
+        from app.core.addons import entitlements
+
+        if not entitlements(merchant).api_webhooks:
+            raise HTTPException(status_code=403, detail="Webhooks are part of the Growth plan and above")
     config = changes.pop("vertical_config", None)
     widget = changes.pop("widget_settings", None)
     for key, value in changes.items():
@@ -159,7 +165,7 @@ async def change_password(
 @router.get("/flow-preview", response_model=FlowPreview)
 async def flow_preview(merchant: Merchant = Depends(get_current_merchant)):
     """The steps the agent takes, for both call directions this account has."""
-    language = merchant.language or "en"
+    language = normalize_language(merchant.language)
     steps: list[str] = []
     sections: dict[str, list[str]] = {}
     for direction in (DIRECTION_INBOUND, DIRECTION_OUTBOUND):

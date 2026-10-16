@@ -4,7 +4,6 @@ import {
   Bot,
   Clock3,
   Globe,
-  Languages,
   MessageCircle,
   MessageCircleMore,
   MessageSquare,
@@ -18,7 +17,7 @@ import {
 
 import { RecordingPlayer, type RecordingLoader } from "@/components/recording-player";
 import { ChannelBadge, OutcomeBadge } from "@/components/status-badge";
-import { formatDuration, humanize, languageLabel } from "@/lib/format";
+import { formatDuration, humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { formatInZone } from "@/lib/vertical";
 import type { CallLog } from "@/services/api";
@@ -189,13 +188,6 @@ export function CallLogList({
                 <dt className="sr-only">{chat ? "Messages" : "Duration"}</dt>
                 <dd>{conversationLength(log)}</dd>
               </div>
-              {log.language && (
-                <div className="inline-flex items-center gap-1.5">
-                  <Languages className="h-3.5 w-3.5" aria-hidden="true" />
-                  <dt className="sr-only">Language</dt>
-                  <dd>{languageLabel(log.language)}</dd>
-                </div>
-              )}
               {log.caller_number && (
                 <div className="inline-flex items-center gap-1.5 tabular-nums">
                   <dt className="sr-only">Number</dt>

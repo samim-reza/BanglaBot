@@ -105,8 +105,8 @@ def make_merchant(**overrides: Any) -> Merchant:
     values: dict[str, Any] = dict(
         id="m1", business_name="Demo Shop", owner_name="Owner", username="demo", password_hash="", phone="",
         email="owner@example.com", vertical="ecommerce", vertical_config={}, knowledge="", inbound_number="",
-        region="BD", timezone="Asia/Dhaka", currency="BDT", emergency_number="999", support_phone="",
-        custom_greeting="", language="en", supported_languages=["en", "bn"], voice_persona="female",
+        region="US", timezone="America/New_York", currency="USD", emergency_number="911", support_phone="",
+        custom_greeting="", language="en", supported_languages=["en"], voice_persona="female",
         verify_address=False, max_call_seconds=0, silence_hangup_secs=10, active=True, plan="trial",
         widget_enabled=False, widget_key="", widget_settings={}, webhook_url="", sms_settings={},
         calendar_settings={}, addons={"_v": 1}, channel_settings={}, auto_call_repeat_daily=False,

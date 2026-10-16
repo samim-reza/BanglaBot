@@ -22,7 +22,7 @@ from app.flows.steps import SlotSpec
 from app.pipeline.blueprint import Blueprint, Branch
 from app.skills.library.greet import FarewellSkill, GreetSkill
 from app.skills.library.intake import IntakeField, IntakeSkill
-from app.skills.library.lines import L2, line
+from app.skills.library.lines import L, line
 from app.skills.library.notify import NotifySkill
 from app.skills.library.phone import PhoneSkill
 from app.skills.library.schedule import ScheduleSkill
@@ -31,13 +31,13 @@ from app.verticals.real_estate.flow import RealEstateFlow
 from app.verticals.real_estate.skills import InterestedSkill, LeadIntentSkill, NeedSkill, PitchSkill, RealtyConfirmSkill
 
 CALLER_FIELDS = (
-    IntakeField("caller_name", L2("Name", "নাম"), L2("May I have your name, please?", "আপনার নামটা একটু বলবেন?"), required=True, hint="The caller's name."),
-    IntakeField("email", L2("Email", "ইমেইল"), L2("What email should our agent send listings to?", "কোন ইমেইলে প্রপার্টির তথ্য পাঠাব?"), type="email", on=False),
-    IntakeField("financing", L2("Financing", "অর্থায়ন"), L2("Will you be paying cash, or with a mortgage?", "নগদে কিনবেন, নাকি লোনে?"), on=False),
+    IntakeField("caller_name", L("Name"), L("May I have your name, please?"), required=True, hint="The caller's name."),
+    IntakeField("email", L("Email"), L("What email should our agent send listings to?"), type="email", on=False),
+    IntakeField("financing", L("Financing"), L("Will you be paying cash, or with a mortgage?"), on=False),
 )
 
 BUYER = ("intake", "property_type", "location", "budget", "timeline", "listings", "visit", "phone")
-SELLER = ("intake", "property_type", "location", "size", "asking_price", "phone")
+SELLER = ("intake", "property_type", "location", "size", "asking_price", "timeline", "phone")
 
 
 def need_skills() -> list[Any]:
@@ -45,59 +45,60 @@ def need_skills() -> list[Any]:
         NeedSkill(
             "property_type",
             slots=(SlotSpec("property_type", "Kind of property.", {"type": "string", "enum": PROPERTY_TYPES}),),
-            lines=(line("property_type", "What kind of property — an apartment, a house, land, or commercial space?", "কী ধরনের প্রপার্টি — জমি বা প্লট, ফ্ল্যাট, বাড়ি, নাকি কমার্শিয়াল?", label="Ask the property type", static=True),),
-            label=L2("Property type", "প্রপার্টির ধরন"),
+            lines=(line("property_type", "What kind of property — an apartment, a house, land, or commercial space?", label="Ask the property type", static=True),),
+            label=L("Property type"),
             goal="Which kind of property (land, flat, house, commercial)?",
         ),
         NeedSkill(
             "location",
             slots=(SlotSpec("location", "Area they want (buyers/renters) or where their property is (sellers), as said."),),
             lines=(
-                line("location", "Which area are you looking in?", "কোন এলাকায় খুঁজছেন?", label="Ask the area", static=True),
-                line("location_sell", "Where is the property located?", "প্রপার্টিটা কোন এলাকায়?", label="Ask the area (seller)", static=True),
+                line("location", "Which area are you looking in?", label="Ask the area", static=True),
+                line("location_sell", "Where is the property located?", label="Ask the area (seller)", static=True),
             ),
             long=True,
-            label=L2("Area", "এলাকা"),
+            label=L("Area"),
             goal="Which area?",
         ),
         NeedSkill(
             "budget",
             slots=(
-                SlotSpec("budget", "Budget as the caller said it (e.g. '৫০-৬০ লাখ', '25 thousand a month')."),
+                SlotSpec("budget", "Budget as the caller said it (e.g. '400 to 450 thousand', '2 thousand a month')."),
                 SlotSpec("budget_max", "Upper end of the budget as a plain number in the account's currency, when clear.", {"type": "number"}),
             ),
             lines=(
-                line("budget", "Roughly what is your budget?", "আপনার বাজেট মোটামুটি কত?", label="Ask the budget", static=True),
-                line("budget_rent", "What monthly rent are you looking at?", "মাসিক ভাড়ার বাজেট কত?", label="Ask the budget (rent)", static=True),
+                line("budget", "Roughly what is your budget?", label="Ask the budget", static=True),
+                line("budget_rent", "What monthly rent are you looking at?", label="Ask the budget (rent)", static=True),
             ),
             long=True,
-            label=L2("Budget", "বাজেট"),
+            label=L("Budget"),
             goal="Their budget.",
         ),
         NeedSkill(
             "timeline",
             slots=(SlotSpec("timeline", "When they plan to buy / move.", {"type": "string", "enum": TIMELINES}),),
             lines=(
-                line("timeline", "When are you planning to buy — right away, or in the next few months?", "কবের মধ্যে নিতে চান — এখনই, নাকি কয়েক মাসের মধ্যে?", label="Ask the timeline", static=True),
-                line("timeline_rent", "When would you like to move in?", "কবে থেকে উঠতে চান?", label="Ask the timeline (rent)", static=True),
+                line("timeline", "When are you planning to buy — right away, or in the next few months?", label="Ask the timeline", static=True),
+                line("timeline_sell", "When are you hoping to sell — right away, or in the next few months?", label="Ask the timeline (sellers)", static=True),
+                line("timeline_rent", "When would you like to move in?", label="Ask the timeline (rent)", static=True),
             ),
-            label=L2("Timeline", "সময়সীমা"),
+            label=L("Timeline"),
             goal="When they plan to buy or move.",
         ),
         NeedSkill(
             "size",
-            slots=(SlotSpec("size", "Size as said (e.g. '৫ কাঠা', '1200 sq ft', '3 bed')."),),
-            lines=(line("size", "How big is it?", "জায়গাটা কত বড় — কত কাঠা বা কত স্কয়ার ফিট?", label="Ask the size", static=True),),
+            slots=(SlotSpec("size", "Size as said (e.g. '1200 sq ft', '3 bed', 'half an acre')."),),
+            lines=(line("size", "How big is it?", label="Ask the size", static=True),),
             long=True,
-            label=L2("Size", "আকার"),
+            label=L("Size"),
             goal="Size of the seller's property.",
         ),
         NeedSkill(
             "asking_price",
             slots=(SlotSpec("asking_price", "Sellers: the price they expect, as said."),),
-            lines=(line("asking_price", "What price are you expecting?", "কত দাম আশা করছেন?", label="Ask the asking price", static=True),),
+            lines=(line("asking_price", "What price are you expecting?", label="Ask the asking price", static=True),),
             long=True,
-            label=L2("Asking price", "প্রত্যাশিত দাম"),
+            label=L("Asking price"),
             goal="The seller's expected price.",
         ),
     ]
@@ -115,10 +116,10 @@ def visit_skill() -> ScheduleSkill:
             SlotSpec("visit_time_pref", "Preferred visit time: HH:MM (24 h) or morning / afternoon / evening."),
         ),
         lines=(
-            line("ask", "Which day would you like to come for a viewing? We do viewings {schedule}.", "কোন দিন সাইট ভিজিটে আসতে চান? আমরা {schedule} সাইট দেখাই।", label="Ask for a day", variables=("schedule",)),
-            line("ask_short", "Which day would you like to come for a viewing?", "কোন দিন সাইট ভিজিটে আসতে চান?", label="Ask again", static=True),
+            line("ask", "Which day would you like to come for a viewing? We do viewings {schedule}.", label="Ask for a day", variables=("schedule",)),
+            line("ask_short", "Which day would you like to come for a viewing?", label="Ask again", static=True),
         ),
-        label=L2("Site visit", "সাইট ভিজিট"),
+        label=L("Site visit"),
         goal="Which day for the site visit (and a preferred time if they say one).",
     )
 
@@ -127,8 +128,8 @@ def intent_skill() -> LeadIntentSkill:
     return LeadIntentSkill(
         {"buy": "buy a property", "rent": "rent a property", "sell": "sell their property"},
         lines=(
-            line("intent", "Are you looking to buy, to rent, or to sell your property?", "আপনি কি কিনতে চান, ভাড়া নিতে চান, নাকি আপনার জমি বা ফ্ল্যাট বিক্রি করতে চান?", label="Ask what they need", static=True),
-            line("branch_off", "Sorry, I can't help with that over the phone, but one of our agents can.", "দুঃখিত, এটা ফোনে করা যাচ্ছে না, আমাদের একজন প্রতিনিধি সাহায্য করবেন।", label="Not offered by phone", static=True),
+            line("intent", "Are you looking to buy, to rent, or to sell your property?", label="Ask what they need", static=True),
+            line("branch_off", "Sorry, I can't help with that over the phone, but one of our agents can.", label="Not offered by phone", static=True),
         ),
         goal="Find out whether they want to buy, rent, or sell.",
     )
@@ -139,7 +140,7 @@ def skills(direction: str) -> dict[str, Any]:
         FarewellSkill(),
         RealtyConfirmSkill(),
         intent_skill(),
-        IntakeSkill(CALLER_FIELDS, label=L2("Caller details", "কলারের তথ্য"), goal="Get the caller's name."),
+        IntakeSkill(CALLER_FIELDS, label=L("Caller details"), goal="Get the caller's name."),
         *need_skills(),
         PitchSkill(),
         visit_skill(),
@@ -147,7 +148,7 @@ def skills(direction: str) -> dict[str, Any]:
         NotifySkill(),
     ]
     if direction == "inbound":
-        greet = GreetSkill(lines=(*GreetSkill.lines[:2], line("opening_question", "Are you looking to buy, rent, or sell a property?", "আপনি কি জমি বা ফ্ল্যাট কিনতে, ভাড়া নিতে, নাকি বিক্রি করতে চান?", label="First question", variables=("business",), static=True)))
+        greet = GreetSkill(lines=(*GreetSkill.lines[:2], line("opening_question", "Are you looking to buy, rent, or sell a property?", label="First question", variables=("business",), static=True)))
         common.insert(0, greet)
     else:
         common.append(InterestedSkill())
@@ -170,9 +171,9 @@ def blueprint(direction: str) -> Blueprint:
         prelude=("intent",) if inbound else ("interested", "intent"),
         router_slot="intent",
         branches={
-            "buy": _branch("buy", BUYER, L2("Buyer", "ক্রেতা")),
-            "rent": _branch("rent", BUYER, L2("Renter", "ভাড়াটিয়া")),
-            "sell": _branch("sell", SELLER, L2("Seller", "বিক্রেতা")),
+            "buy": _branch("buy", BUYER, L("Buyer")),
+            "rent": _branch("rent", BUYER, L("Renter")),
+            "sell": _branch("sell", SELLER, L("Seller")),
         },
         default_branch="buy",
         effects=("notify",),

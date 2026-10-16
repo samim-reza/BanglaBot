@@ -29,7 +29,7 @@ from app.models.admin_user import AdminUser
 logger = structlog.get_logger(__name__)
 
 ENV_ADMIN_PREFIX = "env:"
-TOTP_ISSUER = "BanglaBot Admin"
+TOTP_ISSUER = "Callisa Admin"
 _HAS_USERS_KEY = "admin_users:any"
 
 

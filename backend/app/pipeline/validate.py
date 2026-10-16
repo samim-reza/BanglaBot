@@ -62,7 +62,7 @@ def clean_agent_flow(
     data: Mapping[str, Any],
     *,
     locks: Mapping[str, Any] | None = None,
-    languages: tuple[str, ...] = ("en", "bn"),
+    languages: tuple[str, ...] = ("en",),
     preset: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """The owner's submitted settings → the sparse stored form. Raises :class:`FlowConfigError`."""
@@ -110,8 +110,7 @@ def clean_agent_flow(
             lines_out: dict[str, dict[str, str]] = {}
             for lang, lines in step["lines"].items():
                 if lang not in languages:
-                    errors.append({"path": f"steps.{key}.lines.{lang}", "message": "unsupported language"})
-                    continue
+                    continue  # lines an older account saved in a retired language are dropped, not an error
                 if not isinstance(lines, Mapping):
                     continue
                 for line_key, text in lines.items():

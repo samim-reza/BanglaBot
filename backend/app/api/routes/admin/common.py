@@ -6,10 +6,17 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import require_admin
 from app.api.routes.auth import merchant_out
 from app.core.addons import CATALOG
+from app.core.security import ROLE_SUPERADMIN, ROLE_SUPPORT
 from app.models import AddonRequest, Merchant
 from app.schemas.merchant import MerchantOut
+
+
+#: Changing accounts (create / edit / add-ons / requests / inquiries); finance only reads.
+account_editors = require_admin(ROLE_SUPERADMIN, ROLE_SUPPORT)
+superadmin_only = require_admin(ROLE_SUPERADMIN)
 
 
 def admin_out(merchant: Merchant) -> MerchantOut:

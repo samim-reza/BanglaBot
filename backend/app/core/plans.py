@@ -36,8 +36,7 @@ CHANNEL_LABELS = {
 #: Features a tier can include (or an add-on can unlock).
 FEATURE_GOOGLE_CALENDAR = "google_calendar"
 FEATURE_RECORDING_RETENTION = "recording_retention"
-FEATURE_EXTRA_LANGUAGE = "extra_language"
-ALL_FEATURES = (FEATURE_GOOGLE_CALENDAR, FEATURE_RECORDING_RETENTION, FEATURE_EXTRA_LANGUAGE)
+ALL_FEATURES = (FEATURE_GOOGLE_CALENDAR, FEATURE_RECORDING_RETENTION)
 
 #: Capabilities a tier's limits switch on; an add-on can switch them on too (as a feature key).
 FEATURE_PAYMENTS = "payments"
@@ -105,8 +104,6 @@ class Plan:
     product: str = PRODUCT_VOICE
     #: Yearly price; 0 = ``ANNUAL_MONTHS`` × the monthly price.
     price_year: float = 0.0
-    #: Call languages included (the extra-language add-on adds more).
-    included_languages: int = 1
     limits: TierLimits = field(default_factory=TierLimits)
     #: Verticals this tier is offered for; empty = all.
     verticals: tuple[str, ...] = ()
@@ -148,6 +145,8 @@ class Plan:
         for key in ("features", "channels", "includes", "verticals"):
             if key in values:
                 values[key] = tuple(values[key] or ())
+        # A stored tier may still list a retired feature (the old extra-language one).
+        values["includes"] = tuple(key for key in values.get("includes", ()) if key in ALL_FEATURES)
         limits = TierLimits.from_json(data.get("limits"), base.limits if base else None)
         return cls(**values, limits=limits)
 
@@ -165,7 +164,7 @@ DEFAULT_PLANS: dict[str, Plan] = {
             ("Voice + every chat channel", "50 call minutes", "50 texts"),
             public=False, included_sms=50,
             channels=(CHANNEL_VOICE, CHANNEL_WEB_CHAT, CHANNEL_WHATSAPP, CHANNEL_MESSENGER),
-            includes=ALL_FEATURES, included_languages=2, limits=_limits(1, custom=True), sort=0, trial_days=14,
+            includes=ALL_FEATURES, limits=_limits(1, custom=True), sort=0, trial_days=14,
         ),
         Plan(
             "chat", "Chat agent", 29, 0, 0.0, 1000, 0, "A chatbot for your website.",
@@ -188,13 +187,13 @@ DEFAULT_PLANS: dict[str, Plan] = {
             "pro", "Pro", 349, 1800, 0.16, 0, 3, "For multi-location teams.",
             ("3 phone numbers", "1,800 call minutes / month", "2,000 texts / month", "Bulk + scheduled campaigns",
              "12-month recordings", "Priority support"),
-            included_sms=2000, includes=(FEATURE_GOOGLE_CALENDAR, FEATURE_RECORDING_RETENTION), included_languages=2,
+            included_sms=2000, includes=(FEATURE_GOOGLE_CALENDAR, FEATURE_RECORDING_RETENTION),
             limits=_limits(8, FLOW_FULL, payments=True, custom=True, webhooks=True), sort=40,
         ),
         Plan(
             "enterprise", "Enterprise", 999, 0, 0.10, 0, 0, "Custom volume and integrations.",
             ("Every channel", "Volume minutes from $0.10", "Custom integrations & SSO", "Dedicated success manager"),
-            channels=ALL_CHANNELS, includes=ALL_FEATURES, included_languages=5,
+            channels=ALL_CHANNELS, includes=ALL_FEATURES,
             limits=_limits(20, FLOW_FULL, payments=True, custom=True, webhooks=True), sort=50, checkout=False,
         ),
     )
@@ -262,7 +261,6 @@ __all__ = [
     "DEFAULT_PLANS",
     "FEATURE_API_WEBHOOKS",
     "FEATURE_CUSTOM_FIELDS",
-    "FEATURE_EXTRA_LANGUAGE",
     "FEATURE_FULL_FLOW_EDITING",
     "FEATURE_GOOGLE_CALENDAR",
     "FEATURE_PAYMENTS",

@@ -3,7 +3,9 @@ hops), tool results spoken straight from the backend, and the recovery line."""
 
 from __future__ import annotations
 
+import asyncio
 import json
+import re
 import time
 from typing import Any
 
@@ -14,9 +16,16 @@ from app.pipeline import faq_cache
 from app.voice.audio import clean_spoken_text
 from app.voice.languages import phrase
 from app.voice.llm import LLMReply
-from app.voice.tools import ToolResult, answer_only
+from app.voice.tools import SAVE_DETAILS, ToolResult, answer_only
 
 logger = structlog.get_logger(__name__)
+
+#: A reply that announces a result ("you're booked", "your order is confirmed") — only a tool may say that.
+_CLAIMS_DONE = re.compile(
+    r"\b(?:you'?re|you are|it'?s|it is|that'?s|has been|is now|have been)\s+(?:all\s+)?(?:booked|confirmed|cancell?ed|scheduled|reserved|set)\b"
+    r"|\b(?:booking|appointment|order|reservation|visit|viewing)\s+(?:is|has been)\s+(?:confirmed|booked|cancell?ed|placed)\b",
+    re.IGNORECASE,
+)
 
 # Max model ↔ tool hops per caller turn.
 MAX_TOOL_HOPS = 6
@@ -26,6 +35,40 @@ class TurnMixin:
     """Mixed into :class:`~app.voice.agent.core.CallAgent`."""
 
     async def handle_turn(self, text: str) -> None:
+        """One caller turn. Until a tool runs or a reply is queued it has changed nothing, so a
+        cancel (the caller kept talking) rolls it back without a trace; a turn cut off later
+        (the transport's deadline) never leaves a tool call without its tool reply."""
+        mark, turns = len(self.messages), self.turns
+        self.interruptible = True
+        try:
+            await self._handle_turn(text)
+        except asyncio.CancelledError:
+            if self.interruptible:
+                removed = self.messages[mark:]
+                del self.messages[mark:]
+                # Step directives flushed at the start of this turn still apply to the next one.
+                self._pending_directives[:0] = [m["content"] for m in removed if m.get("role") == "system"]
+                self.turns = turns
+            else:
+                self._drop_dangling_tool_calls()
+            raise
+        finally:
+            self.interruptible = False
+            self.skip_ack = False
+
+    def _drop_dangling_tool_calls(self) -> None:
+        """Chat Completions rejects an assistant tool call without its tool reply: cut from there."""
+        for index in range(len(self.messages) - 1, -1, -1):
+            message = self.messages[index]
+            calls = message.get("tool_calls") if message.get("role") == "assistant" else None
+            if not calls:
+                continue
+            answered = {m.get("tool_call_id") for m in self.messages[index + 1 :] if m.get("role") == "tool"}
+            if not all(call.get("id") in answered for call in calls):
+                del self.messages[index:]
+            return
+
+    async def _handle_turn(self, text: str) -> None:
         llm = self.llm
         if llm is None or self.speaker.closed:
             return
@@ -39,7 +82,7 @@ class TurnMixin:
             return
         self._flush_directives()
         self.messages.append({"role": "user", "content": text})
-        if self.settings.voice_instant_ack and not self.speaker.assistant_speaking and not self.speaker.closing:
+        if self.settings.voice_instant_ack and not self.skip_ack and not self.speaker.assistant_speaking and not self.speaker.closing:
             # One cached word right away; the real reply queues behind it — but not
             # a "yes" on top of a caller who just said no.
             labels = hearing.classify(text)
@@ -59,6 +102,8 @@ class TurnMixin:
                 tool_calls=[c.name for c in reply.tool_calls],
                 cached=int(((reply.usage or {}).get("prompt_tokens_details") or {}).get("cached_tokens") or 0),
             )
+            # The model has answered: from here the turn acts (tools, speech) and is no longer cancellable.
+            self.interruptible = False
             if reply.tool_calls:
                 self.messages.append(self._assistant_tool_message(reply))
                 stop = False
@@ -71,10 +116,25 @@ class TurnMixin:
             content = clean_spoken_text(reply.content)
             if not content:
                 await logger.ainfo("agent_empty_reply", call_log_id=self.call_log_id, finish_reason=reply.finish_reason)
-                line = phrase("recovery", self.language)
+                # Nothing from the model: ask the current question again rather than "something went wrong".
+                instruction = self.runtime.current_instruction()
+                line = instruction.text if instruction.verbatim and not instruction.end_call else phrase("unclear_2", self.language)
                 self.messages.append({"role": "assistant", "content": line})
                 self.speaker.speak(line)
                 return
+            if _CLAIMS_DONE.search(content) and not self.tools.outcome:
+                # The model says "you're booked" but nothing was saved this turn — never let that reach the caller.
+                await logger.awarning("agent_claimed_unsaved_outcome", call_log_id=self.call_log_id, stage=self.runtime.stage)
+                if self.runtime.stage == "confirm" and hearing.supports(text, "confirm", identity=bool(self.flow.identity_gate)):
+                    result = await self.tools.execute(SAVE_DETAILS, {"confirmed": True}, caller_text=text)
+                    if result.say:
+                        message = {"role": "assistant", "content": result.say}
+                        self.messages.append(message)
+                        self._speak_result(result, message_ref=message)
+                        return
+                instruction = self.runtime.current_instruction()
+                if instruction.verbatim and not instruction.end_call:
+                    content = instruction.text
             message = reply.assistant_message or {"role": "assistant", "content": content}
             message = {**message, "content": content}
             self.messages.append(message)
@@ -85,6 +145,7 @@ class TurnMixin:
         self.speaker.speak(phrase("recovery", self.language))
 
     def _record_turn(self, text: str, result: ToolResult) -> None:
+        self.interruptible = False
         self.messages.append({"role": "user", "content": text})
         self._flush_directives()
         message = {"role": "assistant", "content": result.say}
@@ -105,6 +166,7 @@ class TurnMixin:
         }
 
     async def _run_tool_call(self, call_id: str, name: str, raw_args: str) -> ToolResult:
+        self.interruptible = False
         try:
             result = await self.tools.execute(name, raw_args, caller_text=self.last_user_text)
         except Exception as exc:  # noqa: BLE001
