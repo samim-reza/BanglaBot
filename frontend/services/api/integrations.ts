@@ -1,7 +1,7 @@
-/** Add-ons wired to outside services: SMS confirmations and calendar sync. */
+/** Add-ons wired to outside services: SMS confirmations, owner alerts and calendar sync. */
 
 import { queryString, request } from "./client";
-import type { CalendarCheck, GoogleCalendarOption, Integrations, Page, SmsMessage, SmsSettings } from "./types";
+import type { AlertSettings, AlertTestResult, CalendarCheck, GoogleCalendarOption, Integrations, Page, SmsMessage, SmsSettings } from "./types";
 
 const json = (method: string, body: unknown) => ({ method, auth: "merchant" as const, body: JSON.stringify(body) });
 
@@ -16,6 +16,10 @@ export const integrationsApi = {
   /** Empty body = the standard confirmation text for the record. */
   sendRecordSms: (orderId: string, body = "") =>
     request<SmsMessage>(`/api/integrations/messages/order/${encodeURIComponent(orderId)}`, json("POST", { body })),
+
+  // Owner alerts
+  updateAlerts: (values: Partial<AlertSettings>) => request<Integrations>("/api/integrations/alerts", json("PATCH", values)),
+  testAlert: () => request<AlertTestResult>("/api/integrations/alerts/test", { method: "POST", auth: "merchant" }),
 
   // Calendar
   updateCalendar: (values: { busy_ics_urls: string[] }) => request<Integrations>("/api/integrations/calendar", json("PATCH", values)),

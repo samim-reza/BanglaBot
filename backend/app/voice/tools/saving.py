@@ -26,6 +26,7 @@ _MONEY_RE = re.compile(r"[$€£]\s?\d|\b\d+(?:[.,]\d+)?\s*(?:dollars?|euros?|po
 SCHEDULING_NOTICES = frozenset({
     "closed_day", "closed_day_doctor", "closed_day_person", "closed_day_resource", "day_full", "day_full_none",
     "date_past", "date_too_far", "date_unclear", "pref_moved", "window_moved", "slot_taken", "ready_moved",
+    "closed_date", "closed_date_person",
 })
 #: Slots holding a person's name, and words models put there when they have none.
 NAME_SLOTS = frozenset({"customer_name", "patient_name", "caller_name", "owner_name"})

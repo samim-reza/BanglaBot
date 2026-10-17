@@ -109,6 +109,7 @@ class CallBridge(
             settings=self.settings,
             call_log_id=self.call_log_id,
             support_phone=str(getattr(merchant, "support_phone", "") or ""),
+            phone_call=not web,
         )
         self.transcript_lines: list[tuple[str, str]] = []
         self._recent_agent_lines: deque[tuple[str, float]] = deque(maxlen=8)

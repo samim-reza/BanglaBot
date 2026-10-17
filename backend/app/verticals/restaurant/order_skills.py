@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import date, datetime, timedelta
+from datetime import time as dtime
 from typing import Any
 
 from app.flows.base import Instruction
@@ -12,10 +14,19 @@ from app.skills.base import BoundSkill, Skill
 from app.skills.library.choice import ChoiceSkill
 from app.skills.library.lines import line
 from app.verticals.base import FieldSpec, L
-from app.verticals.common import money, notice, when_phrase
+from app.verticals.common import closure_sentence, money, notice, when_phrase
 from app.verticals.restaurant.cart import add_line, free_delivery_gap, make_line, subtotal
 from app.verticals.restaurant.config import LEAD, conf, num
-from app.verticals.restaurant.hours import ASAP, can_do_asap, earliest_ready, hours_phrase, next_opening, order_time_ok, parse_order_time
+from app.verticals.restaurant.hours import (
+    ASAP,
+    can_do_asap,
+    closed_on,
+    earliest_ready,
+    hours_phrase,
+    next_opening,
+    order_time_ok,
+    parse_order_time,
+)
 from app.verticals.restaurant.menu import find_item, match_options
 
 
@@ -115,6 +126,7 @@ class OrderTimeSkill(Skill):
         line("ask", "Would you like it as soon as possible, or for a later time?", label="Ask when", static=True),
         line("closed", "We're closed right now — we open {next}. What time would you like it?", label="Closed now", variables=("next",)),
         line("outside", "We're open {hours}. What time would you like it?", label="Outside hours", variables=("hours",)),
+        line("closed_date", "{closure} What time would you like it?", label="Closed that day", variables=("closure",)),
     )
     asap_words = ("asap", "as soon as", "right away", "right now", "now please", "soonest", "quickly")
     goal = "As soon as possible, or a later time?"
@@ -123,8 +135,20 @@ class OrderTimeSkill(Skill):
         if not b.opt("ask", True) and not slots.get("order_time") and _is_order(slots) and can_do_asap(slots, ctx):
             slots["order_time"] = ASAP
 
+    def _closure_line(self, b: BoundSkill, ctx: CallContext, day: date, language: str) -> str | None:
+        """"We're closed on Thursday, November 26 for Thanksgiving — the next open day is …" when ``day`` is a closure."""
+        closure = closed_on(ctx, day)
+        if closure is None:
+            return None
+        assert ctx.now is not None
+        opens = next_opening(ctx, datetime.combine(day + timedelta(days=1), dtime(0, 0), tzinfo=ctx.now.tzinfo))
+        return b.text("closed_date", language, closure=closure_sentence(ctx, closure, next_day=opens.date() if opens else None))
+
     def _closed_line(self, b: BoundSkill, ctx: CallContext, language: str) -> str:
         assert ctx.now is not None
+        closure = self._closure_line(b, ctx, ctx.today, language)
+        if closure:
+            return closure
         opens = next_opening(ctx, ctx.now)
         if opens is None or opens <= ctx.now:
             return b.text("outside", language, hours=hours_phrase(ctx, language))
@@ -138,6 +162,10 @@ class OrderTimeSkill(Skill):
                 return fields, None
             fields.pop("order_time")
             return fields, Instruction("order_time", self._closed_line(b, ctx, language), verbatim=True)
+        closure = self._closure_line(b, ctx, parsed.date(), language) if isinstance(parsed, datetime) else None
+        if closure:
+            fields.pop("order_time", None)
+            return fields, Instruction("order_time", closure, verbatim=True)
         if parsed is None or not order_time_ok(parsed, ctx):  # type: ignore[arg-type]
             fields.pop("order_time", None)
             return fields, Instruction("order_time", b.text("outside", language, hours=hours_phrase(ctx, language)), verbatim=True)

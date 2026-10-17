@@ -3,6 +3,7 @@ and fetch its recording for the UI."""
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import structlog
@@ -28,6 +29,22 @@ async def redirect_call_to_human(call_sid: str, number: str, region: Region | st
     if not telnyx.configured():
         return False
     texml = dial_twiml(normalize_phone(number, region), caller_id=caller_id or settings.telnyx_from_number)
+    await telnyx.update_call(call_sid, texml=texml)
+    return True
+
+
+async def redirect_call_to_emergency(
+    call_sid: str, number: str, region: Region | str | None = None, caller_id: str = "", after: str = ""
+) -> bool:
+    """Put the live call through to emergency help (or the account's on-call line).
+
+    A short code ("911", "112") is dialled exactly as written — normalising it would turn
+    it into a phone number. When that leg ends or fails, the caller hears ``after``."""
+    if not telnyx.configured():
+        return False
+    digits = re.sub(r"\D", "", number)
+    target = digits if 0 < len(digits) <= 4 else normalize_phone(number, region)
+    texml = dial_twiml(target, caller_id=caller_id or get_settings().telnyx_from_number, timeout_seconds=30, after_say=after)
     await telnyx.update_call(call_sid, texml=texml)
     return True
 

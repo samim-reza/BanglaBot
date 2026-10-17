@@ -96,6 +96,8 @@ class CallLogOut(BaseModel):
     llm_completion_tokens: int = 0
     tts_chars: int = 0
     tts_cache_hits: int = 0
+    # AI summary of the finished conversation ("" = none yet).
+    summary: str = ""
     created_at: datetime | None
 
 

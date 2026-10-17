@@ -11,13 +11,14 @@ import {
   Phone,
   PhoneIncoming,
   PhoneOutgoing,
+  Sparkles,
   UserRound,
   type LucideIcon,
 } from "lucide-react";
 
 import { RecordingPlayer, type RecordingLoader } from "@/components/recording-player";
 import { ChannelBadge, OutcomeBadge } from "@/components/status-badge";
-import { formatDuration, humanize } from "@/lib/format";
+import { formatDuration, formatPhone, humanize } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { formatInZone } from "@/lib/vertical";
 import type { CallLog } from "@/services/api";
@@ -54,7 +55,7 @@ const ANONYMOUS: Record<string, string> = {
 
 /** Who the conversation was with: the record's customer, the number, or the channel's visitor. */
 export function callerName(log: Pick<CallLog, "direction" | "caller_number" | "customer_name">): string {
-  return log.customer_name || log.caller_number || ANONYMOUS[log.direction] || "Unknown caller";
+  return log.customer_name || formatPhone(log.caller_number) || ANONYMOUS[log.direction] || "Unknown caller";
 }
 
 type Turn = { role: "agent" | "customer" | "note"; text: string };
@@ -132,6 +133,20 @@ export function ConversationTranscript({ transcript, className }: { transcript: 
   );
 }
 
+/** The AI summary of a finished call / chat (nothing until it's written). */
+export function CallSummary({ summary, className }: { summary?: string | null; className?: string }) {
+  if (!summary) return null;
+  return (
+    <p className={cn("flex items-start gap-2 rounded-md bg-accent/60 px-3 py-2 text-sm leading-relaxed text-foreground", className)}>
+      <Sparkles className="mt-1 h-3.5 w-3.5 shrink-0 text-primary-dark" aria-hidden="true" />
+      <span className="min-w-0">
+        <span className="sr-only">Summary: </span>
+        {summary}
+      </span>
+    </p>
+  );
+}
+
 const number = (value: number) => value.toLocaleString("en-US");
 
 /** Small technical usage line (LLM tokens, cached tokens, TTS characters, cache hits). */
@@ -191,10 +206,11 @@ export function CallLogList({
               {log.caller_number && (
                 <div className="inline-flex items-center gap-1.5 tabular-nums">
                   <dt className="sr-only">Number</dt>
-                  <dd>{log.caller_number}</dd>
+                  <dd>{formatPhone(log.caller_number)}</dd>
                 </div>
               )}
             </dl>
+            <CallSummary summary={log.summary} className="mt-3" />
             <ConversationTranscript transcript={log.transcript} className="mt-3 max-h-80 overflow-y-auto" />
             {withRecordings && log.recording_sid && (
               <div className="mt-3">

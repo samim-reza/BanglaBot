@@ -6,6 +6,9 @@ from __future__ import annotations
 import structlog
 
 from app.flows.base import CommitAction, CommitResult
+from app.flows.closures import Closure, blocked_commit
+from app.flows.steps import CONFIRMED
+from app.verticals.notices import NOTICE, closed_notice
 from app.voice.languages import phrase
 from app.voice.tools.store import ToolResult
 from app.voice.tools.text import _join, _note
@@ -21,6 +24,10 @@ class CommitMixin:
         if action is None:
             await logger.awarning("commit_action_missing", flow=self.flow.key, slots=sorted(self.runtime.slots))
             return await self._settle_unclear(note=_note("commit_failed", language))
+        closure = blocked_commit(action, ctx)
+        if closure is not None:
+            await logger.ainfo("flow_commit_refused", flow=self.flow.key, reason="closed")
+            return self._refuse_closed(closure)
         try:
             result = await self.store.commit(
                 action,
@@ -69,6 +76,21 @@ class CommitMixin:
             return await self._settle_unclear(note=_note("commit_failed", language))
         override = self.flow.on_commit_failed(result, self.runtime.slots, ctx)
         payload = self.runtime.advance(override=override)
+        instruction = self.runtime.last_instruction
+        if instruction is not None and instruction.verbatim:
+            return self._speak_next(payload, instruction.text, stage=self.runtime.stage)
+        return ToolResult(payload=payload)
+
+    def _refuse_closed(self, closure: Closure) -> ToolResult:
+        """Never book into a closure: drop the time, re-plan (the planner explains the closure) and ask again."""
+        ctx, slots = self.runtime.ctx, self.runtime.slots
+        slots[CONFIRMED] = None
+        for key in ("slot", "serial", "window", "order_time"):
+            slots.pop(key, None)
+        self.flow.derive(slots, ctx)
+        if not slots.get(NOTICE):
+            closed_notice(slots, ctx, closure)
+        payload = self.runtime.advance()
         instruction = self.runtime.last_instruction
         if instruction is not None and instruction.verbatim:
             return self._speak_next(payload, instruction.text, stage=self.runtime.stage)

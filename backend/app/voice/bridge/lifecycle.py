@@ -173,6 +173,9 @@ class LifecycleMixin:
             notify = getattr(self.store, "notify_finished", None)
             if notify is not None:
                 await notify()
+            summarize = getattr(self.store, "summarize", None)
+            if summarize is not None:
+                await summarize()  # detached: the teardown never waits for the LLM
         except Exception as exc:  # noqa: BLE001
             await logger.awarning("bridge_finalize_failed", call_log_id=self.call_log_id, error=str(exc))
         await logger.ainfo(

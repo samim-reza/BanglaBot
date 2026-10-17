@@ -5,12 +5,13 @@ import Link from "next/link";
 import { ChevronDown, ExternalLink } from "lucide-react";
 
 import { ApiError } from "@/components/api-error";
-import { CallTechStats, ConversationTranscript, callerName, channelIcon, conversationLength } from "@/components/call-log-list";
+import { CallSummary, CallTechStats, ConversationTranscript, callerName, channelIcon, conversationLength } from "@/components/call-log-list";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { Pagination } from "@/components/pagination";
 import { RecordingPlayer } from "@/components/recording-player";
 import { OutcomeBadge } from "@/components/status-badge";
 import { Select } from "@/components/ui/select";
+import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { channelLabel, formatInZone, outcomeLabel, t } from "@/lib/vertical";
 import { useWorkspace } from "@/lib/workspace";
@@ -68,7 +69,7 @@ function CallRow({ log, timezone, recordLabel }: { log: CallLog; timezone: strin
             <span className="block truncate text-sm font-medium">{callerName(log)}</span>
             <span className="block truncate text-xs text-muted-foreground">
               {channelLabel(log.direction)}
-              {log.customer_name && log.caller_number ? ` · ${log.caller_number}` : ""}
+              {log.customer_name && log.caller_number ? ` · ${formatPhone(log.caller_number)}` : ""}
             </span>
           </span>
           <span className="flex flex-wrap items-center gap-2">
@@ -78,6 +79,7 @@ function CallRow({ log, timezone, recordLabel }: { log: CallLog; timezone: strin
           <time className="text-xs text-muted-foreground sm:text-right" dateTime={log.created_at}>
             {formatInZone(log.created_at, timezone)}
           </time>
+          {log.summary && !open && <span className="block truncate text-[13px] text-muted-foreground sm:col-span-3">{log.summary}</span>}
         </span>
         <ChevronDown className={cn("mt-2 h-4 w-4 shrink-0 text-muted-foreground transition-transform sm:mt-0", open && "rotate-180")} aria-hidden="true" />
       </button>
@@ -93,6 +95,7 @@ function CallRow({ log, timezone, recordLabel }: { log: CallLog; timezone: strin
               <span>No {recordLabel.toLowerCase()} linked</span>
             )}
           </div>
+          <CallSummary summary={log.summary} />
           <ConversationTranscript transcript={log.transcript} className="max-h-96 overflow-y-auto" />
           {log.recording_sid && <RecordingPlayer logId={log.id} load={callsApi.recordingObjectUrl} />}
           <CallTechStats log={log} />

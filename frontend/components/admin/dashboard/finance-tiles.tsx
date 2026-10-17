@@ -1,5 +1,5 @@
 import { CostWithList, usd } from "@/components/admin/finance/money";
-import { fmtInt, fmtPct, fmtUsd } from "@/components/admin/numbers";
+import { fmtInt, fmtPercent, fmtUsd } from "@/components/admin/numbers";
 import { KpiTile } from "@/components/admin/stats";
 import type { FinanceOverview } from "@/services/api/admin/finance";
 
@@ -12,7 +12,7 @@ export function FinanceTiles({ overview }: { overview: FinanceOverview | null })
       <KpiTile label="Cost MTD" href="/admin/finance" value={fmtUsd(overview.cost_usd, 0)} hint={<CostWithList cost={overview.cost_usd} list={overview.list_cost_usd} />} />
       <KpiTile
         label="Gross margin"
-        value={fmtPct(overview.margin_pct)}
+        value={fmtPercent(overview.margin_pct)}
         emphasis={overview.margin_usd < 0}
         hint={fmtUsd(overview.margin_usd, 0)}
       />

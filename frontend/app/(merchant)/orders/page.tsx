@@ -100,8 +100,8 @@ export default function RecordsPage() {
   }, [anyCalling, load]);
 
   const columns = useMemo(() => vertical.record_fields.filter((spec) => spec.list_column), [vertical.record_fields]);
-  // The summary repeats the doctor / service column for catalog-based records.
-  const showSummary = !columns.some((spec) => spec.type === "catalog");
+  // The summary repeats the doctor / service (or items) column when the table already has one.
+  const showSummary = !columns.some((spec) => spec.type === "catalog" || spec.key === "items_summary");
   const catalogNames = useMemo(() => catalogNamesOf(items), [items]);
 
   const placeCall = async (order: Order) => {

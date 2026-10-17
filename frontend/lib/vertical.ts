@@ -1,5 +1,6 @@
 /** Helpers for rendering a business engine's vocabulary and values. */
 
+import { formatClock, formatPhone } from "@/lib/format";
 import type { FieldSpec, Label, OrderStatus, VerticalSpec } from "@/services/api";
 
 /** The English text of a label. */
@@ -101,6 +102,10 @@ export function displayValue(spec: FieldSpec, value: unknown, opts: { currency?:
       return opts.catalogNames?.[String(value)] ?? String(value);
     case "datetime":
       return formatInZone(String(value), opts.timezone);
+    case "phone":
+      return formatPhone(String(value));
+    case "time":
+      return formatClock(String(value));
     default:
       return String(value);
   }

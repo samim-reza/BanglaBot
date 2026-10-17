@@ -49,6 +49,9 @@ class Scenario:
     full: tuple[tuple[str, str, str], ...] = ()
     #: Slots someone else books while the call is running (the commit fails with "slot taken").
     race: tuple[tuple[str, str, str], ...] = ()
+    #: Closure dates set on the business: (catalog item name or "" for the whole business, weekday, label),
+    #: on the first such weekday after today.
+    closed: tuple[tuple[str, str, str], ...] = ()
     max_turns: int = 18
     expect: Expect = field(default_factory=Expect)
     tags: tuple[str, ...] = ()

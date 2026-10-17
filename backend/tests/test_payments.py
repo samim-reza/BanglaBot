@@ -107,7 +107,8 @@ async def test_dummy_complete_refuses_expired_and_tampered(monkeypatch):
     _, payment = await linked_booking(session)
     token = payment.url.rsplit("/", 1)[1]
     with pytest.raises(PaymentError):
-        await pay_page.complete_dummy(session, token, now=NOW + timedelta(days=2))
+        # The link's expiry comes from the real clock: step past it, whatever today is.
+        await pay_page.complete_dummy(session, token, now=payment.expires_at + timedelta(minutes=1))
     payment.amount = Decimal("1.00")  # the row no longer matches the signed amount
     with pytest.raises(PaymentError):
         await pay_page.pay_view(session, token)

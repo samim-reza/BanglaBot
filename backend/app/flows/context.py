@@ -14,6 +14,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.regions import Region, get_region
+from app.flows import closures as closure_dates
 from app.flows.scheduling import slot_key
 from app.flows.timefmt import business_tz, local_now
 
@@ -186,6 +187,22 @@ class CallContext:
         """Busy times for a resource: its own calendar plus the whole business's."""
         own = self.busy.get(item_id, []) if item_id else []
         return [*own, *self.busy.get("", [])]
+
+    # ---- closures (holidays, a doctor's leave) ------------------------------------------
+    @property
+    def closures(self) -> list[closure_dates.Closure]:
+        """Upcoming closure dates from the account's settings (re-read only when they change)."""
+        raw = self.config.get(closure_dates.CONFIG_KEY)
+        key = (id(raw), self.today)
+        cached = self.__dict__.get("_closures")
+        if cached is None or cached[0] != key:
+            cached = (key, closure_dates.parse(raw, today=self.today))
+            self.__dict__["_closures"] = cached
+        return list(cached[1])
+
+    def closures_for(self, *item_ids: str | None) -> list[closure_dates.Closure]:
+        """Closures that stop bookings with these resources: the whole business's plus their own."""
+        return closure_dates.relevant(self.closures, *item_ids)
 
     def mark_booked(self, item_id: str | None, start: datetime, count: int = 1) -> None:
         key = slot_key(item_id, start)

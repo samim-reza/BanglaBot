@@ -18,6 +18,7 @@ from app.models import AddonRequest, AdminUser, AuditEvent, CallLog, CatalogItem
 from app.models.payment import Payment
 from app.models.platform_setting import PlatformSetting
 from app.models.signup import Signup
+from app.models.sms_opt_out import SmsOptOut
 from app.models.subscription import Subscription
 from app.models.usage import UsageDaily, UsageEvent
 
@@ -30,6 +31,8 @@ REGISTERED_MODELS = (
     Payment, PlatformSetting, UsageEvent, UsageDaily,
     # self-serve signup + subscriptions (2026-10)
     Subscription, Signup,
+    # SMS opt-outs (STOP / START keywords, 2026-10)
+    SmsOptOut,
 )
 
 SCHEMA_PATCHES: tuple[str, ...] = (
@@ -66,7 +69,7 @@ SCHEMA_PATCHES: tuple[str, ...] = (
     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS order_ref VARCHAR(60) NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS items_summary TEXT NOT NULL DEFAULT ''",
-    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS currency VARCHAR(8) NOT NULL DEFAULT 'BDT'",
+    "ALTER TABLE orders ADD COLUMN IF NOT EXISTS currency VARCHAR(8) NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS notes TEXT NOT NULL DEFAULT ''",
     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS flow_data JSONB NOT NULL DEFAULT '{}'::jsonb",
     "ALTER TABLE orders ADD COLUMN IF NOT EXISTS call_attempts INTEGER NOT NULL DEFAULT 0",
@@ -96,9 +99,9 @@ SCHEMA_PATCHES: tuple[str, ...] = (
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS inbound_number VARCHAR(32) NOT NULL DEFAULT ''",
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS region VARCHAR(8) NOT NULL DEFAULT 'BD'",
     "ALTER TABLE merchants ALTER COLUMN region SET DEFAULT 'INTL'",
-    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Dhaka'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS timezone VARCHAR(64) NOT NULL DEFAULT 'UTC'",
     "ALTER TABLE merchants ALTER COLUMN timezone SET DEFAULT 'UTC'",
-    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS currency VARCHAR(8) NOT NULL DEFAULT 'BDT'",
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS currency VARCHAR(8) NOT NULL DEFAULT 'USD'",
     "ALTER TABLE merchants ALTER COLUMN currency SET DEFAULT 'USD'",
     "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS emergency_number VARCHAR(16) NOT NULL DEFAULT '999'",
     "ALTER TABLE merchants ALTER COLUMN emergency_number SET DEFAULT '112'",
@@ -174,6 +177,13 @@ SCHEMA_PATCHES: tuple[str, ...] = (
     # (subscriptions / signups are new tables: create_all builds them with their indexes.)
     "CREATE INDEX IF NOT EXISTS ix_merchants_instagram ON merchants ((channel_settings->'instagram'->>'account_id'))",
     "CREATE INDEX IF NOT EXISTS ix_merchants_whatsapp_cloud ON merchants ((channel_settings->'whatsapp_cloud'->>'phone_number_id'))",
+    # --- Call summaries, owner alerts, SMS opt-outs (2026-10) ------------------------------------
+    # (sms_opt_outs is a new table: create_all builds it with its unique key.)
+    "ALTER TABLE call_logs ADD COLUMN IF NOT EXISTS summary TEXT",
+    # Owner alerts: {"email_events": [...], "sms_events": [...], "sms_to": "+1..."}; {} = the defaults.
+    "ALTER TABLE merchants ADD COLUMN IF NOT EXISTS alert_settings JSONB NOT NULL DEFAULT '{}'::jsonb",
+    # "Has this account texted this number before?" (the first text carries the STOP notice).
+    "CREATE INDEX IF NOT EXISTS ix_messages_merchant_to ON messages (merchant_id, to_number)",
 )
 
 

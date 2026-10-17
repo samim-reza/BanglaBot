@@ -16,6 +16,7 @@ import {
 import { CtaBand } from "@/components/site/cta-band";
 import { PageHero, Section, SectionHeading } from "@/components/site/section";
 import { BRAND } from "@/lib/brand";
+import { RETENTION } from "@/lib/site/legal";
 
 export const metadata: Metadata = {
   title: "Safety & privacy",
@@ -59,12 +60,12 @@ const DATA = [
   {
     icon: Lock,
     title: "Your account, your records",
-    body: "Each business has its own account. Your catalog, knowledge base, bookings, recordings and transcripts are shown only to people signed in to it.",
+    body: `Each business has its own account. Your catalog, knowledge base, bookings, recordings and transcripts are visible only to your team and to authorized ${BRAND.name} support staff.`,
   },
   {
     icon: Mic,
     title: "Recordings and transcripts",
-    body: "Every call and chat is kept with its transcript and outcome, so your team can check what was said. Pro, or an add-on, keeps recordings for 12 months.",
+    body: `Every call and chat is kept with its transcript and outcome, so your team can check what was said. Recordings are kept ${RETENTION.recordingDays} days, or ${RETENTION.extendedRecordingMonths} months on Pro or with the add-on.`,
   },
   {
     icon: KeyRound,
@@ -123,11 +124,27 @@ export default function SecurityPage() {
           Have a security questionnaire, data-processing or compliance question for your industry?{" "}
           <Link href="/contact" className="font-semibold text-primary-dark hover:underline">
             Talk to us
+          </Link>
+          {BRAND.contactEmail && (
+            <>
+              {" "}
+              or email{" "}
+              <a href={`mailto:${BRAND.contactEmail}`} className="font-semibold text-primary-dark hover:underline">
+                {BRAND.contactEmail}
+              </a>
+            </>
+          )}
+          .
+        </p>
+        <p className="mx-auto mt-3 max-w-2xl text-center text-sm text-muted-foreground">
+          The details are in our{" "}
+          <Link href="/privacy" className="font-semibold text-primary-dark hover:underline">
+            Privacy Policy
           </Link>{" "}
-          or email{" "}
-          <a href={`mailto:${BRAND.salesEmail}`} className="font-semibold text-primary-dark hover:underline">
-            {BRAND.salesEmail}
-          </a>
+          and{" "}
+          <Link href="/terms" className="font-semibold text-primary-dark hover:underline">
+            Terms of Service
+          </Link>
           .
         </p>
       </Section>

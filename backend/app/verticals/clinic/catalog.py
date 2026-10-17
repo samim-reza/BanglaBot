@@ -35,6 +35,7 @@ def doctor_availability(item: CatalogEntry | None, ctx: CallContext) -> Availabi
         horizon_days=int(config.get("booking_horizon_days") or 14),
         lead_minutes=int(config.get("lead_minutes") if config.get("lead_minutes") is not None else 30),
         busy=ctx.busy_for(item.id),
+        closures=ctx.closures_for(item.id),
     )
 
 

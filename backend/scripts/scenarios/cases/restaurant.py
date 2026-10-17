@@ -23,6 +23,9 @@ def _p(goal: str, *, facts: dict[str, str] | None = None, style: str = "", curve
 def scenarios(now: datetime) -> list[Scenario]:
     fri = say_day(now, "fri")
     return [
+        Scenario(f"{V}.holiday_table", V, "Wants a table on a day the restaurant is closed", closed=(("", "fri", "a private event"),),
+                 persona=_p(f"Book a table for 4 on {fri} at 7 pm. If they're closed, book the same time on the next open day they offer."),
+                 expect=Expect(commit=True, outcomes=ORDERED, judge=(f"The agent says the restaurant is closed on {fri} and nothing is booked on {fri}; the table is booked on a later day.",))),
         Scenario(f"{V}.pickup", V, "Pickup order with modifiers",
                  _p("Order a large pepperoni pizza with extra cheese on thin crust and a can of Coke, for pickup as soon as possible."),
                  expect=Expect(commit=True, outcomes=ORDERED, judge=(

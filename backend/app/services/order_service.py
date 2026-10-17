@@ -48,6 +48,7 @@ def serialize_call_log(log: CallLog) -> dict[str, Any]:
         "llm_completion_tokens": int(log.llm_completion_tokens or 0),
         "tts_chars": int(log.tts_chars or 0),
         "tts_cache_hits": int(log.tts_cache_hits or 0),
+        "summary": getattr(log, "summary", None) or "",
         "created_at": log.created_at,
     }
 

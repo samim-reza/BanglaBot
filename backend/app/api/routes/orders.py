@@ -21,6 +21,7 @@ from app.schemas.order import (
     OrderUpdate,
 )
 from app.services import call_service, dialer_service, order_service
+from app.services.calls import retention
 from app.services.tenancy import owned
 
 router = APIRouter(prefix="/api/orders", tags=["orders"])
@@ -118,6 +119,7 @@ async def recording(
     db: AsyncSession = Depends(get_db),
 ):
     log = await owned(db, CallLog, log_id, merchant, detail="Call log not found")
+    retention.ensure_available(log, merchant)
     content, media_type = await call_service.fetch_recording(log)
     return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, max-age=3600"})
 

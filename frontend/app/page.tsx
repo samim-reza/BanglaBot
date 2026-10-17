@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, CalendarCheck, Clock, PhoneForwarded, PhoneOutgoing } from "lucide-react";
+import { ArrowRight, CalendarCheck, Clock, PhoneForwarded, PhoneOutgoing, Play } from "lucide-react";
 
 import { AgentCards } from "@/components/site/agent-cards";
 import { CtaBand } from "@/components/site/cta-band";
@@ -7,6 +7,7 @@ import { FaqList } from "@/components/site/faq";
 import { FeatureGrid } from "@/components/site/feature-grid";
 import { HeroVisual } from "@/components/site/hero-visual";
 import { PricingPlans } from "@/components/site/pricing-plans";
+import { SampleCallsSection } from "@/components/site/sample-calls";
 import { Container, Section, SectionHeading } from "@/components/site/section";
 import { SiteShell } from "@/components/site/site-shell";
 import { Steps } from "@/components/site/steps";
@@ -55,9 +56,10 @@ export default function HomePage() {
               </Button>
             </div>
             <p className="mt-5 text-sm text-muted-foreground">
-              <Link href="/how-it-works" className="font-semibold text-primary-dark hover:underline">
-                See how it works
-              </Link>{" "}
+              <a href="#hear-it" className="inline-flex items-center gap-1 font-semibold text-primary-dark hover:underline">
+                <Play className="h-3.5 w-3.5" fill="currentColor" aria-hidden />
+                Hear a sample call
+              </a>{" "}
               · {TRIAL.days}-day free trial with {TRIAL.minutes} call minutes
             </p>
           </div>
@@ -86,6 +88,8 @@ export default function HomePage() {
           </ul>
         </Container>
       </section>
+
+      <SampleCallsSection className="border-t-0" />
 
       {/* Agents */}
       <Section id="agents" labelledBy="agents-title">

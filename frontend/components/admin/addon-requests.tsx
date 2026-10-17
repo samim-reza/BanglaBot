@@ -58,7 +58,8 @@ export function AddonRequestRow({
     setBusy(decision);
     try {
       const updated = await adminApi.decideAddonRequest(request.id, decision, note.trim());
-      toast.success(decision === "approve" ? `${request.addon_name} switched on.` : "Request declined.");
+      const approved = request.addon === "phone_line" ? "Number request done." : `${request.addon_name} switched on.`;
+      toast.success(decision === "approve" ? approved : "Request declined.");
       notifyAddonRequestsChanged();
       onDecided(updated);
     } catch (err) {

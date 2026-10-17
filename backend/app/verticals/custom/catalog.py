@@ -39,6 +39,7 @@ def availability(item: CatalogEntry | None, ctx: CallContext) -> Availability | 
         horizon_days=int(config.get("booking_horizon_days") or 14),
         lead_minutes=int(config.get("lead_minutes") if config.get("lead_minutes") is not None else 60),
         busy=ctx.busy_for(item.id),
+        closures=ctx.closures_for(item.id),
     )
 
 

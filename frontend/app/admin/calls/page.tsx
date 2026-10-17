@@ -12,12 +12,13 @@ import { FilterBar, LoadingRows } from "@/components/admin/states";
 import { pageFrom, useUrlFilters } from "@/components/admin/url-filters";
 import { useAdminMerchants } from "@/components/admin/use-admin-meta";
 import { ApiError } from "@/components/api-error";
+import { CallSummary } from "@/components/call-log-list";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { Pagination } from "@/components/pagination";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDateTime, formatDuration, humanize } from "@/lib/format";
+import { formatDateTime, formatDuration, formatPhone, humanize } from "@/lib/format";
 import { channelLabel } from "@/lib/vertical";
 import { adminApi, formatApiError, type CallChannel, type CallLog, type Merchant } from "@/services/api";
 
@@ -181,7 +182,7 @@ function CallsView() {
                       <TableCell className="whitespace-nowrap">{sourceLabel(log.direction)}</TableCell>
                       <TableCell className="min-w-[9rem]">
                         <div>{log.customer_name || (log.direction === "widget" ? "Website visitor" : "—")}</div>
-                        {log.caller_number && <div className="font-mono text-xs text-muted-foreground">{log.caller_number}</div>}
+                        {log.caller_number && <div className="font-mono text-xs text-muted-foreground">{formatPhone(log.caller_number)}</div>}
                         {log.order_ref && <div className="text-xs text-muted-foreground">Ref {log.order_ref}</div>}
                       </TableCell>
                       <TableCell>
@@ -232,6 +233,7 @@ function CallDetail({ log }: { log: CallLog }) {
       </dl>
       {can("finance") && <CallCosts callLogId={log.id} />}
       {log.recording_sid && <AdminRecordingPlayer logId={log.id} />}
+      <CallSummary summary={log.summary} />
       {log.transcript ? (
         <pre className="transcript max-h-80 overflow-y-auto whitespace-pre-wrap break-words font-sans">{log.transcript}</pre>
       ) : (

@@ -12,6 +12,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { BRAND } from "@/lib/brand";
+import { TRIAL_HREF } from "@/lib/site/nav";
 import { formatApiError, merchantApi, merchantToken, saveMerchantSession } from "@/services/api";
 
 export default function MerchantLoginPage() {
@@ -60,8 +62,8 @@ export default function MerchantLoginPage() {
           <ThemeToggle />
         </div>
         <div>
-          <h1 className="text-2xl font-semibold tracking-normal">Merchant login</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Sign in to enter orders and place confirmation calls.</p>
+          <h1 className="text-2xl font-semibold tracking-normal">Welcome back</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Sign in to your {BRAND.name} portal.</p>
         </div>
         {expired && !error && (
           <p role="status" className="rounded-md border border-border bg-surface px-3 py-2 text-sm text-muted-foreground">
@@ -94,16 +96,27 @@ export default function MerchantLoginPage() {
                 required
               />
               <Button className="w-full" type="submit" disabled={busy}>
-                {busy ? "Signing in…" : "Login"}
+                {busy ? "Signing in…" : "Sign in"}
               </Button>
             </form>
           </CardContent>
         </Card>
-        <p className="text-center text-xs text-muted-foreground">
-          Platform operator?{" "}
-          <Link href="/admin/login" className="text-primary hover:underline">
-            Admin login
+        <p className="text-center text-sm text-muted-foreground">
+          New to {BRAND.name}?{" "}
+          <Link href={TRIAL_HREF} className="font-medium text-primary hover:underline">
+            Start free trial
           </Link>
+        </p>
+        <p className="text-center text-xs text-muted-foreground">
+          By signing in, you agree to our{" "}
+          <Link href="/terms" className="hover:text-foreground hover:underline">
+            Terms of Service
+          </Link>{" "}
+          and{" "}
+          <Link href="/privacy" className="hover:text-foreground hover:underline">
+            Privacy Policy
+          </Link>
+          .
         </p>
       </div>
     </div>

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.skills.library.emergency import EmergencySkill
+from app.skills.library.emergency import CONNECT_LINES, EmergencySkill
 from app.skills.library.intake import IntakeField
 from app.skills.library.lines import L, line
 from app.verticals.clinic.blueprint import inbound_blueprint, inbound_skills, outbound_blueprint
@@ -32,6 +32,7 @@ EMERGENCY_LINES = (
         variables=("emergency",),
         required=("emergency",),
     ),
+    *CONNECT_LINES,
 )
 
 DENTAL_FIELDS = (

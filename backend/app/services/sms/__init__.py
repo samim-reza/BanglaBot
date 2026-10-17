@@ -11,8 +11,9 @@ Account settings live in ``merchants.sms_settings``::
 
 Modules: ``policy`` (settings, platform readiness, ``planned_kind``), ``composer``
 (texts + segments), ``sending`` (send + log, receipts, ``after_outcome``),
-``reminders`` (due reminders + lifespan loop). ``app.services.sms_service``
-re-exports all of it (the import path callers use).
+``reminders`` (due reminders + lifespan loop), ``optout`` (STOP list, first-text
+notice) and ``inbound`` (customers' STOP / START / HELP replies).
+``app.services.sms_service`` re-exports the main API (the import path callers use).
 """
 
 from app.services.sms.composer import compose, segments

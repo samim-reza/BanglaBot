@@ -9,6 +9,7 @@ import { useAppToast } from "@/components/app-toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { formatPhone } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { formatInZone } from "@/lib/vertical";
 import { formatApiError, integrationsApi, type SmsMessage } from "@/services/api";
@@ -31,6 +32,8 @@ export const SMS_KIND_LABEL: Record<string, string> = {
   lead: "Follow-up",
   manual: "Sent by you",
   test: "Test",
+  alert: "Owner alert",
+  help: "Help reply",
 };
 
 export function SmsStatus({ status }: { status: string }) {
@@ -57,7 +60,7 @@ export function SmsMessageList({
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px]">
             <SmsStatus status={message.status} />
             <span className="font-medium">{SMS_KIND_LABEL[message.kind] ?? message.kind}</span>
-            {showNumber && <span className="tabular-nums text-muted-foreground">{message.to_number}</span>}
+            {showNumber && <span className="tabular-nums text-muted-foreground">{formatPhone(message.to_number)}</span>}
             <span className="ml-auto text-xs tabular-nums text-muted-foreground">{formatInZone(message.created_at, timezone)}</span>
           </div>
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.body}</p>
@@ -123,7 +126,7 @@ export function RecordSmsCard({
       const message = await integrationsApi.sendRecordSms(orderId, body.trim());
       if (message.status === "failed" || message.status === "skipped") toast.error(message.error || "The text wasn't sent.");
       else {
-        toast.success(`Text sent to ${message.to_number}.`);
+        toast.success(`Text sent to ${formatPhone(message.to_number)}.`);
         setBody("");
         setComposing(false);
       }
@@ -142,7 +145,7 @@ export function RecordSmsCard({
       <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0">
         <div className="min-w-0 space-y-1.5">
           <CardTitle>Texts</CardTitle>
-          <CardDescription>{phone ? <>To <span className="tabular-nums">{phone}</span></> : "No phone number to text."}</CardDescription>
+          <CardDescription>{phone ? <>To <span className="tabular-nums">{formatPhone(phone)}</span></> : "No phone number to text."}</CardDescription>
         </div>
         <div className="flex gap-1">
           <Button type="button" variant="ghost" size="sm" onClick={() => void load()} disabled={loading} aria-label="Refresh texts">

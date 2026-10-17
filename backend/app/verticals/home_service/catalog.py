@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from app.flows.context import CallContext, CatalogEntry
 from app.flows.scheduling import Availability, window_from_config
-from app.flows.timefmt import normalize_days
+from app.flows.timefmt import normalize_days, parse_time, time_phrase
 from app.verticals.common import join_and, money, slot_start, when_phrase, window_phrase
 
 KIND_SERVICE = "service"
@@ -55,12 +56,17 @@ def service_availability(ctx: CallContext) -> Availability:
         horizon_days=int(config.get("booking_horizon_days") or 7),
         lead_minutes=int(config.get("lead_minutes") if config.get("lead_minutes") is not None else 60),
         busy=ctx.busy_for(None),
+        closures=ctx.closures_for(),
     )
 
 
-def window_label(key: str, ctx: CallContext, language: str) -> str:
+def window_label(key: str, ctx: CallContext, language: str, start: datetime | None = None) -> str:
+    """ "between 8 AM and 12 PM" — or "before 12 PM" for today's window once it has begun."""
     for raw in service_config(ctx).get("time_windows") or DEFAULT_WINDOWS:
         if isinstance(raw, dict) and raw.get("key") == key:
+            end = parse_time(raw.get("end"))
+            if start is not None and end is not None and ctx.now is not None and start <= ctx.now and start.date() == ctx.now.date():
+                return f"before {time_phrase(end, language)}"
             span = window_phrase(raw.get("start"), raw.get("end"), language)
             return f"between {span.replace(' to ', ' and ')}"
     return ""
@@ -103,7 +109,8 @@ def visit_when(slots: dict[str, Any], ctx: CallContext, language: str, *, on: bo
     start = slot_start(slots)
     if start is None:
         return ""
-    return when_phrase(start, ctx, language, window_label=window_label(str(slots.get("window") or ""), ctx, language), on=on)
+    label = window_label(str(slots.get("window") or ""), ctx, language, start.astimezone(ctx.now.tzinfo) if ctx.now else start)
+    return when_phrase(start, ctx, language, window_label=label, on=on)
 
 
 def record_when(record: Any, ctx: CallContext, language: str) -> str:
@@ -113,7 +120,8 @@ def record_when(record: Any, ctx: CallContext, language: str) -> str:
         return ""
     details = getattr(record, "details", None)
     key = str(details.get("time_window") or "") if isinstance(details, dict) else ""
-    return when_phrase(start.astimezone(ctx.now.tzinfo), ctx, language, window_label=window_label(key, ctx, language), on=True)
+    local = start.astimezone(ctx.now.tzinfo)
+    return when_phrase(local, ctx, language, window_label=window_label(key, ctx, language, local), on=True)
 
 
 def record_service(record: Any, ctx: CallContext) -> CatalogEntry | None:

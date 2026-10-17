@@ -153,6 +153,9 @@ class _SmsSession:
     async def get(self, model, obj_id):
         return self.rows.get(obj_id)
 
+    async def scalar(self, stmt):
+        return None  # no STOP on file, never texted before
+
 
 async def test_texts_are_capped_per_number_and_per_account(monkeypatch):
     sent: list[str] = []

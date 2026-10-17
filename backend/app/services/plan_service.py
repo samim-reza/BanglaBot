@@ -8,7 +8,9 @@ Change rules (no proration):
   price (+ any one-off add-ons) now; it applies when paid, period dates unchanged;
 * cheaper (downgrade / fewer add-ons) → nothing to pay; it applies when the
   current period ends (the renewal is charged at the new price);
-* same price, different selection → applies now, nothing to pay.
+* same price, different selection → applies now, nothing to pay;
+* no subscription record yet (an account the admin set up and bills by hand)
+  and the selection is what the account already has → nothing to change.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.addons import CATALOG, PERIOD_ONCE, quantities
 from app.core.datetime_utils import utcnow
 from app.core.entitlements import entitlements
+from app.core.plans import get_plan
 from app.models import Merchant, Subscription
 from app.services import audit_service, checkout_port, usage_service
 from app.services import subscription_service as subs
@@ -59,7 +62,15 @@ def quote_for(merchant: Merchant, tier: str, interval: str, addons: dict[str, in
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
-def decide(current: Subscription | None, quote: Quote, now: datetime) -> Change:
+def already_has(merchant: Any, quote: Quote) -> bool:
+    """The account's current tier + recurring add-ons are exactly this selection."""
+    recurring = {key: qty for key, qty in quantities(getattr(merchant, "addons", None) or {}).items() if CATALOG[key].period != PERIOD_ONCE}
+    return get_plan(getattr(merchant, "plan", None)).key == quote.tier.key and recurring == quote.addons and not quote.once
+
+
+def decide(current: Subscription | None, quote: Quote, now: datetime, merchant: Any = None) -> Change:
+    if current is None and merchant is not None and already_has(merchant, quote):
+        return Change(CHANGE_SAME, Decimal("0.00"), "now", now)
     running = (
         current is not None
         and current.status == subs.STATUS_ACTIVE
@@ -106,7 +117,7 @@ async def view(db: AsyncSession, merchant: Merchant) -> dict[str, Any]:
 
 async def quote_change(db: AsyncSession, merchant: Merchant, tier: str, interval: str, addons: dict[str, int]) -> dict[str, Any]:
     quote = quote_for(merchant, tier, interval, addons)
-    change = decide(await subs.current(db, merchant.id), quote, utcnow())
+    change = decide(await subs.current(db, merchant.id), quote, utcnow(), merchant)
     return {"quote": quote.as_json(), "change": change.as_json()}
 
 
@@ -131,7 +142,7 @@ async def change(db: AsyncSession, merchant: Merchant, tier: str, interval: str,
     now = utcnow()
     quote = quote_for(merchant, tier, interval, addons)
     current = await subs.current(db, merchant.id)
-    decision = decide(current, quote, now)
+    decision = decide(current, quote, now, merchant)
     out: dict[str, Any] = {"quote": quote.as_json(), "change": decision.as_json(), "checkout_url": None, "subscription_id": None}
     if decision.kind == CHANGE_SAME:
         raise HTTPException(status_code=409, detail="That's your current plan")

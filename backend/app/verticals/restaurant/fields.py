@@ -20,8 +20,9 @@ def summarize(record: Any, names: dict[str, str]) -> str:
     details = getattr(record, "details", None)
     details = details if isinstance(details, dict) else {}
     summary = str(getattr(record, "items_summary", "") or "")
-    tag = details.get("fulfillment") or ("table" if details.get("type") == "reservation" else "")
-    return " · ".join(part for part in (summary, str(tag or "")) if part)
+    # A table booking's summary already says "Table for 4".
+    tag = str(details.get("fulfillment") or "").capitalize()
+    return " · ".join(part for part in (summary, tag) if part)
 
 
 #: Keyword arguments of the restaurant :class:`~app.verticals.base.Vertical` (everything but its flows).
@@ -40,7 +41,7 @@ RESTAURANT_SPEC: dict[str, Any] = dict(
         FieldSpec("items_summary", L("Items"), "textarea", list_column=True),
         FieldSpec("total_amount", L("Total"), "money", list_column=True),
         FieldSpec("scheduled_at", L("Ready / table time"), "datetime", list_column=True),
-        FieldSpec("fulfillment", L("Pickup or delivery"), "select", options=(("pickup", L("Pickup")), ("delivery", L("Delivery")))),
+        FieldSpec("fulfillment", L("Pickup or delivery"), "select", list_column=True, options=(("pickup", L("Pickup")), ("delivery", L("Delivery")))),
         FieldSpec("address", L("Delivery address"), "textarea"),
         FieldSpec("progress", L("Kitchen status"), "select", options=PROGRESS_OPTIONS),
         FieldSpec("party_size", L("Guests (table)"), "number"),
@@ -62,7 +63,7 @@ RESTAURANT_SPEC: dict[str, Any] = dict(
             help=L("* = must choose one, + = several allowed."),
         ),
         FieldSpec("allergens", L("Allergens"), "list", placeholder="gluten, dairy"),
-        FieldSpec("available", L("Available"), "bool", default=True),
+        FieldSpec("available", L("In stock"), "bool", default=True, help=L("Off = sold out; the agent tells callers.")),
         FieldSpec("aliases", L("Also called"), "list", placeholder="pepperoni, pep pizza"),
     ),
     config_fields=(

@@ -23,6 +23,7 @@ from app.flows.base import (
 )
 from app.flows.context import DIRECTION_INBOUND
 from app.voice.languages import normalize_language, phrase
+from app.skills.library.emergency import CONNECT, REPORT
 from app.voice.tools.store import ToolResult
 from app.voice.tools.text import _join, _note
 
@@ -31,6 +32,13 @@ logger = structlog.get_logger(__name__)
 
 class EndingsMixin:
     async def _terminal(self, terminal: Terminal, args: dict[str, Any], caller_text: str) -> ToolResult:
+        if terminal.outcome == OUTCOME_EMERGENCY and not self.closing_spoken:
+            # On a phone call: offer to put the caller through instead of hanging up.
+            offered = await self._emergency(terminal.name, args, caller_text)
+            if offered is not None:
+                return offered
+            if terminal.name == CONNECT and REPORT in self._terminals:
+                terminal = self._terminals[REPORT]  # nothing to connect to here: the plain emergency ending
         if self.outcome:
             return ToolResult(payload={"ok": True, "outcome": self.outcome, "instruction": "Say nothing."}, stop=True)
         language = self.language
@@ -191,6 +199,8 @@ class EndingsMixin:
             return ToolResult(payload={"ok": True, "outcome": self.outcome}, hang_up=True, stop=True, outcome=self.outcome)
         if self.completed:
             return self._goodbye_after_completed()
+        if self._offer_left_open():
+            return await self.emergency_goodbye("caller didn't want to be put through.")
         stage = self.runtime.stage
         ctx = self.runtime.ctx
         reason = str(args.get("reason") or "").strip()
@@ -269,6 +279,9 @@ class EndingsMixin:
         if self.completed and not self.outcome:
             # Silence after "anything else?": the booking stands; just say goodbye.
             return self._farewell_line()
+        if self._offer_left_open():
+            result = await self.emergency_goodbye("no answer after the offer to connect.", repeat_advice=True)
+            return result.say
         if not self.outcome:
             if not await self._keep_fallback(note=note or _note(outcome, language)):
                 await self._set_outcome(outcome, note or _note(outcome, language))
@@ -279,6 +292,9 @@ class EndingsMixin:
     async def finish_inbound(self) -> None:
         """An inbound call ended without an outcome (the caller hung up)."""
         if self.outcome or self.completed:
+            return
+        if self._offer_left_open():
+            await self._set_outcome(OUTCOME_EMERGENCY, self._emergency_note("hung up after the offer to connect."))
             return
         if not await self._keep_fallback():
             await self._set_outcome(OUTCOME_INQUIRY, "")

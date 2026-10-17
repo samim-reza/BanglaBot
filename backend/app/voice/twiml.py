@@ -69,12 +69,13 @@ def stream_twiml(*, call_log_id: str, order_id: str = "") -> str:
     )
 
 
-def dial_twiml(number: str, *, caller_id: str | None = None, timeout_seconds: int = 25) -> str:
-    """Hand the live call to a human line; hang up when that leg ends."""
+def dial_twiml(number: str, *, caller_id: str | None = None, timeout_seconds: int = 25, after_say: str = "") -> str:
+    """Hand the live call to another line; when that leg ends, say ``after_say`` (if any) and hang up."""
     caller_attr = f' callerId="{escape(caller_id)}"' if caller_id else ""
+    after = f'<Say language="en-US">{escape(after_say)}</Say>' if after_say else ""
     return (
         '<?xml version="1.0" encoding="UTF-8"?>'
-        f'<Response><Dial timeout="{int(timeout_seconds)}"{caller_attr}>{escape(number)}</Dial><Hangup/></Response>'
+        f'<Response><Dial timeout="{int(timeout_seconds)}"{caller_attr}>{escape(number)}</Dial>{after}<Hangup/></Response>'
     )
 
 

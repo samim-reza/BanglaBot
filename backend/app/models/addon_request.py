@@ -5,6 +5,10 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, new_id
 
+#: Not an add-on: the owner asks for the phone number their plan includes (the admin buys and assigns it).
+PHONE_LINE = "phone_line"
+PHONE_LINE_LABEL = "Phone number (included)"
+
 
 class AddonRequest(Base):
     """An owner asked for an add-on in the portal; the platform admin approves it (no online payment yet)."""

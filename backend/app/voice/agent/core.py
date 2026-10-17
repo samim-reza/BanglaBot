@@ -30,6 +30,7 @@ class CallAgent(TurnMixin, FastPathMixin, PromptProfileMixin):
         settings: Any,
         call_log_id: str = "",
         support_phone: str = "",
+        phone_call: bool = False,
     ) -> None:
         self.flow = flow
         self.ctx = ctx
@@ -39,7 +40,7 @@ class CallAgent(TurnMixin, FastPathMixin, PromptProfileMixin):
         self.settings = settings
         self.call_log_id = call_log_id
         self.runtime = FlowRuntime(flow, ctx, language=language, on_directive=self._on_directive)
-        self.tools = CallTools(self.runtime, store, support_phone=support_phone)
+        self.tools = CallTools(self.runtime, store, support_phone=support_phone, phone_call=phone_call)
         self.messages: list[dict[str, Any]] = []
         # Node directives raised while a tool runs; appended only AFTER the tool
         # reply, because Chat Completions requires the tool message to directly

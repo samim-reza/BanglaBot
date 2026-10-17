@@ -10,10 +10,10 @@ export type TabKey = "business" | "agent" | "payments" | "notifications" | "cale
 export type TabDef = { key: TabKey; label: string; icon: LucideIcon; /** Card ids inside (for the unsaved dots and #anchors). */ sections: string[] };
 
 export const TABS: TabDef[] = [
-  { key: "business", label: "Business", icon: Building2, sections: ["profile", "region", "business"] },
+  { key: "business", label: "Business", icon: Building2, sections: ["profile", "region", "business", "closures"] },
   { key: "agent", label: "Agent", icon: Bot, sections: ["agent", "knowledge"] },
   { key: "payments", label: "Payments", icon: CreditCard, sections: ["payments"] },
-  { key: "notifications", label: "Notifications", icon: Smartphone, sections: ["sms"] },
+  { key: "notifications", label: "Notifications", icon: Smartphone, sections: ["alerts", "sms"] },
   { key: "calendar", label: "Calendar", icon: CalendarDays, sections: ["calendar"] },
   { key: "developers", label: "Developers", icon: Webhook, sections: ["webhooks"] },
   { key: "security", label: "Security", icon: KeyRound, sections: ["security", "sessions"] },

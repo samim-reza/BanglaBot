@@ -147,6 +147,9 @@ class TextSession:
             notify = getattr(self.store, "notify_finished", None)
             if notify is not None:
                 await notify()
+            summarize = getattr(self.store, "summarize", None)
+            if summarize is not None:
+                await summarize()  # detached: finishing never waits for the LLM
         except Exception as exc:  # noqa: BLE001
             await logger.awarning("text_session_finish_failed", session=self.id, error=str(exc))
 

@@ -219,6 +219,14 @@ def test_change_rules_without_proration():
         plan_service.decide(growth, build_quote("starter", "month", {"setup": 1}), NOW)
 
 
+def test_admin_set_up_account_is_not_charged_again_for_its_own_plan():
+    # No subscription record: the admin created the account and bills it by hand.
+    pro = make_merchant(id="m1", plan="pro", vertical="clinic", addons={"_v": 1, "minutes": 1, "setup": 1})
+    assert plan_service.decide(None, build_quote("pro", "month", {"minutes": 1}), NOW, pro).kind == "same"
+    assert plan_service.decide(None, build_quote("pro", "month"), NOW, pro).kind == "new"  # dropping an add-on is a change
+    assert plan_service.decide(None, build_quote("growth", "month", {"minutes": 1}), NOW, pro).kind == "new"
+
+
 async def test_upgrade_is_paid_then_applied_keeping_the_period(checkouts):
     merchant = make_merchant(id="m1", plan="starter", vertical="clinic")
     current = running("starter")

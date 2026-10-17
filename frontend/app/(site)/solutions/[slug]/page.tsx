@@ -5,6 +5,7 @@ import { ArrowRight, Check, ShieldCheck } from "lucide-react";
 
 import { CallTranscript } from "@/components/site/call-transcript";
 import { CtaBand } from "@/components/site/cta-band";
+import { SampleCallBand } from "@/components/site/sample-calls";
 import { Container, Eyebrow, Section, SectionHeading } from "@/components/site/section";
 import { Button } from "@/components/ui/button";
 import { AGENTS, agentBySlug } from "@/lib/site-content";
@@ -78,6 +79,8 @@ export default async function SolutionPage({ params }: Props) {
           <CallTranscript conversation={agent.example} live />
         </Container>
       </section>
+
+      <SampleCallBand vertical={agent.key} />
 
       <Section labelledBy="does-title">
         <div className="grid gap-12 lg:grid-cols-2">

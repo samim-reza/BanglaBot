@@ -392,6 +392,7 @@ class Flow:
             language,
             customer_name=self.person_name(ctx),
             business_name=ctx.merchant_value("business_name", ""),
+            emergency=ctx.say_number(ctx.emergency_number, language),
         )
 
     def reask_line(self, attempt: int, language: str) -> str:

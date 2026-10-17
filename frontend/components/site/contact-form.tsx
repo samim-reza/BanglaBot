@@ -324,7 +324,11 @@ function ContactFormInner({ plan, type }: { plan: string | null; type: string | 
           {busy ? "Sending…" : values.interest === "trial" ? "Request my free trial" : "Send"}
         </Button>
         <p className="text-xs text-muted-foreground">
-          We use your details only to reply to this request.
+          We use your details only to reply to this request. See our{" "}
+          <Link href="/privacy" className="underline-offset-2 hover:text-foreground hover:underline">
+            Privacy Policy
+          </Link>
+          .
         </p>
       </div>
     </form>

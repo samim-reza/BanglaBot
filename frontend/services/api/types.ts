@@ -295,6 +295,8 @@ export type CallLog = {
   llm_completion_tokens: number;
   tts_chars: number;
   tts_cache_hits: number;
+  /** AI summary of the finished conversation ("" = none yet). */
+  summary?: string;
   created_at: string;
   customer_name?: string;
   /** Present on admin listings only. */
@@ -526,7 +528,30 @@ export type Integrations = {
     items: CalendarItem[];
     google: GoogleCalendarState;
   };
+  /** Owner alerts (newer backends). */
+  alerts?: OwnerAlerts;
 };
+
+export type AlertEvent = "booking" | "change" | "message" | "urgent";
+
+export type AlertSettings = {
+  email_events: AlertEvent[];
+  sms_events: AlertEvent[];
+  /** The owner's mobile (E.164); "" = no texts. */
+  sms_to: string;
+};
+
+export type OwnerAlerts = {
+  settings: AlertSettings;
+  /** Where email alerts go (the account email); "" = none. */
+  email_to: string;
+  /** SMTP is configured on the server. */
+  email_ready: boolean;
+  /** Texting is configured on the server. */
+  sms_ready: boolean;
+};
+
+export type AlertTestResult = { results: Partial<Record<"email" | "sms", { status: string; detail: string }>> };
 
 export type SmsMessage = {
   id: string;

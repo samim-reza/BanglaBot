@@ -14,6 +14,9 @@ One model covers every vertical:
 a snapshot taken when the call starts; the store re-checks the slot under a
 lock when the booking is actually written, so the snapshot only has to be
 good enough to *offer* times.
+
+Closure dates (``app.flows.closures``: holidays, a doctor's leave) take a whole
+day out: no slot is offered on it and "next open day" helpers skip it.
 """
 
 from __future__ import annotations
@@ -22,6 +25,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone, tzinfo
 from typing import Any, Iterable, Mapping
 
+from app.flows.closures import Closure, closure_on
 from app.flows.timefmt import PART_TARGETS, normalize_days, parse_time, weekday_key
 
 
@@ -168,15 +172,20 @@ def open_days(
     limit: int = 2,
     lead_minutes: int = 30,
     busy: Iterable[tuple[datetime, datetime]] = (),
+    closures: Iterable[Closure] = (),
 ) -> list[date]:
-    """The next days (from ``start``, default today) with at least one free slot."""
+    """The next days (from ``start``, default today) with at least one free slot, closure dates skipped."""
     windows = list(windows)
     busy = list(busy)
+    closures = list(closures)
     first = start or now.date()
     last = now.date() + timedelta(days=max(0, horizon_days))
     found: list[date] = []
     day = first
     while day <= last and len(found) < limit:
+        if closure_on(closures, day, item_id) is not None:
+            day += timedelta(days=1)
+            continue
         if free_slots(windows, day, now=now, item_id=item_id, booked=booked, lead_minutes=lead_minutes, busy=busy):
             found.append(day)
         day += timedelta(days=1)
@@ -234,9 +243,17 @@ class Availability:
     lead_minutes: int = 30
     #: Busy times from the business's own calendar (never offered).
     busy: list[tuple[datetime, datetime]] = field(default_factory=list)
+    #: Closure dates that apply here (the whole business's and this resource's) — never offered.
+    closures: list[Closure] = field(default_factory=list)
+
+    def closure_on(self, day: date) -> Closure | None:
+        """The closure that shuts ``day`` for this resource, if any."""
+        return closure_on(self.closures, day, self.item_id)
 
     def free(self, day: date, *, now: datetime, booked: Mapping[str, int]) -> list[Slot]:
         if day < now.date() or day > now.date() + timedelta(days=self.horizon_days):
+            return []
+        if self.closure_on(day) is not None:
             return []
         return free_slots(
             self.windows, day, now=now, item_id=self.item_id, booked=booked, lead_minutes=self.lead_minutes, busy=self.busy
@@ -253,6 +270,7 @@ class Availability:
             limit=limit,
             lead_minutes=self.lead_minutes,
             busy=self.busy,
+            closures=self.closures,
         )
 
     def working_days(self) -> list[str]:

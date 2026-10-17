@@ -73,6 +73,8 @@ class Merchant(Base):
     webhook_secret_stored: Mapped[str] = mapped_column("webhook_secret", String(255), default="")
     # SMS confirmations / reminders: {"enabled", "on_booking", "on_change", "reminder_hours"}.
     sms_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
+    # Owner alerts: {"email_events": [...], "sms_events": [...], "sms_to"} (see app.services.alerts.settings).
+    alert_settings: Mapped[dict] = mapped_column(JSONB, default=dict)
     # Secret in the account's calendar feed URL (iCal subscription), read and set through the
     # ``calendar_token`` property: found by its peppered hash, an encrypted copy rebuilds the
     # URL for the owner. ``calendar_token_legacy`` is plaintext from before (cleared on upgrade).

@@ -11,6 +11,7 @@ from app.api.routes.auth import merchant_out
 from app.core.addons import CATALOG
 from app.core.security import ROLE_SUPERADMIN, ROLE_SUPPORT
 from app.models import AddonRequest, Merchant
+from app.models.addon_request import PHONE_LINE, PHONE_LINE_LABEL
 from app.schemas.merchant import MerchantOut
 
 
@@ -46,7 +47,7 @@ def _addon_request(row: AddonRequest, merchant: Merchant | None) -> dict:
         "merchant_name": merchant.business_name if merchant else "",
         "merchant_plan": merchant.plan if merchant else "",
         "addon": row.addon,
-        "addon_name": addon.name if addon else row.addon,
+        "addon_name": addon.name if addon else (PHONE_LINE_LABEL if row.addon == PHONE_LINE else row.addon),
         "price_label": addon.price_label() if addon else "",
         "quantity": row.quantity,
         "note": row.note,

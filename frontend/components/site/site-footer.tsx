@@ -15,6 +15,11 @@ const PLATFORM_LINKS = [
   { href: TRIAL_HREF, label: "Start free trial" },
 ];
 
+const LEGAL_LINKS = [
+  { href: "/privacy", label: "Privacy policy" },
+  { href: "/terms", label: "Terms of service" },
+];
+
 const COMPANY_LINKS = [
   { href: "/contact", label: "Contact sales" },
   { href: "/security", label: "Safety & privacy" },
@@ -52,12 +57,15 @@ export function SiteFooter() {
             <span className="text-lg font-bold tracking-tight text-primary-dark">{BRAND.name}</span>
           </Link>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{BRAND.tagline}</p>
-          <a
-            href={`mailto:${BRAND.salesEmail}`}
-            className="mt-3 inline-block text-sm font-medium text-primary-dark hover:underline"
-          >
-            {BRAND.salesEmail}
-          </a>
+          {BRAND.contactEmail ? (
+            <a href={`mailto:${BRAND.contactEmail}`} className="mt-3 inline-block text-sm font-medium text-primary-dark hover:underline">
+              {BRAND.contactEmail}
+            </a>
+          ) : (
+            <Link href="/contact" className="mt-3 inline-block text-sm font-medium text-primary-dark hover:underline">
+              Get in touch
+            </Link>
+          )}
         </div>
         <FooterColumn title="Solutions" links={PRODUCT_LINKS} />
         <FooterColumn title="Product" links={PLATFORM_LINKS} />
@@ -68,9 +76,17 @@ export function SiteFooter() {
           <p>
             © {year} {BRAND.name}. All rights reserved.
           </p>
-          <Link href="/admin/login" className="hover:text-foreground hover:underline">
-            Admin
-          </Link>
+          <nav aria-label="Legal">
+            <ul className="flex flex-wrap gap-x-5 gap-y-2">
+              {LEGAL_LINKS.map((link) => (
+                <li key={link.href}>
+                  <Link href={link.href} className="hover:text-foreground hover:underline">
+                    {link.label}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </nav>
         </div>
       </div>
     </footer>

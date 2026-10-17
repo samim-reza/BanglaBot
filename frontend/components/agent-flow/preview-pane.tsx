@@ -9,20 +9,60 @@ import { cn } from "@/lib/utils";
 import { t } from "@/lib/vertical";
 import type { AgentFlowPreview, Direction } from "@/services/api";
 
-/** "{doctor}" placeholders shown as chips. */
+/** What a "{variable}" reads like in the preview — filled in for real on the call. */
+const SAMPLES: Record<string, string> = {
+  departments: "your departments",
+  who: "the doctor",
+  doctor: "the doctor",
+  schedule: "their days and hours",
+  when: "Tuesday at 10 AM",
+  time: "10 AM",
+  day: "Tuesday",
+  date: "Tuesday",
+  amount: "$40",
+  price: "$40",
+  fee: "$40",
+  total: "$32.50",
+  minimum: "$15",
+  subtotal: "$12",
+  service: "the service",
+  services: "your services",
+  staff: "the stylist",
+  names: "your team",
+  hours: "your opening hours",
+  item: "the item",
+  items: "the items",
+  area: "the area",
+  areas: "your service areas",
+  window: "8 AM to 12 PM",
+  hold: "30",
+  name: "Alex",
+  customer_name: "Alex",
+  pet_name: "Max",
+  type: "home",
+  size: "3 bedrooms",
+  emergency: "911",
+  serial_part: "",
+};
+
+function sample(variable: string): string {
+  return variable in SAMPLES ? SAMPLES[variable] : variable.replace(/_/g, " ");
+}
+
+/** "{doctor}" placeholders shown as highlighted sample words (the real value is filled in on the call). */
 function Said({ text }: { text: string }) {
   const parts = text.split(/(\{[a-z_][a-z0-9_]*\})/g);
   return (
     <>
-      {parts.map((part, index) =>
-        /^\{[a-z_][a-z0-9_]*\}$/.test(part) ? (
-          <span key={index} className="rounded bg-card/70 px-1 font-mono text-[11.5px] text-muted-foreground">
-            {part}
+      {parts.map((part, index) => {
+        if (!/^\{[a-z_][a-z0-9_]*\}$/.test(part)) return <span key={index}>{part}</span>;
+        const words = sample(part.slice(1, -1));
+        return words ? (
+          <span key={index} title={`Filled in on the call: ${part}`} className="rounded bg-card/70 px-1 italic text-primary">
+            {words}
           </span>
-        ) : (
-          <span key={index}>{part}</span>
-        ),
-      )}
+        ) : null;
+      })}
     </>
   );
 }
@@ -61,7 +101,7 @@ export function PreviewPane({
         <h2 id="flow-preview-title" className="flex items-center gap-2 text-sm font-semibold">
           <Bot className="h-4 w-4 text-primary" aria-hidden />
           Preview
-          <InfoTip label="About the preview">What your agent says in this branch, in order. Details like {"{doctor}"} are filled in on the call.</InfoTip>
+          <InfoTip label="About the preview">What your agent says in this branch, in order. Highlighted words are examples — the real details are filled in on the call.</InfoTip>
         </h2>
         <span className="flex items-center gap-2 text-xs text-muted-foreground">
           {loading && <LoaderCircle className="h-3.5 w-3.5 animate-spin" aria-label="Updating" />}

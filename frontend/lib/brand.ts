@@ -3,5 +3,6 @@ export const BRAND = {
   name: "Callisa",
   product: "AI voice & chat agents",
   tagline: "AI receptionists that answer every call, book the job and follow up.",
-  salesEmail: "sales@example.com",
+  /** Public contact address (NEXT_PUBLIC_CONTACT_EMAIL, read at build time). Empty = pages link to /contact instead. */
+  contactEmail: (process.env.NEXT_PUBLIC_CONTACT_EMAIL ?? "").trim(),
 } as const;

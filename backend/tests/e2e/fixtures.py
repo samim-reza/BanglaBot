@@ -53,7 +53,7 @@ async def settle_background(timeout: float = 5.0) -> list[str]:
 
 
 #: The app's own background loops (main.lifespan names them).
-LIFESPAN_TASKS = frozenset({"auto-call-scheduler", "chat-reaper", "sms-reminders", "billing-jobs", "payment-sweeper", "finance-jobs"})
+LIFESPAN_TASKS = frozenset({"auto-call-scheduler", "chat-reaper", "sms-reminders", "billing-jobs", "payment-sweeper", "finance-jobs", "recording-purge"})
 
 
 @pytest_asyncio.fixture(scope="session", loop_scope="session")

@@ -10,131 +10,24 @@ rendered at instruction time.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from app.flows.context import CallContext
 from app.flows.scheduling import Availability, pick_slot
-from app.flows.steps import lang_text
-from app.flows.timefmt import (
-    PART_TARGETS,
-    WEEKDAY_EN,
-    date_phrase,
-    days_phrase,
-    parse_date,
-    parse_time,
-    short_date_phrase,
-    time_phrase,
-    weekday_key,
+from app.flows.timefmt import PART_TARGETS, date_phrase, days_phrase, parse_date, parse_time, time_phrase
+from app.verticals.notices import (
+    NOTICE,
+    clear_notice,
+    closed_notice,
+    closure_sentence,
+    join_and,
+    join_or,
+    notice,
+    render_notice,
+    with_notice,
 )
 from app.voice.languages import normalize_language, spoken_amount
-
-NOTICE = "_notice"
-
-_NOTICES: dict[str, dict[str, str]] = {
-    "date_unclear": {
-        "en": "Sorry, I didn't catch the date.",
-    },
-    "date_past": {
-        "en": "That date has already passed.",
-    },
-    "date_too_far": {
-        "en": "We take bookings for the next {days} days only.",
-    },
-    "closed_day": {
-        "en": "We're closed on {weekday}. We're open {open} — for example {next}.",
-    },
-    "closed_day_doctor": {
-        "en": "{who} doesn't see patients on {weekday}; only {open} — for example {next}.",
-    },
-    "closed_day_resource": {
-        "en": "{who} isn't available on {weekday}; only {open} — for example {next}.",
-    },
-    "closed_day_person": {
-        "en": "{who} isn't in on {weekday}; {who} works {open} — for example {next}.",
-    },
-    "day_full": {
-        "en": "Sorry, {day} is fully booked. {next} has openings.",
-    },
-    "day_full_none": {
-        "en": "Sorry, the next few days are fully booked.",
-    },
-    "order_cancel_request": {
-        "en": "I'll pass your request to cancel order {ref} to the team right away.",
-    },
-    "order_status": {
-        "en": "Your order {ref} — {items}, {total} — is {status}.",
-    },
-    "slot_taken": {
-        "en": "Sorry, that time was just taken by someone else.",
-    },
-    "pref_moved": {
-        "en": "{pref} isn't free, so here is the nearest open time.",
-    },
-    "ready_moved": {
-        "en": "The earliest we can have it ready is {time}.",
-    },
-    "window_moved": {
-        "en": "Sorry, the {pref} is fully booked, so here is the next open time.",
-    },
-}
-
-
-def notice(slots: dict[str, Any], code: str, **params: Any) -> None:
-    slots[NOTICE] = {"code": code, "params": params}
-
-
-def clear_notice(slots: dict[str, Any]) -> None:
-    slots.pop(NOTICE, None)
-
-
-def render_notice(slots: dict[str, Any], ctx: CallContext, language: str) -> str:
-    entry = slots.get(NOTICE)
-    if not isinstance(entry, dict):
-        return ""
-    lang = normalize_language(language)
-    code = str(entry.get("code") or "")
-    params = dict(entry.get("params") or {})
-    rendered: dict[str, str] = {}
-    for key, value in params.items():
-        if key == "open" and isinstance(value, list):
-            rendered[key] = days_phrase(value, lang)
-        elif key == "weekday" and isinstance(value, date):
-            rendered[key] = WEEKDAY_EN[weekday_key(value)]
-        elif key == "pref" and isinstance(value, str) and parse_time(value) is not None:
-            rendered[key] = time_phrase(parse_time(value), lang)  # type: ignore[arg-type]
-        elif isinstance(value, date):
-            rendered[key] = date_phrase(value, ctx.today, lang, month_first=ctx.month_first)
-        elif isinstance(value, list) and value and all(isinstance(v, date) for v in value):
-            rendered[key] = join_or([short_date_phrase(v, ctx.today, lang, month_first=ctx.month_first) for v in value], lang)
-        else:
-            rendered[key] = str(value)
-    if code == "day_full" and not params.get("next"):
-        code = "day_full_none"
-    template = lang_text(_NOTICES.get(code, {}), lang)
-    try:
-        return template.format(**rendered)
-    except (KeyError, IndexError, ValueError):
-        return template
-
-
-def with_notice(slots: dict[str, Any], ctx: CallContext, language: str, line: str) -> str:
-    lead = render_notice(slots, ctx, language)
-    return f"{lead} {line}".strip() if lead else line
-
-
-def join_or(parts: list[str], language: str) -> str:
-    parts = [part for part in parts if part]
-    if len(parts) <= 1:
-        return parts[0] if parts else ""
-    return f"{', '.join(parts[:-1])} or {parts[-1]}"
-
-
-def join_and(parts: list[str], language: str) -> str:
-    parts = [part for part in parts if part]
-    if len(parts) <= 1:
-        return parts[0] if parts else ""
-    return f"{', '.join(parts[:-1])} and {parts[-1]}"
 
 
 def money(amount: Any, ctx: CallContext, language: str) -> str:
@@ -230,6 +123,12 @@ def plan_booking(
         slots.pop(date_key, None)
         notice(slots, "date_too_far", days=availability.horizon_days)
         return
+    closure = availability.closure_on(day)
+    if closure is not None:
+        slots.pop(date_key, None)
+        nxt = availability.next_days(now=ctx.now, booked=ctx.booked, start=day + timedelta(days=1), limit=1)
+        closed_notice(slots, ctx, closure, next_day=nxt[0] if nxt else None, who=who)
+        return
     if not any(window.open_on(day) for window in availability.windows):
         slots.pop(date_key, None)
         nxt = availability.next_days(now=ctx.now, booked=ctx.booked, start=ctx.today, limit=2)
@@ -242,8 +141,6 @@ def plan_booking(
     free = availability.free(day, now=ctx.now, booked=ctx.booked)
     if not free:
         slots.pop(date_key, None)
-        from datetime import timedelta
-
         nxt = availability.next_days(now=ctx.now, booked=ctx.booked, start=day + timedelta(days=1), limit=2)
         notice(slots, "day_full", day=day, next=nxt)
         return
@@ -270,6 +167,8 @@ def plan_booking(
 __all__ = [
     "NOTICE",
     "clear_notice",
+    "closed_notice",
+    "closure_sentence",
     "join_and",
     "join_or",
     "money",

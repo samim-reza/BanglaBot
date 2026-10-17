@@ -36,4 +36,6 @@ class CallLog(Base):
     llm_cached_tokens: Mapped[int] = mapped_column(Integer, default=0)
     tts_chars: Mapped[int] = mapped_column(Integer, default=0)
     tts_cache_hits: Mapped[int] = mapped_column(Integer, default=0)
+    # One or two plain sentences written by the LLM after the call / chat ended (NULL = none yet).
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

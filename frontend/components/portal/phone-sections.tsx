@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowRight, FileText, Phone, PhoneOutgoing } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { usePhoneRequest } from "@/components/portal/phone-request";
 import { useCopy, CopyButton, SectionCard, StatusPill, SetupNote } from "@/components/portal/kit";
 import { t } from "@/lib/vertical";
 import { useWorkspace } from "@/lib/workspace";
@@ -17,6 +18,7 @@ export function PhoneLineSection() {
   const { copied, copy } = useCopy();
   const number = merchant.inbound_number?.trim();
   const ready = telephony.configured;
+  const phone = usePhoneRequest(!number);
   return (
     <SectionCard id="phone" icon={Phone} title="Phone line" badge={<StatusPill ok={ready}>{ready ? "Ready" : "Not set up"}</StatusPill>}>
       <div className="space-y-3 text-sm">
@@ -29,7 +31,10 @@ export function PhoneLineSection() {
             <p className="text-muted-foreground">Forward your business number here.</p>
           </>
         ) : (
-          <p className="text-muted-foreground">No number yet — your admin assigns one.</p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-muted-foreground">{phone.requested ? "Number requested — we'll assign it." : "No number yet — we assign it for you."}</p>
+            {phone.action}
+          </div>
         )}
         {!ready && <SetupNote>Phone calling isn&apos;t set up on this server yet.</SetupNote>}
         {ready && telephony.platform_number && (

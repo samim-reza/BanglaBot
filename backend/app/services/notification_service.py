@@ -1,4 +1,4 @@
-"""What happens after a booking changes: the customer's SMS and the calendar mirror.
+"""What happens after a booking changes: the customer's SMS, the calendar mirror, the owner's alert.
 
 Called fire-and-forget after an agent outcome (from the call store) and after a
 manual change in the portal; nothing here can fail a call or a request.
@@ -27,10 +27,16 @@ async def _after_outcome(merchant_id: str, record_id: str, outcome: str) -> None
     )
 
 
-def after_outcome(merchant_id: str, record_id: str, outcome: str) -> None:
-    """An agent wrote an outcome on a record: text the customer, mirror the calendar."""
+def after_outcome(merchant_id: str, record_id: str, outcome: str, *, call_log_id: str = "") -> None:
+    """An outcome was written on a record: text the customer, mirror the calendar. With
+    ``call_log_id`` (the agent wrote it during a call / chat) the owner gets their alert too,
+    with or without a record (an emergency may have none)."""
     if record_id:
         asyncio.create_task(_after_outcome(merchant_id, record_id, outcome))
+    if call_log_id:
+        from app.services import alerts
+
+        alerts.schedule(merchant_id, record_id, outcome, call_log_id=call_log_id)
 
 
 def after_record_change(record_id: str) -> None:

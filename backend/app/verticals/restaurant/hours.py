@@ -1,5 +1,7 @@
 """Opening hours, order times ("as soon as possible" / a later time) and table capacity.
 
+Closure dates (holidays) close the whole day: no orders, no tables.
+
 Tables are counted in covers (guests) per slot. The booking snapshot and the
 commit lock count *reservations*, not guests, so a slot's capacity for a party
 of ``n`` is ``covers // n`` reservations — exact when the tables in a slot are
@@ -12,6 +14,7 @@ import re
 from datetime import date, datetime, time, timedelta
 from typing import Any
 
+from app.flows.closures import Closure, closure_on
 from app.flows.context import CallContext
 from app.flows.scheduling import Availability, Window, window_from_config
 from app.flows.timefmt import parse_date, parse_time
@@ -22,6 +25,8 @@ ASAP = "asap"
 #: How far ahead an order may be placed.
 ORDER_DAYS = 7
 UNLIMITED = 999
+#: How far ahead the next opening is looked for (a long holiday closure included).
+OPENING_SEARCH_DAYS = 60
 
 
 def opening_window(ctx: CallContext, *, step: int = 0, capacity: int = 1) -> Window | None:
@@ -47,7 +52,14 @@ def _bounds(window: Window, day: date, tz: Any) -> tuple[datetime, datetime]:
     return datetime.combine(day, window.start, tzinfo=tz), datetime.combine(day, window.end, tzinfo=tz)
 
 
+def closed_on(ctx: CallContext, day: date) -> Closure | None:
+    """The restaurant's closure (holiday) on ``day``, if any."""
+    return closure_on(ctx.closures, day)
+
+
 def is_open(ctx: CallContext, at: datetime) -> bool:
+    if closed_on(ctx, at.date()) is not None:
+        return False
     window = opening_window(ctx)
     if window is None:
         return True  # hours not set: never refuse
@@ -61,9 +73,9 @@ def next_opening(ctx: CallContext, after: datetime) -> datetime | None:
     window = opening_window(ctx)
     if window is None:
         return None
-    for offset in range(0, 8):
+    for offset in range(0, OPENING_SEARCH_DAYS):
         day = after.date() + timedelta(days=offset)
-        if not window.open_on(day):
+        if not window.open_on(day) or closed_on(ctx, day) is not None:
             continue
         start, end = _bounds(window, day, after.tzinfo)
         if after < start:
@@ -121,6 +133,8 @@ def order_time_ok(at: datetime, ctx: CallContext) -> bool:
     assert ctx.now is not None
     if at < ctx.now - timedelta(minutes=5) or (at.date() - ctx.today).days > ORDER_DAYS:
         return False
+    if closed_on(ctx, at.date()) is not None:
+        return False
     window = opening_window(ctx)
     if window is None:
         return True
@@ -177,12 +191,14 @@ def table_availability(slots: dict[str, Any], ctx: CallContext) -> Availability 
         horizon_days=max(1, whole(config.get("booking_horizon_days"), 14)),
         lead_minutes=max(0, whole(config.get("lead_minutes"), 60)),
         busy=ctx.busy_for(None),
+        closures=ctx.closures_for(),
     )
 
 
 __all__ = [
     "ASAP",
     "can_do_asap",
+    "closed_on",
     "hours_phrase",
     "is_open",
     "lead_minutes",

@@ -43,3 +43,21 @@ export function humanize(value: string | null | undefined): string {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+
+/** "+16175550142" → "(617) 555-0142" for US / Canada numbers; other numbers are shown as stored. */
+export function formatPhone(value: string | null | undefined): string {
+  const raw = String(value ?? "").trim();
+  const digits = raw.replace(/\D/g, "");
+  const national = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : !raw.startsWith("+") && digits.length === 10 ? digits : "";
+  return national ? `(${national.slice(0, 3)}) ${national.slice(3, 6)}-${national.slice(6)}` : raw;
+}
+
+/** "17:00" → "5 PM", "09:30" → "9:30 AM"; anything else is shown as stored. */
+export function formatClock(value: string | null | undefined): string {
+  const match = /^(\d{1,2}):(\d{2})/.exec(String(value ?? "").trim());
+  if (!match) return String(value ?? "");
+  const hours = Number(match[1]);
+  const suffix = hours < 12 || hours === 24 ? "AM" : "PM";
+  const hour12 = hours % 12 || 12;
+  return match[2] === "00" ? `${hour12} ${suffix}` : `${hour12}:${match[2]} ${suffix}`;
+}

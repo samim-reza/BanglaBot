@@ -70,10 +70,10 @@ class DbCallStore:
                 log.language = language or log.language
             await session.commit()
             merchant_id = order.merchant_id if order is not None else (log.merchant_id if log is not None else "")
-        if self.order_id:
-            from app.services import notification_service
+        from app.services import notification_service
 
-            notification_service.after_outcome(merchant_id, self.order_id, outcome)
+        # The customer's text + calendar (when there is a record) and the owner's alert (always).
+        notification_service.after_outcome(merchant_id, self.order_id, outcome, call_log_id=self.call_log_id)
 
     @staticmethod
     async def _existing_by_idem(session: Any, merchant_id: str, action: CommitAction) -> str:
@@ -165,7 +165,7 @@ class DbCallStore:
         self.order_id = new_id
         from app.services import notification_service
 
-        notification_service.after_outcome(merchant_id, new_id, action.outcome)
+        notification_service.after_outcome(merchant_id, new_id, action.outcome, call_log_id=self.call_log_id)
         return CommitResult(ok=True, record_id=new_id)
 
     async def save_transcript(self, transcript: str, *, language: str, final_node: str) -> None:
@@ -205,6 +205,12 @@ class DbCallStore:
 
         # Detached and failure-proof: the call / chat never waits on (or sees) metering.
         recorder.schedule_call(self.call_log_id, dict(counters), llm_stats=llm_stats, stt_usage=stt_usage, tts_usage=tts_usage)
+
+    async def summarize(self) -> None:
+        """AI summary of the finished call / chat, written onto its log in the background."""
+        from app.services import summaries
+
+        summaries.schedule(self.call_log_id)
 
     async def notify_finished(self) -> None:
         """Webhook add-on: tell the business's own system how the call ended."""

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { fmtInt, fmtPct, fmtUsd } from "@/components/admin/numbers";
+import { fmtInt, fmtPercent, fmtUsd } from "@/components/admin/numbers";
 import { LoadingRows } from "@/components/admin/states";
 import { useCursorList } from "@/components/admin/use-cursor-list";
 import { useAdminMeta, verticalName } from "@/components/admin/use-admin-meta";
@@ -62,7 +62,7 @@ export function FinanceAccountsTable({ month }: { month: string }) {
                   </TableCell>
                   <TableCell className={cn("whitespace-nowrap text-right tabular-nums", row.margin_usd < 0 && "font-semibold text-destructive")}>
                     {fmtUsd(row.margin_usd)}
-                    <div className="text-xs text-muted-foreground">{fmtPct(row.margin_pct)}</div>
+                    <div className="text-xs text-muted-foreground">{fmtPercent(row.margin_pct)}</div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{usd(row.cost_per_minute_usd)}</TableCell>
                 </TableRow>

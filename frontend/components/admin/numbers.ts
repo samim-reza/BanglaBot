@@ -19,6 +19,11 @@ export function fmtPct(ratio: number | null | undefined, digits = 0): string {
   return `${(ratio * 100).toFixed(digits)}%`;
 }
 
+/** For values the API already sends as a percentage (the `*_pct` fields: 87.5 → "87.5%"). */
+export function fmtPercent(percent: number | null | undefined, digits = 0): string {
+  return percent === null || percent === undefined ? "—" : fmtPct(percent / 100, digits);
+}
+
 export const fmtMs = (ms: number | null | undefined) => (ms === null || ms === undefined ? "—" : ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`);
 
 export function fmtBytes(bytes: number | null | undefined): string {

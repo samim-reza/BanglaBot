@@ -169,6 +169,7 @@ def service_availability(ctx: CallContext) -> Availability:
         horizon_days=int(config.get("booking_horizon_days") or 7),
         lead_minutes=int(config.get("lead_minutes") if config.get("lead_minutes") is not None else 60),
         busy=ctx.busy_for(None),
+        closures=ctx.closures_for(),
     )
 
 

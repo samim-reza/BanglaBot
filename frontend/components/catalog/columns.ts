@@ -1,3 +1,4 @@
+import { formatClock } from "@/lib/format";
 import { displayValue, money, t } from "@/lib/vertical";
 import type { CatalogItem, FieldSpec } from "@/services/api";
 
@@ -27,7 +28,7 @@ export function catalogColumns(fields: FieldSpec[], kind: string, currency: stri
         render: (item) => {
           const start = item.data?.start_time;
           const end = item.data?.end_time;
-          return start || end ? `${start || "?"}–${end || "?"}` : "—";
+          return start || end ? `${start ? formatClock(String(start)) : "?"}–${end ? formatClock(String(end)) : "?"}` : "—";
         },
       });
     } else if (key === "price_range" && byKey.has("price_from")) {

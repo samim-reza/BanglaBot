@@ -13,6 +13,7 @@ from app.api.routes import addons, admin, admin_audit, admin_users, auth, calls,
 from app.api.routes import admin_flow, admin_system, agent_flow
 from app.api.routes import admin_plans, plan, signup
 from app.api.routes import admin_finance, payments
+from app.api.routes import closures, dashboard, phone_line
 from app.core.config import get_settings
 from app.core.http_security import BodySizeLimitMiddleware, SecurityHeadersMiddleware, SplitCORSMiddleware, cors_origins
 from app.core.logging import configure_logging
@@ -21,6 +22,7 @@ from app.core.security import boot_guard
 from app.db.bootstrap import bootstrap
 from app.db.session import engine
 from app.services import billing_jobs, call_service, dialer_service, sms_service
+from app.services.calls import retention as recording_retention
 from app.services.payments import holds as payment_holds
 from app.finance import scheduler as finance_scheduler
 from app.voice import text_session
@@ -70,6 +72,8 @@ async def lifespan(app: FastAPI):
         asyncio.create_task(payment_holds.run_sweeper(), name="payment-sweeper"),
         # SMS metering, cost-guard refresh, ledger retention.
         asyncio.create_task(finance_scheduler.run_scheduler(), name="finance-jobs"),
+        # Deletes recordings past the account's retention (RECORDING_PURGE=true).
+        asyncio.create_task(recording_retention.run(), name="recording-purge"),
     ]
     yield
     for task in background:
@@ -151,5 +155,8 @@ app.include_router(admin_flow.router)
 app.include_router(admin_system.router)
 app.include_router(payments.router)
 app.include_router(admin_finance.router)
+app.include_router(dashboard.router)
+app.include_router(closures.router)
+app.include_router(phone_line.router)
 app.include_router(telnyx.router)
 app.include_router(twilio.router)

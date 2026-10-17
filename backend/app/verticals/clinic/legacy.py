@@ -182,6 +182,7 @@ def doctor_availability(item: CatalogEntry | None, ctx: CallContext) -> Availabi
         horizon_days=int(config.get("booking_horizon_days") or 14),
         lead_minutes=int(config.get("lead_minutes") if config.get("lead_minutes") is not None else 30),
         busy=ctx.busy_for(item.id),
+        closures=ctx.closures_for(item.id),
     )
 
 
@@ -789,22 +790,22 @@ CLINIC = Vertical(
     catalog_label=L("Doctor"),
     catalog_label_plural=L("Doctors"),
     catalog_fields=(
-        FieldSpec("name", L("Doctor's name"), required=True, placeholder="Dr. Abdul Karim"),
-        FieldSpec("specialty", L("Department / specialty"), required=True, placeholder="Medicine / Pediatrics"),
-        FieldSpec("degrees", L("Degrees"), placeholder="MBBS, FCPS (Medicine)"),
-        FieldSpec("days", L("Chamber days"), "days", required=True),
-        FieldSpec("start_time", L("Starts at"), "time", required=True, default="17:00"),
-        FieldSpec("end_time", L("Ends at"), "time", required=True, default="21:00"),
+        FieldSpec("name", L("Doctor's name"), required=True, placeholder="Dr. Sarah Mitchell"),
+        FieldSpec("specialty", L("Department / specialty"), required=True, placeholder="Family medicine / Pediatrics"),
+        FieldSpec("degrees", L("Degrees"), placeholder="MD, FAAP"),
+        FieldSpec("days", L("Clinic days"), "days", required=True),
+        FieldSpec("start_time", L("Starts at"), "time", required=True, default="09:00"),
+        FieldSpec("end_time", L("Ends at"), "time", required=True, default="17:00"),
         FieldSpec(
             "slot_minutes",
             L("Minutes per patient"),
             "number",
             default=15,
-            help=L("Serial n arrives at start + (n − 1) × this."),
+            help=L("Length of each appointment. With serial numbers, serial n arrives at start + (n − 1) × this."),
         ),
         FieldSpec("max_patients", L("Max patients per day"), "number", default=0, help=L("0 = no limit")),
         FieldSpec("fee", L("Consultation fee"), "money"),
-        FieldSpec("notes", L("Notes for the agent"), "textarea", placeholder="Room 304. Reports shown free within 7 days."),
+        FieldSpec("notes", L("Notes for the agent"), "textarea", placeholder="Room 304. Bring your insurance card and a photo ID."),
         FieldSpec(
             "calendar_ics",
             L("Busy calendar (iCal link)"),
@@ -821,12 +822,12 @@ CLINIC = Vertical(
             "queue_numbers",
             L("Tell patients a queue (serial) number"),
             "bool",
-            help=L("Common in South Asian chambers. Unset = on for BD/IN/PK accounts."),
+            help=L("Common in South Asian clinics. Unset = on for India and Pakistan accounts."),
         ),
         FieldSpec(
             "health_line",
             L("Health advice line (optional)"),
-            placeholder="111 (NHS)",
+            placeholder="Your nurse advice line",
             help=L("Suggested for medical questions; empty = the region's line, if any."),
         ),
     ),

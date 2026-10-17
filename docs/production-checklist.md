@@ -56,6 +56,7 @@ several of those tiers stop working, or aren't allowed, once real customers call
 | Messenger / Instagram bots | **Meta app** | `META_APP_SECRET` not set | Create a Meta app; Business verification + App Review | Free |
 | Google Calendar sync | **Google OAuth** | Not set locally | Google app verification for the calendar scope (needs privacy policy + terms pages, domain check; takes days to weeks). Until verified, users see "unverified app" and there's a 100-user cap | Free |
 | Shared audio cache (no paying twice for the same sentence across servers) | **Supabase Storage** | Bucket exists, key missing | Add `SUPABASE_SECRET_KEY` | Included in Supabase |
+| Putting emergency callers through to 911 (the agent offers, connects on a yes) | **Telnyx E911** | Not enabled | On each number: Telnyx → Numbers → Emergency Services → add the business address → enable. The dispatcher sees that address, not the caller's (the agent tells callers to give their address). **Test by setting the account's emergency number to 933 (Telnyx's test line) — never dial 911 to test.** Without E911 the transfer fails and the caller is told to dial 911 themselves. Owners can switch the offer off or connect to an on-call line instead (Agent → Emergencies) | Small monthly fee per number (check Telnyx pricing) |
 | Rate limits and call counters across several servers | **Redis** | Off on Render (works fine with one server) | Upstash free tier, or Render Key Value when you run 2+ servers | Free → ≈ $10/mo |
 
 ## 4. Used for testing only: don't rely on these in production
@@ -79,6 +80,7 @@ several of those tiers stop working, or aren't allowed, once real customers call
 | `SMS_ENABLED` | off | `true` (after 10DLC is approved) |
 | `PAYMENT_PROVIDER` | `dummy` | `stripe` + `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `TELNYX_PUBLIC_KEY` | empty (blocked on trial) | Copy from Telnyx → API Keys → Public Key (adds Ed25519 checks). Unsigned `/telnyx/*` URLs are already refused in production: run `python -m scripts.telnyx_route prod` before deploying so the TeXML app and messaging profile use the signed URLs |
+| `RECORDING_PURGE` | `false` (expired recordings are only hidden) | `true`: deletes recordings at Telnyx after 30 days (12 months on Pro / the add-on), as the privacy policy promises |
 | `SMTP_*` | empty | Your email provider's details |
 | `SUPABASE_SECRET_KEY` | empty | Supabase → Project settings → API keys |
 

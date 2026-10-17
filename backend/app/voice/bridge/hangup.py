@@ -1,5 +1,5 @@
 """Ending the call: hangup after the goodbye has played, transfer to the business's
-support line, ending the phone leg and closing the media socket."""
+support line (or to emergency help), ending the phone leg and closing the media socket."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import asyncio
 import structlog
 
 from app.core.regions import region_of
-from app.voice import prepared
+from app.voice import emergency_dial, prepared
 from app.voice.bridge.utterance import _Utterance
 from app.voice.languages import phrase
 
@@ -36,10 +36,11 @@ class HangupMixin:
             await self._safe_close()
 
     async def _transfer_call(self, number: str) -> None:
-        """Dial the business's support line once the transfer line has played."""
+        """Dial the business's support line (or emergency help) once the transfer line has played."""
+        emergency, number = emergency_dial.unmark(number)
         await asyncio.sleep(0.3)
         try:
-            ok = await self._dial_support(number)
+            ok = await (self._dial_emergency(number) if emergency else self._dial_support(number))
         except Exception as exc:  # noqa: BLE001
             ok = False
             await logger.awarning("transfer_dial_failed", call_log_id=self.call_log_id, error=str(exc))
@@ -49,7 +50,10 @@ class HangupMixin:
             await asyncio.sleep(2.0)
             await self._safe_close(end_phone_call=False)
             return
-        line = phrase("closing_transfer_callback", self.active_language)
+        if emergency:
+            line = phrase("emergency_not_connected", self.active_language, emergency=self._emergency_words())
+        else:
+            line = phrase("closing_transfer_callback", self.active_language)
         self.messages.append({"role": "assistant", "content": line})
         self.speak(line, allow_barge_in=False, close_after=True)
 
@@ -60,6 +64,20 @@ class HangupMixin:
         if not self.call_sid or self.web:
             return False
         return await redirect_call_to_human(self.call_sid, number, region_of(self.merchant), caller_id=telnyx.number_for(self.merchant))
+
+    def _emergency_words(self) -> str:
+        return self.ctx.say_number(self.ctx.emergency_number, self.active_language)
+
+    async def _dial_emergency(self, number: str) -> bool:
+        from app.services import telnyx
+        from app.services.call_service import redirect_call_to_emergency
+
+        if not self.call_sid or self.web:
+            return False
+        after = phrase("emergency_after_dial", self.active_language, emergency=self._emergency_words())
+        return await redirect_call_to_emergency(
+            self.call_sid, number, region_of(self.merchant), caller_id=telnyx.number_for(self.merchant), after=after
+        )
 
     async def _end_phone_call(self) -> None:
         if not self.call_sid or self.web:

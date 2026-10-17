@@ -56,6 +56,28 @@ PROFILES = (
 )
 
 
+def _holidays(now: datetime) -> list[Scenario]:
+    thu = say_day(now, "thu")
+    closed = (("", "thu", "staff training"),)
+    return [
+        Scenario(
+            "clinic.holiday", "clinic", "Wants an appointment on a day the clinic is closed", closed=closed,
+            persona=Persona("Emma Stone", f"Book a check-up with Dr. Sarah Mitchell on {thu} at 10 am. If they're closed, take the next open day they offer (any time).", {"name": "Emma Stone", "phone": "212-555-0147"}),
+            expect=Expect(commit=True, outcomes=BOOKED, judge=(
+                f"The agent says the clinic is closed on {thu} (staff training) and offers the next open day.",
+                f"Nothing is booked on {thu}; the saved appointment is on a later day with Dr. Sarah Mitchell.",
+            ))),
+        Scenario(
+            "clinic.holiday_question", "clinic", "Asks whether the clinic is open on the holiday", closed=closed,
+            script=(f"Hi, are you open on {thu}?", "Okay, thanks, that's all. Bye."),
+            expect=Expect(commit=False, judge=(f"The agent says the clinic is closed on {thu} — it must not say it is open.",))),
+        Scenario(
+            "salon.stylist_day_off", "salon", "Wants a stylist on her day off", closed=(("Maya", "wed", ""),),
+            persona=Persona("Emma Stone", f"Book a women's haircut with Maya on {say_day(now, 'wed')}. If Maya isn't in, take her next available day.", {"name": "Emma Stone", "phone": "212-555-0147"}),
+            expect=Expect(commit=True, outcomes=BOOKED, judge=(f"Nothing is booked with Maya on {say_day(now, 'wed')}; the booking is with Maya on a later day.",))),
+    ]
+
+
 def _special(now: datetime) -> list[Scenario]:
     wed, tue = say_day(now, "wed"), say_day(now, "tue")
     return [
@@ -112,4 +134,4 @@ def scenarios(now: datetime) -> list[Scenario]:
     out: list[Scenario] = []
     for profile in PROFILES:
         out += common(profile, now)
-    return out + _special(now)
+    return out + _special(now) + _holidays(now)

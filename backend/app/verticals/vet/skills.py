@@ -26,7 +26,9 @@ def emergency_vet(ctx: CallContext, language: str) -> str:
 
 
 class VetEmergencySkill(EmergencySkill):
-    """Animal emergencies: go to the emergency vet now (the human emergency number is the wrong place)."""
+    """Animal emergencies: go to the emergency vet now (the human emergency number is the wrong place).
+
+    The offer to connect needs the emergency vet's number in "Connect to"; it never dials 911."""
 
     lines = (
         line(
@@ -36,15 +38,24 @@ class VetEmergencySkill(EmergencySkill):
             variables=("emergency_vet", "emergency"),
             required=("emergency_vet",),
         ),
+        line("offer", "Would you like me to connect you to {target} now?", label="Offer to connect", variables=("target",)),
+        line("connecting", "Connecting you now.", label="While connecting", static=True),
+        line("goodbye", "Okay. Please get your pet to {emergency_vet} as soon as you can. Goodbye.", label="If they say no", variables=("emergency_vet",)),
     )
+
+    def connect_target(self, b: BoundSkill, ctx: CallContext) -> str:
+        return str(b.opt("connect_to") or "").strip() if b.opt("connect", True) else ""
+
+    def target_words(self, b: BoundSkill, target: str, ctx: CallContext, language: str) -> str:
+        return emergency_vet(ctx, language)
+
+    def goodbye(self, b: BoundSkill, ctx: CallContext, language: str) -> str:
+        return b.text("goodbye", language, emergency_vet=emergency_vet(ctx, language))
 
     def closing(self, b: BoundSkill, outcome: str, slots: dict[str, Any], ctx: CallContext, language: str) -> str:
         if outcome != OUTCOME_EMERGENCY:
             return ""
         return b.text("emergency", language, emergency_vet=emergency_vet(ctx, language), emergency=ctx.say_number(ctx.emergency_number, language))
-
-    def prefetch(self, b: BoundSkill, ctx: CallContext, language: str) -> list[str]:
-        return [self.closing(b, OUTCOME_EMERGENCY, {}, ctx, language)]
 
 
 class VetAttendSkill(AttendSkill):

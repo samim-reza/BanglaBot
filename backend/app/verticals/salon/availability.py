@@ -9,7 +9,7 @@ start at 10:15 but never at 17:45 when the stylist leaves at 18:00.
 The call's booking snapshot (``ctx.booked``) knows when existing bookings *start*, not
 how long they last, so each is assumed to last as long as that person's longest
 service — it may hide a time that was actually free, but never double-books. Calendar
-busy times (``ctx.busy``) are exact.
+busy times (``ctx.busy``) are exact. A closure takes the whole salon (or one person) out for the day.
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Mapping
 
+from app.flows.closures import Closure, closure_on
 from app.flows.context import CallContext
 from app.flows.scheduling import Availability, Slot, window_from_config
 from app.verticals.salon.catalog import ANY, KIND_STAFF, chosen_service, duration, longest, salon_config, staff_by_ref, staff_for
@@ -50,8 +51,22 @@ class StaffAvailability(Availability):
     #: window key (staff ref, "" without a staff list) → (catalog item id, minutes one of their bookings may last, busy times).
     owners: dict[str, tuple[str | None, int, list[Interval]]] = field(default_factory=dict)
 
+    def _owner_id(self, key: str) -> str | None:
+        return self.owners.get(key, (self.item_id, 0, []))[0]
+
+    def closure_on(self, day: date) -> Closure | None:
+        """The salon's closure on ``day``, or one person's when everyone who could do it is away."""
+        shop = closure_on(self.closures, day, None)
+        if shop is not None:
+            return shop
+        working = [window for window in self.windows if window.open_on(day)]
+        away = [closure_on(self.closures, day, self._owner_id(window.key)) for window in working]
+        return away[0] if away and all(away) else None
+
     def free(self, day: date, *, now: datetime, booked: Mapping[str, int]) -> list[Slot]:
         if day < now.date() or day > now.date() + timedelta(days=self.horizon_days):
+            return []
+        if closure_on(self.closures, day, None) is not None:
             return []
         tz = now.tzinfo or timezone.utc
         earliest = now + timedelta(minutes=max(0, self.lead_minutes))
@@ -62,6 +77,8 @@ class StaffAvailability(Availability):
             if not window.open_on(day):
                 continue
             item_id, held, busy = self.owners.get(window.key, (self.item_id, self.duration, self.busy))
+            if closure_on(self.closures, day, item_id) is not None:
+                continue
             taken = bookings_on(booked, item_id, day, tz)
             hold = timedelta(minutes=max(held, 5))
             current = datetime.combine(day, window.start, tzinfo=tz)
@@ -126,6 +143,7 @@ def booking_availability(slots: dict[str, Any], ctx: CallContext) -> StaffAvaila
         duration=duration(service),
         grid=int(config.get("slot_minutes") or 15),
         owners=owners,
+        closures=ctx.closures_for(*(owner[0] for owner in owners.values())),
     )
 
 

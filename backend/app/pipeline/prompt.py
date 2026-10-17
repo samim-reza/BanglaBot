@@ -23,6 +23,7 @@ import re
 from typing import Any
 
 from app.flows.base import Flow
+from app.flows.closures import call_facts as closure_facts
 from app.flows.context import CallContext
 from app.pipeline.knowledge import relevant
 from app.voice.languages import language_name, normalize_language
@@ -97,6 +98,7 @@ def brief(flow: Flow, runtime: Any, ctx: CallContext, language: str, caller_text
         lines.append(f'The system last said: "{_clip(last.text, 240)}"')
     lines += step_facts(flow, stage, slots, ctx, language)
     lines += [line for line in flow.call_facts(ctx, language) if line]
+    lines += closure_facts(ctx)
     snippets = relevant(str(ctx.merchant_value("knowledge", "") or ""), caller_text)
     if snippets:
         lines.append("Business information that may answer them: " + " | ".join(snippets))

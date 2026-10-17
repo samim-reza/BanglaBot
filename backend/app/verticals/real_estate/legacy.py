@@ -156,6 +156,7 @@ def visit_availability(ctx: CallContext) -> Availability | None:
         horizon_days=int(config.get("booking_horizon_days") or 14),
         lead_minutes=int(config.get("lead_minutes") if config.get("lead_minutes") is not None else 120),
         busy=ctx.busy_for(None),
+        closures=ctx.closures_for(),
     )
 
 
@@ -596,7 +597,7 @@ def _summary(record: Any, names: dict[str, str]) -> str:
 
 REAL_ESTATE = Vertical(
     key="real_estate",
-    label=L("Real estate / land broker"),
+    label=L("Real estate"),
     description=L(
         "Answers buyers, renters and sellers: qualifies them, presents matching listings, books site visits and scores every lead; follows up leads by phone.",
     ),
@@ -647,9 +648,9 @@ REAL_ESTATE = Vertical(
             default="land",
         ),
         FieldSpec("location", L("Area"), required=True, placeholder="Riverside"),
-        FieldSpec("size", L("Size"), placeholder="1,450 sq ft / 0.5 acre / 5 katha"),
+        FieldSpec("size", L("Size"), placeholder="1,450 sq ft / 0.5 acre"),
         FieldSpec("price", L("Price (monthly for rent)"), "money"),
-        FieldSpec("price_note", L("Price note"), placeholder="negotiable / per katha"),
+        FieldSpec("price_note", L("Price note"), placeholder="negotiable / per sq ft"),
         FieldSpec("bedrooms", L("Bedrooms"), "number"),
         FieldSpec("features", L("Highlights"), "textarea", placeholder="South facing, parking, ready to move in"),
     ),

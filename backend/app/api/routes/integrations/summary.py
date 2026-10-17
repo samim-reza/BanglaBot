@@ -1,5 +1,5 @@
-"""The integrations page in one payload: SMS settings and usage, calendar feed links,
-per-item calendars, and the Google connection state."""
+"""The integrations page in one payload: SMS settings and usage, owner alerts, calendar
+feed links, per-item calendars, and the Google connection state."""
 
 from __future__ import annotations
 
@@ -31,6 +31,19 @@ def _booked_kind(vertical: Any) -> str:
         if spec.key == "catalog_item_id" and getattr(spec, "catalog_kind", ""):
             return str(spec.catalog_kind)
     return str(vertical.catalog_kind or "")
+
+
+def _alerts(merchant: Merchant) -> dict[str, Any]:
+    """Owner alerts: the choices, where email goes, and what the server can send."""
+    from app.services import alerts
+    from app.services.alerts import dispatch
+
+    return {
+        "settings": alerts.settings_of(merchant),
+        "email_to": alerts.email_to(merchant),
+        "email_ready": dispatch.smtp_ready(),
+        "sms_ready": dispatch.sms_ready(),
+    }
 
 
 async def _summary(request: Request, merchant: Merchant, db: AsyncSession) -> dict[str, Any]:
@@ -78,6 +91,7 @@ async def _summary(request: Request, merchant: Merchant, db: AsyncSession) -> di
             "sender": settings.telnyx_sms_from or settings.telnyx_from_number or "",
             "sent_this_month": month_sms,
         },
+        "alerts": _alerts(merchant),
         "calendar": {
             "feed_url": f"{base}/api/public/calendar/{merchant.calendar_token}.ics" if merchant.calendar_token else "",
             "public": bool(settings.public_base_url),

@@ -3,6 +3,7 @@
 /** Self-serve signup: business type → plan → add-ons (live total) → account → checkout. */
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, LoaderCircle } from "lucide-react";
 
@@ -136,6 +137,19 @@ export function SignupWizard() {
           {step === 2 && <AddonPicker addons={addons} value={selection.addons} onChange={(next) => setSelection((s) => ({ ...s, addons: next }))} />}
           {step === 3 && <StepAccount form={account} regions={base.regions} onChange={(patch) => setAccount((a) => ({ ...a, ...patch }))} />}
           {formError && step === 3 && <ApiError message={formError} />}
+          {step === 3 && (
+            <p className="text-xs text-muted-foreground">
+              By continuing, you agree to the{" "}
+              <Link href="/terms" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-dark underline-offset-2 hover:underline">
+                Terms of Service
+              </Link>{" "}
+              and{" "}
+              <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="font-medium text-primary-dark underline-offset-2 hover:underline">
+                Privacy Policy
+              </Link>
+              .
+            </p>
+          )}
         </div>
         {step > 0 && <QuoteSummary quote={quote.data} loading={quote.loading} error={quote.error} />}
       </div>

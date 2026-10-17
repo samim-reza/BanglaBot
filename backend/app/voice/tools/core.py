@@ -13,6 +13,7 @@ from app.flows.runtime import FlowRuntime
 from app.voice.tools.store import CallStore, ToolResult
 from app.voice.tools.text import END_CALL, SAVE_DETAILS, TRANSFER_TO_HUMAN, unclear_line
 from app.voice.tools.commit import CommitMixin
+from app.voice.tools.emergency import EmergencyMixin
 from app.voice.tools.endings import EndingsMixin
 from app.voice.tools.saving import SavingMixin
 from app.voice.tools.schemas import SchemasMixin
@@ -21,11 +22,13 @@ from app.voice.tools.skill_tools import SkillToolsMixin
 logger = structlog.get_logger(__name__)
 
 
-class CallTools(SchemasMixin, SavingMixin, SkillToolsMixin, CommitMixin, EndingsMixin):
-    def __init__(self, runtime: FlowRuntime, store: CallStore, *, support_phone: str = "") -> None:
+class CallTools(SchemasMixin, SavingMixin, SkillToolsMixin, CommitMixin, EmergencyMixin, EndingsMixin):
+    def __init__(self, runtime: FlowRuntime, store: CallStore, *, support_phone: str = "", phone_call: bool = False) -> None:
         self.runtime = runtime
         self.store = store
         self.support_phone = str(support_phone or "").strip()
+        #: A live phone call the bridge can put through (emergency offer); chats and browser calls can't.
+        self.phone_call = phone_call
         self.flow = runtime.flow
         self._terminals: dict[str, Terminal] = {t.name: t for t in self.flow.terminals()}
         self.outcome: str = ""

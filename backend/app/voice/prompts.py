@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Any
 
 from app.flows.base import Flow
+from app.flows.closures import call_facts as closure_facts
 from app.flows.context import CallContext
 from app.voice.languages import language_name, normalize_language, phrase
 
@@ -108,6 +109,7 @@ def call_block(flow: Flow, ctx: CallContext, language: str, *, opening: str, ini
     else:
         lines.append(f"- Direction: {'the caller phoned the business' if ctx.inbound else 'the business is calling this person'}.")
     lines += flow.call_facts(ctx, language)
+    lines += closure_facts(ctx)
     lines.append(f"You have ALREADY said: \"{opening}\" — do not greet again; continue from the caller's answer.")
     if initial_directive:
         lines.append(initial_directive)

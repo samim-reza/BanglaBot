@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import require_admin
 from app.api.routes.admin.common import _merchants
 from app.db.session import get_db
-from app.models import CallLog, Order
+from app.models import CallLog, Merchant, Order
 from app.schemas.admin import AdminCallPage, AdminOrderPage
 from app.services import order_service
 
@@ -86,9 +86,11 @@ async def admin_calls(
 @router.get("/recordings/{log_id}")
 async def admin_recording(log_id: str, _: dict = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     from app.services.call_service import fetch_recording
+    from app.services.calls import retention
 
     log = await db.get(CallLog, log_id)
     if log is None:
         raise HTTPException(status_code=404, detail="Call log not found")
+    retention.ensure_available(log, await db.get(Merchant, log.merchant_id))
     content, media_type = await fetch_recording(log)
     return Response(content=content, media_type=media_type)

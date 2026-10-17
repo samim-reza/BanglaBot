@@ -21,7 +21,7 @@ def summarize(record: Any, names: dict[str, str]) -> str:
 #: Keyword arguments of the real-estate :class:`~app.verticals.base.Vertical` (everything but its flows).
 REAL_ESTATE_SPEC: dict[str, Any] = dict(
     key="real_estate",
-    label=L("Real estate / land broker"),
+    label=L("Real estate"),
     description=L(
         "Answers buyers, renters and sellers: qualifies them, presents matching listings, books site visits and scores every lead; follows up leads by phone.",
     ),
@@ -53,9 +53,9 @@ REAL_ESTATE_SPEC: dict[str, Any] = dict(
         FieldSpec("listing_type", L("For"), "select", required=True, options=(("sale", L("Sale")), ("rent", L("Rent"))), default="sale"),
         FieldSpec("property_type", L("Type"), "select", required=True, options=_TYPES, default="land"),
         FieldSpec("location", L("Area"), required=True, placeholder="Riverside"),
-        FieldSpec("size", L("Size"), placeholder="1,450 sq ft / 0.5 acre / 5 katha"),
+        FieldSpec("size", L("Size"), placeholder="1,450 sq ft / 0.5 acre"),
         FieldSpec("price", L("Price (monthly for rent)"), "money"),
-        FieldSpec("price_note", L("Price note"), placeholder="negotiable / per katha"),
+        FieldSpec("price_note", L("Price note"), placeholder="negotiable / per sq ft"),
         FieldSpec("bedrooms", L("Bedrooms"), "number"),
         FieldSpec("features", L("Highlights"), "textarea", placeholder="South facing, parking, ready to move in"),
     ),

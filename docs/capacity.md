@@ -31,6 +31,9 @@ What the platform already does to keep this down:
 
 ## 2. Free testing phase (now)
 
+These free tiers and trial accounts are for testing only. None of them is used in production or
+counted in any cost in this folder.
+
 | Service | Free allowance | What it means |
 |---|---|---|
 | Groq (LLM: gpt-oss-120b / 20b, qwen) | per model ≈ 8K tokens/min, 200K tokens/day | ~5–6 requests/min per model; 3 models back each other up → a few test calls at a time, a few dozen per day |
@@ -90,7 +93,8 @@ The finance engine (admin → Finance) records the real cost of every call by pr
 
 ## 5. Limits to watch as you grow
 
-- **Telnyx concurrent channels:** pretrial allows 2 outbound; raise it before marketing.
+- **Telnyx concurrent channels:** the trial account allows 2 outbound calls at once. On the paid
+  account, raise the limit (the "Verified" level) before marketing.
 - **Per-account concurrency:** each tier has `max_concurrent_calls`; extra calls get a polite busy line.
 - **LLM rate limits:** paid tiers have far higher limits; set `LLM_ALLOW_PAID=true` and put a paid
   model first in `LLM_CHAIN` for production.

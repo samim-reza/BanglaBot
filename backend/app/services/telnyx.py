@@ -251,6 +251,18 @@ async def download_recording(recording_sid: str) -> tuple[bytes, str]:
     return response.content, content_type
 
 
+async def delete_recording(recording_sid: str) -> None:
+    """Delete a recording at Telnyx (already gone counts as deleted)."""
+    try:
+        if account_sid():
+            await _request("DELETE", _account_path(f"/Recordings/{recording_sid}.json"))
+        else:
+            await _request("DELETE", f"/recordings/{recording_sid}")
+    except TelnyxError as exc:
+        if exc.status_code != 404:
+            raise
+
+
 async def point_app_at(voice_url: str) -> None:
     """Set the TeXML application's voice webhook (inbound calls)."""
     settings = get_settings()

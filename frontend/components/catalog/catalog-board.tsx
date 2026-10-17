@@ -160,7 +160,7 @@ export function CatalogBoard({ spec, primary, multi = false }: { spec: CatalogKi
         <div className="space-y-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {items.length} {items.length === 1 ? singular.toLowerCase() : plural.toLowerCase()} · {activeCount} offered
+              {items.length} listed · {activeCount} offered
             </p>
             {items.length > 5 && (
               <div className="relative sm:w-72">

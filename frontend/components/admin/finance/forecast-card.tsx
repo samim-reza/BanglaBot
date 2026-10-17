@@ -1,5 +1,5 @@
 import { RatioBar } from "@/components/admin/voice/ratio-bar";
-import { fmtInt, fmtPct, fmtUsd } from "@/components/admin/numbers";
+import { fmtInt, fmtPct, fmtPercent, fmtUsd } from "@/components/admin/numbers";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { FinanceForecast } from "@/services/api/admin/finance";
 
@@ -37,7 +37,7 @@ export function ForecastCard({ forecast }: { forecast: FinanceForecast }) {
           <Projection label="Cost" mtd={f.cost_mtd_usd} forecast={f.cost_forecast_usd} />
           <div className="rounded-md border border-border p-3">
             <dt className="text-xs font-medium text-muted-foreground">Margin</dt>
-            <dd className={f.margin_forecast_usd < 0 ? "mt-1 text-xl font-semibold text-destructive" : "mt-1 text-xl font-semibold"}>{fmtPct(f.margin_forecast_pct, 1)}</dd>
+            <dd className={f.margin_forecast_usd < 0 ? "mt-1 text-xl font-semibold text-destructive" : "mt-1 text-xl font-semibold"}>{fmtPercent(f.margin_forecast_pct, 1)}</dd>
             <dd className="text-xs text-muted-foreground">{fmtUsd(f.margin_forecast_usd, 0)}</dd>
           </div>
           <Projection label="Minutes" mtd={f.minutes_mtd} forecast={f.minutes_forecast} money={false} />

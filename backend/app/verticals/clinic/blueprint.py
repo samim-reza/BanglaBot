@@ -19,7 +19,7 @@ from app.flows.context import CallContext
 from app.pipeline.blueprint import Blueprint, Branch
 from app.skills.library.consent import ConsentSkill
 from app.skills.library.customer_type import CustomerTypeSkill
-from app.skills.library.emergency import EmergencySkill
+from app.skills.library.emergency import CONNECT_LINES, EmergencySkill
 from app.skills.library.greet import FarewellSkill, GreetSkill
 from app.skills.library.intake import IntakeField, IntakeSkill
 from app.skills.library.intent import IntentSkill
@@ -57,6 +57,7 @@ EMERGENCY_LINES = (
         variables=("emergency",),
         required=("emergency",),
     ),
+    *CONNECT_LINES,
 )
 
 SCHEDULE_LINES = (

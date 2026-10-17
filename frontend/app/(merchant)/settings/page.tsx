@@ -22,7 +22,9 @@ import {
 import { WebhookSection } from "@/components/portal/webhook-section";
 import { AgentSection } from "@/components/settings/agent-section";
 import { BusinessSettingsSection } from "@/components/settings/business-settings-section";
+import { ClosuresSection } from "@/components/settings/closures-section";
 import { KnowledgeSection } from "@/components/settings/knowledge-section";
+import { OwnerAlertsSection } from "@/components/settings/owner-alerts-section";
 import { PaymentsSection } from "@/components/settings/payments-section";
 import { ProfileSection } from "@/components/settings/profile-section";
 import { RegionSection } from "@/components/settings/region-section";
@@ -122,6 +124,7 @@ function SettingsView() {
             <ProfileSection />
             <RegionSection />
             <BusinessSettingsSection />
+            {vertical.scheduled && <ClosuresSection />}
           </TabPanel>
         )}
         {mounted("agent") && (
@@ -138,7 +141,10 @@ function SettingsView() {
         {mounted("notifications") && (
           <TabPanel tab="notifications" active={active === "notifications"}>
             {integrationsBody((data) => (
-              <SmsSection data={data} onSaved={integrations.setData} />
+              <>
+                {data.alerts && <OwnerAlertsSection alerts={data.alerts} onSaved={integrations.setData} />}
+                <SmsSection data={data} onSaved={integrations.setData} />
+              </>
             ))}
           </TabPanel>
         )}

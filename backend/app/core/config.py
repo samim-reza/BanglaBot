@@ -172,6 +172,9 @@ class Settings(BaseSettings):
     )
     # Base64 Ed25519 key (Keys & Credentials → Public Key) for ENFORCE_WEBHOOK_SIGNATURES.
     telnyx_public_key: str | None = None
+    # Delete call recordings at Telnyx once past the account's retention (30 days, or 12 months
+    # with Pro / the add-on). Off = expired recordings are only hidden from the portal.
+    recording_purge: bool = False
     # Public https origin Telnyx can reach (status callbacks + media websocket).
     public_base_url: str | None = Field(
         default=None, validation_alias=AliasChoices("PUBLIC_BASE_URL", "TELNYX_PUBLIC_BASE_URL")

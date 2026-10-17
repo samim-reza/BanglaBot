@@ -112,6 +112,32 @@ def schedule_call(call_log_id: str, counters: dict[str, Any], *, llm_stats: Any 
     task.add_done_callback(_pending.discard)
 
 
+async def record_llm_extra(merchant_id: str, call_log_id: str | None, llm_stats: Any, *, purpose: str) -> int:
+    """Tokens of a follow-up LLM request about a call (e.g. its summary), category ``llm``,
+    ``meta.purpose`` set. Never raises.
+
+    A call's own lines are written once (``already_metered`` looks for any of its llm lines),
+    so these are attached to the call only after its lines are in; until then they carry the
+    link in ``meta.call_log_id`` and can never make the call's flush skip."""
+    try:
+        async with sessions()() as session:
+            occurred = utcnow()
+            meter = CallMeter(await pricebook.current(session, occurred.date()))
+            meter.add_llm(llm_stats)
+            if not meter.lines:
+                return 0
+            for line in meter.lines:
+                line.meta = {**line.meta, "purpose": purpose, **({"call_log_id": call_log_id} if call_log_id else {})}
+            attach = bool(call_log_id) and await ledger.already_metered(session, str(call_log_id))
+            count = await flush(session, meter.lines, merchant_id=merchant_id, call_log_id=call_log_id if attach else None, occurred_at=occurred)
+            await session.commit()
+        guard.record_spend(meter.lines)
+        return count
+    except Exception as exc:  # noqa: BLE001 — metering never breaks anything
+        await logger.awarning("usage_meter_failed", call_log_id=call_log_id or "", purpose=purpose, error=str(exc)[:200], error_type=type(exc).__name__)
+        return 0
+
+
 async def record_payment_fee(payment: Any) -> int:
     """The processor's fee on a paid platform payment (Stripe). Never raises."""
     if getattr(payment, "provider", "") != "stripe" or getattr(payment, "status", "") != "paid":
@@ -130,4 +156,4 @@ async def record_payment_fee(payment: Any) -> int:
         return 0
 
 
-__all__ = ["flush", "record_call", "record_call_log", "record_payment_fee", "schedule_call"]
+__all__ = ["flush", "record_call", "record_call_log", "record_llm_extra", "record_payment_fee", "schedule_call"]

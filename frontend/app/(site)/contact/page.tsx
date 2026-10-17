@@ -52,15 +52,17 @@ export default function ContactPage() {
                 </p>
               </div>
             </div>
-            <div className="flex gap-4 rounded-xl border border-border bg-card p-5">
-              <Mail className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
-              <div>
-                <h2 className="font-semibold text-foreground">Email sales</h2>
-                <a href={`mailto:${BRAND.salesEmail}`} className="mt-1 inline-block text-sm font-medium text-primary-dark hover:underline">
-                  {BRAND.salesEmail}
-                </a>
+            {BRAND.contactEmail && (
+              <div className="flex gap-4 rounded-xl border border-border bg-card p-5">
+                <Mail className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
+                <div>
+                  <h2 className="font-semibold text-foreground">Email us</h2>
+                  <a href={`mailto:${BRAND.contactEmail}`} className="mt-1 inline-block text-sm font-medium text-primary-dark hover:underline">
+                    {BRAND.contactEmail}
+                  </a>
+                </div>
               </div>
-            </div>
+            )}
             <div className="flex gap-4 rounded-xl border border-border bg-card p-5">
               <MessageCircle className="mt-0.5 h-5 w-5 shrink-0 text-primary" aria-hidden />
               <div>

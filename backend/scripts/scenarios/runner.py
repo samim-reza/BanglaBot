@@ -48,6 +48,18 @@ def slot_keys(specs: tuple[tuple[str, str, str], ...], items: list[Any], now: da
     return keys
 
 
+def apply_closures(merchant: Any, specs: tuple[tuple[str, str, str], ...], items: list[Any], now: datetime) -> None:
+    """(item name or "", weekday, label) → closures on the account's settings, on the first such weekday after today."""
+    if not specs:
+        return
+    rows = []
+    for name, weekday, label in specs:
+        item = next((i for i in items if name and i.name.lower() == name.lower()), None)
+        day = next_weekday(now, weekday).isoformat()
+        rows.append({"start": day, "end": day, "label": label, "item_id": item.id if item else ""})
+    merchant.vertical_config = {**dict(merchant.vertical_config or {}), "closures": rows}
+
+
 def _columns(row: Any) -> dict[str, Any]:
     """Every column of a record (items, totals, address ...) — the judge's ground truth."""
     skip = {"id", "merchant_id", "catalog_item_id", "created_at", "updated_at", "flow_data", "call_attempts"}
@@ -122,10 +134,13 @@ async def _converse(scenario: Scenario, chat: OpenAIChat, result: RunResult, *, 
         ctx.now = now.astimezone(ctx.now.tzinfo) if ctx.now is not None else now
     for key in slot_keys(scenario.full, items, ctx.now):
         ctx.booked[key] = 999
+    apply_closures(merchant, scenario.closed, items, ctx.now)
     flow = flow_for(merchant, scenario.direction)
     store = NullCallStore(taken=set(slot_keys(scenario.race, items, ctx.now)))
     llm = llm_for_call(flow_key=f"{flow.key}:scenario", merchant=merchant, channel="chat" if is_chat else "voice")
     session = TextSession(merchant=merchant, ctx=ctx, flow=flow, store=store, call_log_id="scenario", llm=llm)
+    # A voice scenario plays a phone call: the agent may put the caller through (emergency offer).
+    session.agent.tools.phone_call = not is_chat
     recovery = _recovery_line()
     _trace_turns(session, result)
 

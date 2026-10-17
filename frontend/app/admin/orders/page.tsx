@@ -14,7 +14,7 @@ import { Pagination } from "@/components/pagination";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { formatDateTime, humanize } from "@/lib/format";
+import { formatDateTime, formatPhone, humanize } from "@/lib/format";
 import { formatInZone, statusLabel, t } from "@/lib/vertical";
 import { ORDER_STATUSES, adminApi, formatApiError, type Merchant, type Order, type OrderStatus } from "@/services/api";
 
@@ -159,7 +159,7 @@ function RecordsView() {
                     <TableCell className="whitespace-nowrap font-mono text-xs">
                       {order.customer_phone ? (
                         <a href={`tel:${order.customer_phone}`} className="hover:text-primary hover:underline">
-                          {order.customer_phone}
+                          {formatPhone(order.customer_phone)}
                         </a>
                       ) : (
                         "—"

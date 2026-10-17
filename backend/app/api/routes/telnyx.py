@@ -191,6 +191,12 @@ async def _sms_event(request: Request, message_id: str = "") -> Response:
     except ValueError:
         return Response(status_code=204)
     data = event.get("data") if isinstance(event, dict) else None
+    if isinstance(data, dict) and data.get("event_type") == "message.received" and not message_id:
+        # A customer's reply on the profile webhook: STOP / START / HELP keywords.
+        from app.services.sms import inbound
+
+        await inbound.handle(data.get("payload") or {})
+        return Response(status_code=204)
     if not isinstance(data, dict) or data.get("event_type") not in ("message.sent", "message.finalized"):
         return Response(status_code=204)
     payload = data.get("payload") or {}
@@ -215,7 +221,8 @@ async def sms_status(message_id: str, request: Request, sig: str | None = None):
 @router.post("/sms-events/{sig}")
 @router.post("/sms-events")
 async def sms_events(request: Request, sig: str | None = None):
-    """The messaging profile's webhook: receipts for texts sent without a per-message URL."""
+    """The messaging profile's webhook: receipts for texts sent without a per-message URL, and
+    customers' replies (``message.received``: STOP / START / HELP)."""
     _guard_path(request, telnyx_urls.SMS_EVENTS, None, sig)
     return await _sms_event(request)
 

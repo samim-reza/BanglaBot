@@ -20,7 +20,7 @@ from app.services.calls.callbacks import (
     reconcile_stale_calls,
 )
 from app.services.calls.console import open_test_call
-from app.services.calls.control import complete_call, fetch_call_details, fetch_recording, redirect_call_to_human
+from app.services.calls.control import complete_call, fetch_call_details, fetch_recording, redirect_call_to_emergency, redirect_call_to_human
 from app.services.calls.inbound import (
     answer_inbound_call,
     configure_inbound_webhook,
@@ -61,6 +61,7 @@ __all__ = [
     "is_machine_answer",
     "open_test_call",
     "reconcile_stale_calls",
+    "redirect_call_to_emergency",
     "redirect_call_to_human",
     "remember_call_sid",
     "require_telephony",

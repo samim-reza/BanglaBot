@@ -13,6 +13,7 @@ from app.core.addons import CATALOG, MAX_QUANTITY, entitlements, quantities, sto
 from app.core.datetime_utils import utcnow
 from app.db.session import get_db
 from app.models import AddonRequest, Merchant
+from app.models.addon_request import PHONE_LINE
 
 router = APIRouter()
 
@@ -75,7 +76,12 @@ async def decide_addon_request(
     if row.status != "pending":
         raise HTTPException(status_code=409, detail="This request was already handled")
     merchant = await _merchant_or_404(db, row.merchant_id)
-    if decision == "approve":
+    if decision == "approve" and row.addon == PHONE_LINE:
+        # The plan's own number: nothing to switch on — approving means it has been assigned.
+        if not (merchant.inbound_number or "").strip():
+            raise HTTPException(status_code=409, detail="Assign the phone number on the account first")
+        row.status = "approved"
+    elif decision == "approve":
         addon = CATALOG.get(row.addon)
         if addon is None:
             raise HTTPException(status_code=422, detail="That add-on no longer exists")

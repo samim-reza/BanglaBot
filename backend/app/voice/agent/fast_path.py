@@ -13,6 +13,7 @@ from app.flows.base import STAGE_COMMIT, STAGE_DONE, STAGE_RELAY, STAGE_WRONG_NU
 from app.pipeline import faq_cache
 from app.voice import jev
 from app.voice.tools import SAVE_DETAILS, ToolResult
+from app.voice.tools.emergency import ANSWERED, wants_connection
 from app.voice.tools.text import END_CALL
 
 logger = structlog.get_logger(__name__)
@@ -51,6 +52,17 @@ class FastPathMixin:
         """
         if self.speaker.closing:
             return False
+        if self.tools.emergency_offer_pending():
+            # The answer to "Would you like me to connect you?": a clear yes connects at once;
+            # anything else goes to the model, which has the offer in front of it.
+            self.runtime.slots[ANSWERED] = True
+            if not wants_connection(text):
+                return False
+            self.interruptible = False  # a tool runs: the turn now acts
+            result = await self.tools.connect_emergency()
+            self._record_turn(text, result)
+            logger.info("turn_fast_path", call_log_id=self.call_log_id, stage=self.runtime.stage, emergency="connect")
+            return True
         stage = self.runtime.stage
         inbound = not getattr(self.flow, "identity_gate", False)
         if inbound and (hearing.says_goodbye(text) or hearing.dialed_wrong(text)) and stage not in (STAGE_COMMIT,):

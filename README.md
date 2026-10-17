@@ -89,7 +89,7 @@ cp .env.example .env   # fill OPENAI_API_KEY, AZURE_SPEECH_KEY/REGION, TELNYX_*,
 
 | Part | Where | Address |
 |---|---|---|
-| Website + portal + admin | Vercel (Hobby), root directory `frontend`, env `NEXT_BACKEND_URL=https://banglabot-api.onrender.com` | https://www.banglabot.xyz |
+| Website + portal + admin | Vercel (Hobby), root directory `frontend`, env `NEXT_BACKEND_URL=https://banglabot-api.onrender.com`, optional `NEXT_PUBLIC_CONTACT_EMAIL` (public contact address; empty = pages link to `/contact`) | https://www.banglabot.xyz |
 | Backend (FastAPI, calls, jobs) | Render free web service `banglabot-api`, Docker `backend/Dockerfile`, health check `/health`, Singapore | https://api.banglabot.xyz (also https://banglabot-api.onrender.com) |
 | Database | Supabase session pooler (Singapore) | `DATABASE_URL` |
 | DNS | cPanel zone `banglabot.xyz`: `@` A → Vercel, `www` CNAME → Vercel, `api` CNAME → Render; email `MX`/`mail` point at the cPanel server | |
